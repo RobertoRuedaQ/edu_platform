@@ -469,4 +469,26 @@
   .checkout-line__name { flex: 1; }
   .checkout-line__price { font-variant-numeric: tabular-nums; font-weight: var(--weight-medium); }
   .checkout-line.is-blocked .checkout-line__name { color: var(--color-text-muted); text-decoration: line-through; }
+
+  /* --- Notification (presentational item) -------------------------------- */
+  .notification {
+    display: flex;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    text-decoration: none;
+    color: inherit;
+  }
+  a.notification { transition: background-color var(--transition-fast); }
+  a.notification:hover { background: var(--color-surface-sunken); }
+  .notification.is-unread { background: var(--color-primary-subtle); border-color: transparent; }
+  .notification__icon { color: var(--color-primary); flex: none; margin-top: 1px; }
+  .notification__head { display: flex; align-items: center; gap: var(--space-2); }
+  .notification__title { font-weight: var(--weight-medium); }
+  .notification.is-unread .notification__title { font-weight: var(--weight-semibold); }
+  .notification__dot { width: 0.5rem; height: 0.5rem; border-radius: var(--radius-full); background: var(--color-primary); flex: none; }
+  .notification__message { font-size: var(--text-sm); color: var(--color-text-muted); margin-top: var(--space-1); }
+  .notification__time { display: block; font-size: var(--text-xs); color: var(--color-text-subtle); margin-top: var(--space-1); }
 }

@@ -49,4 +49,22 @@ module UiHelper
       unit: cfg[:unit], precision: cfg[:precision],
       delimiter: ".", separator: ",", format: cfg[:format])
   end
+
+  MONTHS_ES = %w[enero febrero marzo abril mayo junio julio agosto septiembre
+                 octubre noviembre diciembre].freeze
+
+  # Format a timestamp for the es locale in the institution's time zone.
+  # format: :short (03/07/2026 14:30) | :date | :time | :long (3 de julio…).
+  # TODO: time zone will come from institution_settings; passed in for now.
+  def datetime(time, zone: "America/Bogota", format: :short)
+    return "—" if time.nil?
+
+    t = time.in_time_zone(zone)
+    case format.to_sym
+    when :time then t.strftime("%H:%M")
+    when :date then t.strftime("%d/%m/%Y")
+    when :long then "#{t.day} de #{MONTHS_ES[t.month - 1]} de #{t.year}, #{t.strftime('%H:%M')}"
+    else            t.strftime("%d/%m/%Y %H:%M")
+    end
+  end
 end
