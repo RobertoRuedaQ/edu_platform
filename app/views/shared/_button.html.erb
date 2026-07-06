@@ -1,0 +1,13 @@
+<%# locals: (label:, variant: :primary, size: :md, href: nil, type: "button", **attrs) -%>
+<%#
+  The ONE way to render a button. Prefer ui_button(...) in views.
+  variant: :primary | :secondary | :ghost | :danger
+  size:    :sm | :md | :lg
+  Pass href: to render an <a> styled as a button; otherwise a <button>.
+-%>
+<% attrs[:class] = class_names("btn", "btn--#{variant}", "btn--#{size}", attrs[:class]) -%>
+<% if href -%>
+  <%= link_to label, href, **attrs %>
+<% else -%>
+  <%= button_tag label, type: type, **attrs %>
+<% end -%>

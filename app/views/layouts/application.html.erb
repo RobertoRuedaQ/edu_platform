@@ -28,9 +28,12 @@
     <div class="app-shell">
       <header class="app-header">
         <div class="container app-header__inner">
-          <%# Wordmark + nav are extracted to identity partials in Part 5. %>
-          <a class="wordmark" href="/">EduPlatform</a>
-          <nav class="app-nav" aria-label="Principal"></nav>
+          <%= render "shared/wordmark" %>
+          <nav class="app-nav" aria-label="Principal">
+            <%# Real destinations land with the routes added in Part 6. %>
+            <%= link_to "Estudiantes", "/core/students", class: "app-nav__link" %>
+            <%= link_to "Catálogo", "/core/courses", class: "app-nav__link" %>
+          </nav>
         </div>
       </header>
 
@@ -39,7 +42,7 @@
           <% if flash.any? %>
             <div class="flash-region" aria-live="polite">
               <% flash.each do |type, message| %>
-                <div class="flash flash--<%= type %>" role="status"><%= message %></div>
+                <%= render "shared/flash", type: type, message: message %>
               <% end %>
             </div>
           <% end %>

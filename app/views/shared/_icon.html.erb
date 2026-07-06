@@ -1,0 +1,20 @@
+<%# locals: (name:, size: 20, **attrs) -%>
+<%#
+  Inline SVG icons — no icon-font, no external dependency. Feather-style,
+  drawn with currentColor so they inherit text color. Add new glyphs to ICONS.
+  Available: search, x, chevron-down, users, calendar, alert-triangle, check-circle
+-%>
+<% icons = {
+  "search"         => '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
+  "x"              => '<path d="M18 6 6 18M6 6l12 12"/>',
+  "chevron-down"   => '<path d="m6 9 6 6 6-6"/>',
+  "users"          => '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
+  "calendar"       => '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+  "alert-triangle" => '<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4M12 17h.01"/>',
+  "check-circle"   => '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/>'
+} -%>
+<% attrs[:class] = class_names("icon", attrs[:class]) -%>
+<svg width="<%= size %>" height="<%= size %>" viewBox="0 0 24 24" fill="none"
+     stroke="currentColor" stroke-width="2" stroke-linecap="round"
+     stroke-linejoin="round" aria-hidden="true" focusable="false"
+     class="<%= attrs[:class] %>"><%= raw icons.fetch(name.to_s) { icons["alert-triangle"] } %></svg>

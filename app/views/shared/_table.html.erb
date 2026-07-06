@@ -1,0 +1,16 @@
+<%# locals: (headers: [], caption: nil, **attrs) -%>
+<%# The one table style. Render as a layout; the block supplies the <tbody> rows: -%>
+<%#   render layout: "shared/table", locals: { headers: ["Nombre", "Código"] } do … end -%>
+<%# The wrapper scrolls horizontally on narrow screens so the page never does. -%>
+<% attrs[:class] = class_names("table", attrs[:class]) -%>
+<div class="table-wrap">
+  <%= tag.table(**attrs) do -%>
+    <% if caption -%><caption class="table__caption"><%= caption %></caption><% end -%>
+    <% if headers.any? -%>
+      <thead>
+        <tr><% headers.each do |h| %><th scope="col"><%= h %></th><% end %></tr>
+      </thead>
+    <% end -%>
+    <tbody><%= yield %></tbody>
+  <% end -%>
+</div>

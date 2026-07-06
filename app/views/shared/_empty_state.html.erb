@@ -1,0 +1,10 @@
+<%# locals: (title:, description: nil, icon: nil, action: nil) -%>
+<%# Shown when a collection is empty. icon: an icon name (see shared/_icon). -%>
+<div class="empty-state">
+  <% if icon -%>
+    <div class="empty-state__icon" aria-hidden="true"><%= ui_icon(icon, size: 28) %></div>
+  <% end -%>
+  <h3 class="empty-state__title"><%= title %></h3>
+  <% if description -%><p class="empty-state__desc"><%= description %></p><% end -%>
+  <% if action -%><div class="empty-state__action"><%= action %></div><% end -%>
+</div>

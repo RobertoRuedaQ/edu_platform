@@ -1,0 +1,13 @@
+<%# locals: (title: nil, subtitle: nil, **attrs) -%>
+<%# Content card. Render as a layout with a block for the body: -%>
+<%#   render layout: "shared/card", locals: { title: "Perfil" } do … end -%>
+<% attrs[:class] = class_names("card", attrs[:class]) -%>
+<%= tag.section(**attrs) do -%>
+  <% if title || subtitle -%>
+    <header class="card__header">
+      <% if title -%><h3 class="card__title"><%= title %></h3><% end -%>
+      <% if subtitle -%><p class="card__subtitle"><%= subtitle %></p><% end -%>
+    </header>
+  <% end -%>
+  <div class="card__body"><%= yield %></div>
+<% end -%>

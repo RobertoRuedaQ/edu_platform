@@ -1,0 +1,6 @@
+<%# locals: (href: "/") -%>
+<%# Textual wordmark — the app's identity. Display face + primary accent. -%>
+<%= link_to href, class: "wordmark", "aria-label": "EduPlatform — inicio" do %>
+  <span class="wordmark__mark" aria-hidden="true"><%= ui_icon "check-circle", size: 22 %></span>
+  <span class="wordmark__text">Edu<b>Platform</b></span>
+<% end %>
