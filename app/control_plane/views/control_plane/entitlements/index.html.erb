@@ -1,0 +1,27 @@
+<% content_for :title, "Entitlements" %>
+<%#
+  Screen 4 — entitlement editor for one institution. Gate #1 of two serial
+  gates (entitlement, then RBAC in identity_access). Toggles are VISUAL only,
+  no submit this phase. @institution + @entitlements are stub.
+-%>
+
+<%= render "shared/page_header",
+      title: "Entitlements · #{@institution.name}",
+      subtitle: "Compuerta 1 de 2 (entitlement → RBAC) · sin submit · datos stub" %>
+
+<%= render "shared/alert", variant: :info,
+      title: "Doble compuerta",
+      message: "Habilitar aquí responde solo '¿la institución PUEDE?'. El '¿el usuario DENTRO puede?' lo resuelve el RBAC de identity_access (plano de inquilino)." %>
+
+<section class="cp-section" aria-labelledby="cp-ent-editor-h">
+  <h2 id="cp-ent-editor-h">Addons de la institución</h2>
+  <div class="cp-stack">
+    <% @entitlements.each do |ent| %>
+      <%= render "control_plane/shared/entitlement_toggle_row",
+            addon_name: ent.addon_name, enabled: ent.enabled?,
+            valid_from: ent.valid_from, valid_until: ent.valid_until,
+            override_fee: ent.override_fee, override_quota: ent.override_quota,
+            currency: ent.currency %>
+    <% end %>
+  </div>
+</section>

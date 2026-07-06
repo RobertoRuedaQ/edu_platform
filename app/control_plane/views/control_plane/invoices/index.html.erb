@@ -1,0 +1,35 @@
+<% content_for :title, "Facturación" %>
+<%#
+  Screen 7 — platform billing (the PLATFORM charging the SCHOOL; NOT the finance
+  domain). Line items in three sections by kind. Data stub via @invoices.
+-%>
+
+<%= render "shared/page_header",
+      title: "Facturación de plataforma",
+      subtitle: "Plataforma → colegio (no es el dominio finance) · datos stub" %>
+
+<% sections = { "base_seats" => "Base por alumno", "addon_fee" => "Fee por addon", "usage_overage" => "Overage por uso" } %>
+
+<% @invoices.each do |invoice| %>
+  <%= render layout: "shared/card",
+        locals: { title: "#{invoice.number} · #{invoice.institution_name}",
+                  subtitle: "#{invoice.period_label} · #{invoice.status}" } do %>
+
+    <% sections.each do |kind, heading| %>
+      <% lines = invoice.lines_of(kind) %>
+      <% next if lines.empty? %>
+      <h3><%= heading %></h3>
+      <%= render layout: "shared/table",
+            locals: { headers: [ "Concepto", "Cantidad", "Precio unit.", "Importe" ] } do %>
+        <% lines.each do |line| %>
+          <%= render "control_plane/shared/invoice_line",
+                kind: line.kind, description: line.description, quantity: line.quantity,
+                unit: line.unit, unit_price: line.unit_price, amount: line.amount,
+                currency: line.currency %>
+        <% end %>
+      <% end %>
+    <% end %>
+
+    <p class="invoice-total"><strong>Subtotal:</strong> <%= money(invoice.subtotal, currency: invoice.currency) %></p>
+  <% end %>
+<% end %>

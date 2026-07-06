@@ -1,0 +1,36 @@
+<% content_for :title, @institution.name %>
+<%#
+  Screen 2 (detail) — plan, enabled addons, estimated next invoice (stub).
+  @institution + @entitlements are stub. The two-gate model is UI-only here.
+-%>
+
+<%= render "shared/page_header",
+      title: @institution.name,
+      subtitle: "Institución ##{@institution.id} · datos stub" %>
+
+<section class="cp-section" aria-label="Resumen">
+  <%= render "control_plane/shared/institution_summary_card",
+        name: @institution.name, plan_name: @institution.plan_name,
+        plan_key: @institution.plan_key, subscription_status: @institution.subscription_status,
+        students_count: @institution.students_count,
+        enabled_addon_names: @institution.enabled_addon_names,
+        next_invoice_estimate: @institution.next_invoice_estimate,
+        currency: @institution.currency %>
+</section>
+
+<section class="cp-section" aria-labelledby="cp-ent-h">
+  <h2 id="cp-ent-h">Entitlements</h2>
+  <p>
+    <%= link_to "Abrir editor de entitlements",
+          control_plane_entitlements_path(institution_id: @institution.id) %>
+  </p>
+  <div class="cp-stack">
+    <% @entitlements.each do |ent| %>
+      <%= render "control_plane/shared/entitlement_toggle_row",
+            addon_name: ent.addon_name, enabled: ent.enabled?,
+            valid_from: ent.valid_from, valid_until: ent.valid_until,
+            override_fee: ent.override_fee, override_quota: ent.override_quota,
+            currency: ent.currency %>
+    <% end %>
+  </div>
+</section>

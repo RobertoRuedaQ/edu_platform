@@ -1,0 +1,39 @@
+<% content_for :title, "Planes y precios" %>
+<%#
+  Screen 5 — plans & pricing. Three orthogonal hybrid-billing pieces:
+  base por alumno (brackets) + fee por addon + cupo/overage. Data stub.
+-%>
+
+<%= render "shared/page_header",
+      title: "Planes y precios",
+      subtitle: "Cobro híbrido: base por alumno + fee por addon + overage por uso · stub" %>
+
+<section class="cp-section" aria-labelledby="cp-plans-h">
+  <h2 id="cp-plans-h">Base por alumno (brackets)</h2>
+  <% @plans.each do |plan| %>
+    <%= render layout: "shared/card", locals: { title: plan.name, subtitle: plan.status } do %>
+      <%= render layout: "shared/table",
+            locals: { headers: [ "Desde", "Hasta", "Por alumno" ] } do %>
+        <% plan.brackets.each do |bracket| %>
+          <tr>
+            <td><%= number_with_delimiter(bracket.from, delimiter: ".") %></td>
+            <td><%= bracket.open_ended? ? "y más" : number_with_delimiter(bracket.to, delimiter: ".") %></td>
+            <td><%= money(bracket.per_student, currency: plan.currency) %></td>
+          </tr>
+        <% end %>
+      <% end %>
+    <% end %>
+  <% end %>
+</section>
+
+<section class="cp-section" aria-labelledby="cp-fees-h">
+  <h2 id="cp-fees-h">Fee por addon + cupo / overage</h2>
+  <div class="cp-grid">
+    <% @addons.each do |addon| %>
+      <%= render "control_plane/shared/addon_card",
+            name: addon.name, status: addon.status, monthly_fee: addon.monthly_fee,
+            currency: addon.currency, metered: addon.metered?, unit: addon.unit,
+            quota: addon.quota, domain: addon.domain %>
+    <% end %>
+  </div>
+</section>

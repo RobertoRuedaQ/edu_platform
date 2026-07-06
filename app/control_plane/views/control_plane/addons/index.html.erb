@@ -1,0 +1,22 @@
+<% content_for :title, "Catálogo de addons" %>
+<%#
+  Screen 3 — addon catalog (visual CRUD, no persistence). Addon = domain 1:1.
+  Data stub via @addons. Cards via control_plane/shared/_addon_card.
+-%>
+
+<%= render "shared/page_header",
+      title: "Catálogo de addons",
+      subtitle: "Addon = dominio 1:1 · datos stub",
+      actions: ui_button("Nuevo addon", href: "#", variant: :primary) %>
+
+<section class="cp-section" aria-label="Addons">
+  <div class="cp-grid">
+    <% @addons.each do |addon| %>
+      <%= render "control_plane/shared/addon_card",
+            name: addon.name, status: addon.status, monthly_fee: addon.monthly_fee,
+            currency: addon.currency, metered: addon.metered?, unit: addon.unit,
+            quota: addon.quota, domain: addon.domain,
+            actions: ui_button("Editar", href: "#", variant: :ghost, size: :sm) %>
+    <% end %>
+  </div>
+</section>

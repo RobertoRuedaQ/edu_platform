@@ -1,0 +1,24 @@
+<% content_for :title, "Instituciones" %>
+<%#
+  Screen 2 (list) — institutions as seen from the control plane. `id` is a
+  global FK here, never an RLS scope. Data stub via @institutions.
+-%>
+
+<%= render "shared/page_header",
+      title: "Instituciones",
+      subtitle: "#{@institutions.size} instituciones · datos stub" %>
+
+<%= render layout: "shared/table",
+      locals: { headers: [ "Institución", "Plan", "Suscripción", "Alumnos", "MRR", "Próx. factura (est.)", "" ] } do %>
+  <% @institutions.each do |inst| %>
+    <tr>
+      <th scope="row"><%= link_to inst.name, control_plane_institution_path(inst.id) %></th>
+      <td><%= render "control_plane/shared/plan_badge", name: inst.plan_name, plan_key: inst.plan_key %></td>
+      <td><%= render "control_plane/shared/subscription_status_badge", status: inst.subscription_status %></td>
+      <td><%= number_with_delimiter(inst.students_count, delimiter: ".") %></td>
+      <td><%= money(inst.mrr, currency: inst.currency) %></td>
+      <td><%= money(inst.next_invoice_estimate, currency: inst.currency) %></td>
+      <td><%= link_to "Ver", control_plane_institution_path(inst.id) %></td>
+    </tr>
+  <% end %>
+<% end %>

@@ -1,0 +1,55 @@
+<% content_for :title, "Dashboard de plataforma" %>
+<%#
+  Screen 1 — Platform dashboard. Cross-tenant rollups (stub via @dashboard).
+  PASO 2 replaces the marked placeholders with shared/reusable components.
+-%>
+
+<%= render "shared/page_header",
+      title: "Dashboard de plataforma",
+      subtitle: "Vista cross-tenant · datos stub" %>
+
+<section class="cp-section" aria-label="Indicadores">
+  <div class="cp-grid">
+    <%= render "shared/stat", value: @dashboard.active_institutions,
+          label: "Instituciones activas", variant: :primary %>
+    <%= render "shared/stat", value: money(@dashboard.mrr, currency: @dashboard.currency),
+          label: "MRR", variant: :success %>
+    <%= render "shared/stat",
+          value: number_with_delimiter(@dashboard.total_students, delimiter: "."),
+          label: "Alumnos totales" %>
+  </div>
+</section>
+
+<section class="cp-section" aria-labelledby="cp-alerts-h">
+  <h2 id="cp-alerts-h">Alertas</h2>
+  <div class="cp-stack">
+    <% @dashboard.alerts.each do |alert| %>
+      <%= render "shared/alert", variant: alert.level.to_sym,
+            title: alert.title, message: alert.detail %>
+    <% end %>
+  </div>
+</section>
+
+<section class="cp-section" aria-labelledby="cp-usage-h">
+  <h2 id="cp-usage-h">Uso agregado</h2>
+  <div class="cp-stack">
+    <% @dashboard.usage_meters.each do |meter| %>
+      <%= render "control_plane/shared/usage_meter",
+            label: meter.label, addon_name: meter.addon_name, unit: meter.unit,
+            used: meter.used, quota: meter.quota, threshold: meter.threshold,
+            overage_unit_price: meter.overage_unit_price, currency: meter.currency %>
+    <% end %>
+  </div>
+</section>
+
+<section class="cp-section" aria-labelledby="cp-audit-h">
+  <h2 id="cp-audit-h">Actividad reciente</h2>
+  <div class="cp-stack">
+    <% @dashboard.recent_audit.each do |entry| %>
+      <%= render "shared/audit_entry_row",
+            actor: entry.actor, actor_role: entry.actor_role, action: entry.action,
+            target: entry.target, occurred_at: entry.occurred_at, ip: entry.ip %>
+    <% end %>
+  </div>
+  <p><%= link_to "Ver auditoría completa", control_plane_audit_entries_path %></p>
+</section>

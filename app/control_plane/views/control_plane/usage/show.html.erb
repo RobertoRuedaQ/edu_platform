@@ -1,0 +1,20 @@
+<% content_for :title, "Uso / metering" %>
+<%#
+  Screen 6 — usage / metering: meters against quota. Overage counts EVENTS,
+  never students. Data stub via @usage_meters.
+-%>
+
+<%= render "shared/page_header",
+      title: "Uso / metering",
+      subtitle: "Consumo contra cupo · el overage cuenta eventos, nunca alumnos · stub" %>
+
+<section class="cp-section" aria-label="Medidores">
+  <div class="cp-stack">
+    <% @usage_meters.each do |meter| %>
+      <%= render "control_plane/shared/usage_meter",
+            label: meter.label, addon_name: meter.addon_name, unit: meter.unit,
+            used: meter.used, quota: meter.quota, threshold: meter.threshold,
+            overage_unit_price: meter.overage_unit_price, currency: meter.currency %>
+    <% end %>
+  </div>
+</section>
