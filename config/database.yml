@@ -1,0 +1,52 @@
+# The primary DB is RLS-enforced. The Solid infra DBs (cache/queue/cable) are
+# NOT RLS-scoped — they hold no tenant rows and get no tenant policies.
+default: &default
+  adapter: postgresql
+  encoding: unicode
+  pool: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
+  host: <%= ENV.fetch("EDU_DB_HOST", "localhost") %>
+  port: <%= ENV.fetch("EDU_DB_PORT", 5432) %>
+  # The app boots as edu_app_runtime (NOBYPASSRLS, DML-only, owns nothing).
+  # bin/migrate overrides EDU_DB_USER/EDU_DB_PASSWORD with the migrator creds so
+  # DDL runs as the schema owner. One switch, two roles — boring and explicit.
+  username: <%= ENV.fetch("EDU_DB_USER", "edu_app_runtime") %>
+  password: <%= ENV.fetch("EDU_DB_PASSWORD", nil) %>
+
+development:
+  primary:
+    <<: *default
+    database: edu_platform_development
+  cache:
+    <<: *default
+    database: edu_platform_development_cache
+    migrations_paths: db/cache_migrate
+  queue:
+    <<: *default
+    database: edu_platform_development_queue
+    migrations_paths: db/queue_migrate
+  cable:
+    <<: *default
+    database: edu_platform_development_cable
+    migrations_paths: db/cable_migrate
+
+test:
+  primary:
+    <<: *default
+    database: edu_platform_test
+
+production:
+  primary:
+    <<: *default
+    database: edu_platform_production
+  cache:
+    <<: *default
+    database: edu_platform_production_cache
+    migrations_paths: db/cache_migrate
+  queue:
+    <<: *default
+    database: edu_platform_production_queue
+    migrations_paths: db/queue_migrate
+  cable:
+    <<: *default
+    database: edu_platform_production_cable
+    migrations_paths: db/cable_migrate
