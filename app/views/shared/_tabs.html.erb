@@ -1,0 +1,26 @@
+<%# locals: (panels:, id: "tabs", label: "Secciones", **attrs) -%>
+<%# Accessible tabs (ARIA tablist/tab/tabpanel) with keyboard support, as -%>
+<%# progressive enhancement. Without JS: tabs are in-page anchors and every -%>
+<%# panel stays visible. The tabs controller collapses to one panel on connect. -%>
+<%# panels: an ordered Hash { "Etiqueta" => html_safe_content }, built with capture. -%>
+<% attrs[:class] = class_names("tabs", attrs[:class]) -%>
+<%= tag.div(data: { controller: "tabs" }, **attrs) do -%>
+  <div class="tabs__list" role="tablist" aria-label="<%= label %>">
+    <% panels.each_with_index do |(name, _content), i| -%>
+      <% slug = "#{id}-#{name.to_s.parameterize}" -%>
+      <a class="tabs__tab" id="<%= slug %>-tab" href="#<%= slug %>"
+         role="tab" aria-controls="<%= slug %>" aria-selected="<%= i.zero? %>"
+         tabindex="<%= i.zero? ? 0 : -1 %>"
+         data-tabs-target="tab"
+         data-action="click->tabs#select keydown->tabs#navigate"><%= name %></a>
+    <% end -%>
+  </div>
+
+  <% panels.each_with_index do |(name, content), i| -%>
+    <% slug = "#{id}-#{name.to_s.parameterize}" -%>
+    <section class="tabs__panel" id="<%= slug %>" role="tabpanel"
+             aria-labelledby="<%= slug %>-tab" tabindex="0" data-tabs-target="panel">
+      <%= content %>
+    </section>
+  <% end -%>
+<% end -%>

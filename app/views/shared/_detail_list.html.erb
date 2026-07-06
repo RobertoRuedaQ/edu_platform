@@ -1,0 +1,13 @@
+<%# locals: (items:, **attrs) -%>
+<%# Key–value detail block as a semantic <dl>. -%>
+<%# items: a Hash (or array of [term, value] pairs), insertion-ordered. -%>
+<%# Values may be html_safe (e.g. a badge). -%>
+<% attrs[:class] = class_names("detail-list", attrs[:class]) -%>
+<%= tag.dl(**attrs) do -%>
+  <% items.each do |term, value| -%>
+    <div class="detail-list__row">
+      <dt class="detail-list__term"><%= term %></dt>
+      <dd class="detail-list__value"><%= value.presence || "—" %></dd>
+    </div>
+  <% end -%>
+<% end -%>
