@@ -1,6 +1,9 @@
-<%# locals: (value:, label:, icon: nil, variant: :default, hint: nil, **attrs) -%>
+<%# locals: (value:, label:, icon: nil, variant: :default, hint: nil, trend: nil, sparkline: nil, **attrs) -%>
 <%# Compact metric block: big number + label, optional icon and status variant. -%>
 <%# variant: :default | :primary | :success | :warning | :danger -%>
+<%# trend: { direction: :up|:down|:flat, label: "+12%", variant: :neutral } — delta shown -%>
+<%#        with an arrow ICON + TEXT (never color alone). -%>
+<%# sparkline: array of numbers/points -> tiny _line_chart (decorative). -%>
 <% attrs[:class] = class_names("stat", ("stat--#{variant}" unless variant == :default), attrs[:class]) -%>
 <%= tag.div(**attrs) do -%>
   <% if icon -%>
@@ -10,5 +13,18 @@
     <div class="stat__value"><%= value %></div>
     <div class="stat__label"><%= label %></div>
     <% if hint -%><div class="stat__hint"><%= hint %></div><% end -%>
+
+    <% if trend -%>
+      <% dir = (trend[:direction] || :flat).to_sym -%>
+      <% glyph = { up: "trending-up", down: "trending-down", flat: "chevron-down" }.fetch(dir, "chevron-down") -%>
+      <p class="stat__trend stat__trend--<%= trend[:variant] || :neutral %>">
+        <span class="stat__trend-icon" aria-hidden="true"><%= ui_icon glyph, size: 14 %></span>
+        <span><%= trend[:label] %></span>
+      </p>
+    <% end -%>
+
+    <% if sparkline.present? -%>
+      <div class="stat__sparkline"><%= render "shared/line_chart", points: sparkline, sparkline: true %></div>
+    <% end -%>
   </div>
 <% end -%>

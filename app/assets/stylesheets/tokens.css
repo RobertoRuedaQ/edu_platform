@@ -147,6 +147,16 @@
     --z-overlay:  1200;
     --z-modal:    1300;
     --z-toast:    1400;
+
+    /* Categorical chart palette — validated for CVD separation + contrast on
+       the light surface (dataviz validator). Assigned in fixed order, never
+       cycled. Semantic colors (success/danger/…) are NOT reused as series. */
+    --chart-1: #3557b7;
+    --chart-2: #0d9488;
+    --chart-3: #b45309;
+    --chart-4: #7c3aed;
+    --chart-5: #be123c;
+    --chart-6: #0891b2;
   }
 
   /* ------------------------------------------------------------------------
@@ -181,6 +191,15 @@
       --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
       --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.5);
       --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.6);
+
+      /* Chart palette re-picked for the dark surface (not a naive flip):
+         validated for CVD separation + contrast on dark. */
+      --chart-1: #6366f1;
+      --chart-2: #0d9488;
+      --chart-3: #d97706;
+      --chart-4: #8b5cf6;
+      --chart-5: #e11d48;
+      --chart-6: #0891b2;
     }
   }
 }
