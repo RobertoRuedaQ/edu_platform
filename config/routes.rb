@@ -27,5 +27,11 @@ Rails.application.routes.draw do
     resource  :usage, only: %i[show], controller: "usage"  # metering (one view)
     resources :invoices, only: %i[index]
     resources :audit_entries, only: %i[index], path: "audit", controller: "audit"
+
+    # Dev-only component gallery. NOT an app view: a buildless preview of the
+    # control-plane components with stub data. Never mounted outside development.
+    if Rails.env.development?
+      resources :previews, only: %i[index]
+    end
   end
 end

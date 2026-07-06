@@ -431,4 +431,37 @@
   .invoice-line__amount { font-weight: var(--weight-semibold); }
 
   .invoice-total { margin-top: var(--space-3); text-align: end; font-variant-numeric: tabular-nums; }
+
+  /* --- Dev-only preview gallery ------------------------------------------- */
+  .cp-preview-banner {
+    background: var(--color-warning-subtle);
+    color: var(--color-warning-text);
+    border: 1px solid var(--color-warning);
+    border-radius: var(--radius-md);
+    padding: var(--space-3) var(--space-4);
+    margin-block-end: var(--space-5);
+    font-size: var(--text-sm);
+  }
+
+  .cp-preview-toc {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    margin-block-end: var(--space-6);
+    font-size: var(--text-sm);
+  }
+
+  .cp-specimen {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    margin-block-end: var(--space-3);
+  }
+
+  .cp-specimen__note {
+    font-size: var(--text-sm);
+    font-weight: var(--weight-normal);
+    color: var(--color-text-subtle);
+  }
 }
