@@ -1,0 +1,82 @@
+/* =============================================================================
+   layout.css — Page scaffolding: container, header/nav, main, footer, skip-link.
+   Visual identity (wordmark, nav polish) is refined in Part 5; this is the frame.
+   ============================================================================= */
+
+@layer layout {
+  .container {
+    width: 100%;
+    max-width: var(--container-max);
+    margin-inline: auto;
+    padding-inline: var(--space-4);
+  }
+
+  /* Sticky footer: header / main / footer stack fills the viewport. */
+  .app-shell {
+    display: flex;
+    flex-direction: column;
+    min-height: 100dvh;
+  }
+  .app-main { flex: 1 0 auto; padding-block: var(--space-6); }
+
+  /* --- Skip link: first focusable element, hidden until focused. --------- */
+  .skip-link {
+    position: absolute;
+    left: var(--space-3);
+    top: -3rem;
+    z-index: var(--z-toast);
+    padding: var(--space-2) var(--space-4);
+    background: var(--color-primary);
+    color: var(--color-primary-contrast);
+    border-radius: var(--radius-md);
+    text-decoration: none;
+    transition: top var(--transition-fast);
+  }
+  .skip-link:focus { top: var(--space-3); }
+
+  /* --- Header / nav ------------------------------------------------------ */
+  .app-header {
+    position: sticky;
+    top: 0;
+    z-index: var(--z-sticky);
+    background: var(--color-surface);
+    border-bottom: 1px solid var(--color-border);
+  }
+  .app-header__inner {
+    display: flex;
+    align-items: center;
+    gap: var(--space-5);
+    min-height: 3.5rem;
+  }
+  .app-nav {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    margin-inline-start: auto;
+  }
+
+  /* --- Footer ------------------------------------------------------------ */
+  .app-footer {
+    flex-shrink: 0;
+    border-top: 1px solid var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-text-muted);
+    font-size: var(--text-sm);
+  }
+  .app-footer__inner {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3) var(--space-5);
+    align-items: center;
+    justify-content: space-between;
+    padding-block: var(--space-5);
+  }
+
+  /* --- Flash region ------------------------------------------------------ */
+  .flash-region {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding-block: var(--space-3);
+  }
+}
