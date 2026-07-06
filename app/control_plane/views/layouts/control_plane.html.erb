@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <title><%= page_title %></title>
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="application-name" content="EduPlatform · Control">
+    <%= csrf_meta_tags %>
+    <%= csp_meta_tag %>
+
+    <%= yield :head %>
+
+    <link rel="icon" href="/icon.png" type="image/png">
+    <link rel="icon" href="/icon.svg" type="image/svg+xml">
+
+    <%# Propshaft: tenant token/base/layout/component layers PLUS the control-plane
+        stylesheet, linked only here. @layer keeps the cascade predictable. %>
+    <%= stylesheet_link_tag "tokens", "base", "layout", "components", "utilities",
+                            "control_plane", "data-turbo-track": "reload" %>
+    <%= javascript_importmap_tags %>
+  </head>
+
+  <body>
+    <a class="skip-link" href="#cp-main">Saltar al contenido</a>
+
+    <div class="cp-shell">
+      <%# Saturated top band: a constant visual reminder that this is the
+          cross-tenant super-admin plane, not a tenant app. %>
+      <header class="cp-band">
+        <div class="cp-band__inner">
+          <span class="cp-band__mark">EduPlatform</span>
+          <span class="cp-band__tag">Plano de control</span>
+
+          <%# STUB: shown until the real platform_admin session + MFA guard lands. %>
+          <span class="cp-band__stub" title="Auth y rol auditado BYPASSRLS aún son stub">
+            SIN AUTH · datos stub
+          </span>
+
+          <span class="cp-band__admin">
+            <%# TODO: reemplazar por ControlPlane::PlatformAdmin actual. %>
+            super-admin (stub)
+          </span>
+        </div>
+      </header>
+
+      <div class="cp-body">
+        <%# Sidebar. Text-only on purpose: the shared icon set has no glyphs for
+            these destinations, and a wrong icon is worse than none. %>
+        <nav class="cp-nav" aria-label="Secciones del plano de control">
+          <% cp_nav_items.each do |label, path| %>
+            <%= link_to label, path, class: "cp-nav__link",
+                        "aria-current": (current_page?(path) ? "page" : nil) %>
+          <% end %>
+        </nav>
+
+        <main id="cp-main" class="cp-main" tabindex="-1">
+          <% if flash.any? %>
+            <div class="flash-region" aria-live="polite">
+              <% flash.each do |type, message| %>
+                <%= render "shared/flash", type: type, message: message %>
+              <% end %>
+            </div>
+          <% end %>
+
+          <%= yield %>
+        </main>
+      </div>
+    </div>
+  </body>
+</html>
