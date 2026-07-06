@@ -449,4 +449,24 @@
   .alert__title { font-weight: var(--weight-semibold); }
   .alert__message { margin: 0; }
   .alert__extra { margin-top: var(--space-3); display: flex; flex-direction: column; gap: var(--space-2); }
+
+  /* --- Domain-local: cafeteria ------------------------------------------- */
+  /* Kept here (single component layer); prefixed so ownership stays obvious. */
+  .menu-item .card__body { display: flex; flex-direction: column; gap: var(--space-3); }
+  .menu-item.is-unavailable { opacity: 0.7; }
+  .menu-item__head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); }
+  .menu-item__name { font-size: var(--text-lg); }
+  .menu-item__category { font-size: var(--text-sm); color: var(--color-text-muted); margin-top: var(--space-1); }
+  .menu-item__aside { display: flex; flex-direction: column; align-items: flex-end; gap: var(--space-1); flex: none; }
+  .menu-item__price { font-family: var(--font-display); font-size: var(--text-xl); font-weight: var(--weight-semibold); font-variant-numeric: tabular-nums; }
+  .menu-item__tags { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+  .menu-item__allergens { display: flex; flex-direction: column; gap: var(--space-2); }
+
+  .checkout-line { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3) 0; border-bottom: 1px solid var(--color-border); }
+  .checkout-line:last-child { border-bottom: 0; }
+  .checkout-line__main { display: flex; align-items: baseline; gap: var(--space-3); }
+  .checkout-line__qty { color: var(--color-text-muted); font-variant-numeric: tabular-nums; }
+  .checkout-line__name { flex: 1; }
+  .checkout-line__price { font-variant-numeric: tabular-nums; font-weight: var(--weight-medium); }
+  .checkout-line.is-blocked .checkout-line__name { color: var(--color-text-muted); text-decoration: line-through; }
 }

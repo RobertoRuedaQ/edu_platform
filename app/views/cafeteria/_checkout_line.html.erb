@@ -1,0 +1,30 @@
+<%# locals: (name:, unit_price:, quantity: 1, currency: "COP", blocked: false, block_reason: nil, allergens: [], **attrs) -%>
+<%#
+  Domain-local (cafeteria) checkout line. When blocked: true, renders a danger
+  shared/_alert with the reason and the offending _allergen_flag(s). It does NOT
+  decide the block — it only reflects the flag it receives.
+  allergens: array of { name:, severity:, reaction: } hashes (stub).
+  # TODO: reemplazar por modelo real (Cafeteria::CheckoutLine).
+-%>
+<% line_total = unit_price * quantity -%>
+<% attrs[:class] = class_names("checkout-line", ("is-blocked" if blocked), attrs[:class]) -%>
+<%= tag.div(**attrs) do -%>
+  <div class="checkout-line__main">
+    <span class="checkout-line__qty"><%= quantity %>&times;</span>
+    <span class="checkout-line__name"><%= name %></span>
+    <span class="checkout-line__price"><%= money(line_total, currency: currency) %></span>
+  </div>
+
+  <% if blocked -%>
+    <% flags = capture do -%>
+      <% allergens.each do |a| -%>
+        <%= render "shared/allergen_flag", name: a[:name], severity: (a[:severity] || :severe), reaction: a[:reaction] %>
+      <% end -%>
+    <% end -%>
+    <%= render "shared/alert",
+          variant: :danger, role: "alert",
+          title: "Compra bloqueada",
+          message: (block_reason.presence || "Contraindicación con el registro médico del estudiante."),
+          body: (flags if allergens.any?) %>
+  <% end -%>
+<% end -%>
