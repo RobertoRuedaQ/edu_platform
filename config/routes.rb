@@ -11,4 +11,21 @@ Rails.application.routes.draw do
 
   # Defines the root path route ("/")
   # root "posts#index"
+
+  # --- Control plane (super-admin, cross-tenant, above RLS) -----------------
+  # Its own namespace, mounted at /control_plane. NOT a tenant domain: no RLS
+  # scoping applies. Controllers live in app/control_plane/control_plane/ and
+  # resolve to ControlPlane::*Controller. Auth guard + audited BYPASSRLS role
+  # are still stubs in this phase (see ControlPlane::BaseController).
+  namespace :control_plane do
+    root to: "dashboard#show"
+
+    resources :institutions, only: %i[index show]
+    resources :addons, only: %i[index]
+    resources :entitlements, only: %i[index]   # editor per institution (?institution_id=)
+    resources :plans, only: %i[index]
+    resource  :usage, only: %i[show], controller: "usage"  # metering (one view)
+    resources :invoices, only: %i[index]
+    resources :audit_entries, only: %i[index], path: "audit", controller: "audit"
+  end
 end
