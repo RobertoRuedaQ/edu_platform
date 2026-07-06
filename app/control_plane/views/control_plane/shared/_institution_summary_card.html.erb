@@ -1,0 +1,25 @@
+<%# locals: (name:, plan_name:, subscription_status:, next_invoice_estimate:, plan_key: nil, students_count: nil, enabled_addon_names: [], currency: "USD", href: nil, **attrs) -%>
+<%#
+  Institution summary: current plan, enabled addons, estimated next invoice.
+  Composes shared/_card + _detail_list + plane _plan_badge/_subscription_status_badge.
+  next_invoice_estimate is a stub of the hybrid billing calc.
+  # TODO: alimentar desde referencia global de institución + suscripción.
+-%>
+<% attrs[:class] = class_names("institution-summary", attrs[:class]) -%>
+<%= render layout: "shared/card", locals: attrs do -%>
+  <div class="institution-summary__head">
+    <h3 class="institution-summary__name">
+      <%= href ? link_to(name, href) : name %>
+    </h3>
+    <div class="institution-summary__badges">
+      <%= render "control_plane/shared/plan_badge", name: plan_name, plan_key: plan_key %>
+      <%= render "control_plane/shared/subscription_status_badge", status: subscription_status %>
+    </div>
+  </div>
+
+  <%= render "shared/detail_list", items: {
+        "Alumnos"            => (students_count ? number_with_delimiter(students_count, delimiter: ".") : nil),
+        "Addons habilitados" => enabled_addon_names.join(", ").presence,
+        "Próxima factura (est.)" => money(next_invoice_estimate, currency: currency)
+      } %>
+<% end -%>

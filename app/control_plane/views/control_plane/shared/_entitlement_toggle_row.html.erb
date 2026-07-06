@@ -1,0 +1,50 @@
+<%# locals: (addon_name:, enabled:, valid_from: nil, valid_until: nil, override_fee: nil, override_quota: nil, currency: "USD", **attrs) -%>
+<%#
+  One institution × addon grant, as an editor row. This is GATE #1 (entitlement:
+  can the INSTITUTION use it?). Gate #2 is RBAC in identity_access.
+  The toggle is VISUAL ONLY — a disabled switch shows state accessibly but does
+  NOT submit. Wiring lands in a later phase.
+  # TODO: reemplazar por ControlPlane::Entitlement + submit real (Turbo/form).
+-%>
+<% negotiated = !override_fee.nil? || !override_quota.nil? -%>
+<% attrs[:class] = class_names("ent-row", ("ent-row--on" if enabled), attrs[:class]) -%>
+<% switch_id = "ent-#{addon_name.to_s.parameterize}" -%>
+<%= tag.div(**attrs) do -%>
+  <label class="ent-row__switch" for="<%= switch_id %>">
+    <%# Disabled checkbox styled as a switch: conveys checked/unchecked to AT and
+        is visibly non-submittable in this phase. -%>
+    <input type="checkbox" id="<%= switch_id %>" class="ent-row__input"
+           role="switch" <%= "checked" if enabled %> disabled
+           aria-describedby="<%= switch_id %>-state">
+    <span class="ent-row__track" aria-hidden="true"><span class="ent-row__thumb"></span></span>
+    <span class="ent-row__name"><%= addon_name %></span>
+    <span id="<%= switch_id %>-state" class="visually-hidden">
+      <%= enabled ? "habilitado" : "deshabilitado" %> (vista, sin guardar)
+    </span>
+  </label>
+
+  <dl class="ent-row__meta">
+    <div class="ent-row__meta-item">
+      <dt>Desde</dt>
+      <dd><%= valid_from ? datetime(valid_from.to_time, format: :date) : "—" %></dd>
+    </div>
+    <div class="ent-row__meta-item">
+      <dt>Hasta</dt>
+      <dd><%= valid_until ? datetime(valid_until.to_time, format: :date) : "sin fin" %></dd>
+    </div>
+    <div class="ent-row__meta-item">
+      <dt>Override</dt>
+      <dd>
+        <% if negotiated -%>
+          <%= ui_badge "Negociado", variant: :info %>
+          <span class="ent-row__override">
+            <% if override_fee -%>fee <%= money(override_fee, currency: currency) %><% end -%>
+            <% if override_quota -%>· cupo <%= number_with_delimiter(override_quota, delimiter: ".") %><% end -%>
+          </span>
+        <% else -%>
+          <span class="ent-row__override ent-row__override--none">Según plan</span>
+        <% end -%>
+      </dd>
+    </div>
+  </dl>
+<% end -%>

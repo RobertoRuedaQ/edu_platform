@@ -1,0 +1,9 @@
+<%# locals: (status:, **attrs) -%>
+<%# Platform subscription status -> badge. Text carries meaning (never color -%>
+<%# alone). Mirrors finance/_payment_status_badge, but for PLATFORM billing. -%>
+<%# TODO: reemplazar por ControlPlane::Subscription#status. -%>
+<% variant = { "active" => :success, "trialing" => :info,
+               "past_due" => :warning, "canceled" => :neutral }.fetch(status.to_s, :neutral) -%>
+<% label = { "active" => "Activa", "trialing" => "En prueba",
+             "past_due" => "Vencida", "canceled" => "Cancelada" }.fetch(status.to_s, status.to_s.humanize) -%>
+<%= ui_badge label, variant: variant, **attrs %>
