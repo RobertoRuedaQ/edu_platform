@@ -362,4 +362,15 @@
   .stat--success .stat__icon { color: var(--color-success);      background: var(--color-success-subtle); }
   .stat--warning .stat__icon { color: var(--color-warning-text); background: var(--color-warning-subtle); }
   .stat--danger  .stat__icon { color: var(--color-danger);       background: var(--color-danger-subtle); }
+
+  /* --- Time range (days + hours) ----------------------------------------- */
+  .time-range {
+    display: inline-flex;
+    align-items: baseline;
+    gap: var(--space-2);
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+  }
+  .time-range__days { font-weight: var(--weight-medium); color: var(--color-text); }
+  .time-range__hours { font-variant-numeric: tabular-nums; white-space: nowrap; }
 }
