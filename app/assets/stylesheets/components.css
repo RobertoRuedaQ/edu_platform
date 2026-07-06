@@ -332,4 +332,34 @@
   .tabs__tab:hover { color: var(--color-text); }
   .tabs__tab[aria-selected="true"] { color: var(--color-primary); border-bottom-color: var(--color-primary); }
   .tabs__panel[hidden] { display: none; }
+
+  /* --- Stat (compact metric) --------------------------------------------- */
+  .stat {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    padding: var(--space-4) var(--space-5);
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+  }
+  .stat__icon {
+    display: inline-flex;
+    padding: var(--space-2);
+    border-radius: var(--radius-md);
+    color: var(--color-primary);
+    background: var(--color-primary-subtle);
+  }
+  .stat__value {
+    font-family: var(--font-display);
+    font-size: var(--text-3xl);
+    font-weight: var(--weight-semibold);
+    line-height: var(--leading-tight);
+    font-variant-numeric: tabular-nums;
+  }
+  .stat__label { font-size: var(--text-sm); color: var(--color-text-muted); }
+  .stat__hint { font-size: var(--text-xs); color: var(--color-text-subtle); margin-top: var(--space-1); }
+  .stat--success .stat__icon { color: var(--color-success);      background: var(--color-success-subtle); }
+  .stat--warning .stat__icon { color: var(--color-warning-text); background: var(--color-warning-subtle); }
+  .stat--danger  .stat__icon { color: var(--color-danger);       background: var(--color-danger-subtle); }
 }

@@ -1,0 +1,14 @@
+<%# locals: (value:, label:, icon: nil, variant: :default, hint: nil, **attrs) -%>
+<%# Compact metric block: big number + label, optional icon and status variant. -%>
+<%# variant: :default | :primary | :success | :warning | :danger -%>
+<% attrs[:class] = class_names("stat", ("stat--#{variant}" unless variant == :default), attrs[:class]) -%>
+<%= tag.div(**attrs) do -%>
+  <% if icon -%>
+    <span class="stat__icon" aria-hidden="true"><%= ui_icon(icon, size: 20) %></span>
+  <% end -%>
+  <div class="stat__body">
+    <div class="stat__value"><%= value %></div>
+    <div class="stat__label"><%= label %></div>
+    <% if hint -%><div class="stat__hint"><%= hint %></div><% end -%>
+  </div>
+<% end -%>
