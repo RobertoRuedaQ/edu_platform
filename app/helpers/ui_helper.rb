@@ -29,4 +29,24 @@ module UiHelper
       "warning" => "flash--warning"
     }.fetch(type.to_s, "flash--info")
   end
+
+  # Per-currency display config. es-style grouping (1.234,50).
+  # TODO: currency will come from institution_settings; passed in for now.
+  MONEY_FORMATS = {
+    "COP" => { unit: "$",   precision: 0, format: "%u%n" },
+    "USD" => { unit: "US$", precision: 2, format: "%u%n" },
+    "MXN" => { unit: "$",   precision: 2, format: "%u%n" },
+    "EUR" => { unit: "€",   precision: 2, format: "%n %u" }
+  }.freeze
+
+  # Format money for the es locale with a configurable currency. Never hardcode
+  # the currency at call sites for real amounts — pass the institution's.
+  def money(amount, currency: "COP")
+    return "—" if amount.nil?
+
+    cfg = MONEY_FORMATS.fetch(currency.to_s, { unit: "#{currency} ", precision: 2, format: "%u%n" })
+    number_to_currency(amount,
+      unit: cfg[:unit], precision: cfg[:precision],
+      delimiter: ".", separator: ",", format: cfg[:format])
+  end
 end
