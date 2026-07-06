@@ -1,0 +1,17 @@
+<%# locals: (category:, employment_type: nil, **attrs) -%>
+<%#
+  Staff category + employment type. Category/type are conveyed by TEXT (never
+  color alone); an icon precedes them. Local to staff_management for now —
+  promote to shared/ if teacher_management (or another domain) consumes it.
+-%>
+<% cat = { "teaching" => "Docente", "kitchen" => "Cocina", "transport" => "Transporte",
+           "maintenance" => "Mantenimiento", "security" => "Vigilancia",
+           "admin" => "Administración", "other" => "Otro" }.fetch(category.to_s, category.to_s.humanize) -%>
+<% type = { "full_time" => "Tiempo completo", "part_time" => "Medio tiempo",
+            "contract" => "Contrato" }[employment_type.to_s] -%>
+<% attrs[:class] = class_names("employment-badge", attrs[:class]) -%>
+<%= tag.span(**attrs) do -%>
+  <span class="employment-badge__icon" aria-hidden="true"><%= ui_icon "users", size: 14 %></span>
+  <span class="employment-badge__cat"><%= cat %></span>
+  <% if type -%><span class="employment-badge__type"><%= type %></span><% end -%>
+<% end -%>

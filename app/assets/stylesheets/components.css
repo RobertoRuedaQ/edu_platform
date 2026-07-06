@@ -532,4 +532,22 @@
   @media (prefers-reduced-motion: reduce) {
     .chart__bar { transition: none; }
   }
+
+  /* --- Domain-local: staff_management ------------------------------------ */
+  .employment-badge { display: inline-flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); }
+  .employment-badge__icon { color: var(--color-text-muted); display: inline-flex; }
+  .employment-badge__cat { font-weight: var(--weight-medium); }
+  .employment-badge__type {
+    font-size: var(--text-xs);
+    color: var(--color-text-muted);
+    background: var(--color-surface-sunken);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-full);
+    padding: 0.1em 0.6em;
+  }
+  .staff-card .card__body { display: flex; flex-direction: column; gap: var(--space-4); }
+  .staff-card__head { display: flex; align-items: center; gap: var(--space-3); }
+  .staff-card__id { flex: 1; min-width: 0; }
+  .staff-card__name { font-size: var(--text-lg); margin-bottom: var(--space-1); }
+  .staff-row__person { display: inline-flex; align-items: center; gap: var(--space-2); }
 }

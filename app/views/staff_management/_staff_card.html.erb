@@ -1,0 +1,23 @@
+<%# locals: (name:, employee_number:, category:, employment_type:, status:, department: nil, hire_date: nil, **attrs) -%>
+<%#
+  Staff member card. Composes shared/_card + _avatar + _detail_list + _badge
+  and the local _employment_badge. Fed by locals (model attrs or stub).
+  # TODO: alimentar desde StaffManagement::StaffMember vía presenter/locals.
+-%>
+<% status_variant = { "active" => :success, "on_leave" => :warning, "terminated" => :neutral }.fetch(status.to_s, :neutral) -%>
+<% status_label = { "active" => "Activo", "on_leave" => "En licencia", "terminated" => "Desvinculado" }.fetch(status.to_s, status.to_s.humanize) -%>
+<%= render layout: "shared/card", locals: { class: "staff-card" } do -%>
+  <div class="staff-card__head">
+    <%= ui_avatar name, size: :lg %>
+    <div class="staff-card__id">
+      <h3 class="staff-card__name"><%= name %></h3>
+      <%= render "staff_management/employment_badge", category: category, employment_type: employment_type %>
+    </div>
+    <%= ui_badge status_label, variant: status_variant %>
+  </div>
+  <%= render "shared/detail_list", items: {
+        "N.º de empleado" => employee_number,
+        "Departamento"    => department,
+        "Ingreso"         => hire_date
+      } %>
+<% end -%>

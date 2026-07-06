@@ -64,6 +64,24 @@ ALTER TABLE ONLY public.assessments FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: departments; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.departments (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    name character varying NOT NULL,
+    code character varying NOT NULL,
+    kind character varying NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT departments_kind_check CHECK (((kind)::text = ANY ((ARRAY['academic'::character varying, 'operational'::character varying])::text[])))
+);
+
+ALTER TABLE ONLY public.departments FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: dietary_restrictions; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -79,6 +97,27 @@ CREATE TABLE public.dietary_restrictions (
 );
 
 ALTER TABLE ONLY public.dietary_restrictions FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: employment_periods; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.employment_periods (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    staff_member_id uuid NOT NULL,
+    contract_type character varying NOT NULL,
+    starts_on date NOT NULL,
+    ends_on date,
+    fte numeric(4,2),
+    status character varying DEFAULT 'active'::character varying NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT employment_periods_status_check CHECK (((status)::text = ANY ((ARRAY['active'::character varying, 'ended'::character varying])::text[])))
+);
+
+ALTER TABLE ONLY public.employment_periods FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -261,6 +300,30 @@ CREATE TABLE public.sessions (
 
 
 --
+-- Name: staff_members; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.staff_members (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    institution_user_id uuid NOT NULL,
+    department_id uuid,
+    employee_number character varying NOT NULL,
+    staff_category character varying NOT NULL,
+    employment_type character varying NOT NULL,
+    hire_date date,
+    status character varying DEFAULT 'active'::character varying NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT staff_members_category_check CHECK (((staff_category)::text = ANY ((ARRAY['teaching'::character varying, 'kitchen'::character varying, 'transport'::character varying, 'maintenance'::character varying, 'security'::character varying, 'admin'::character varying, 'other'::character varying])::text[]))),
+    CONSTRAINT staff_members_employment_type_check CHECK (((employment_type)::text = ANY ((ARRAY['full_time'::character varying, 'part_time'::character varying, 'contract'::character varying])::text[]))),
+    CONSTRAINT staff_members_status_check CHECK (((status)::text = ANY ((ARRAY['active'::character varying, 'on_leave'::character varying, 'terminated'::character varying])::text[])))
+);
+
+ALTER TABLE ONLY public.staff_members FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: student_guardians; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -341,6 +404,7 @@ CREATE TABLE public.teachers (
     hired_on date,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
+    staff_member_id uuid,
     CONSTRAINT teachers_gender_check CHECK (((gender)::text = ANY ((ARRAY['male'::character varying, 'female'::character varying])::text[])))
 );
 
@@ -394,11 +458,27 @@ ALTER TABLE ONLY public.assessments
 
 
 --
+-- Name: departments departments_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.departments
+    ADD CONSTRAINT departments_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: dietary_restrictions dietary_restrictions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.dietary_restrictions
     ADD CONSTRAINT dietary_restrictions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: employment_periods employment_periods_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.employment_periods
+    ADD CONSTRAINT employment_periods_pkey PRIMARY KEY (id);
 
 
 --
@@ -490,6 +570,14 @@ ALTER TABLE ONLY public.sessions
 
 
 --
+-- Name: staff_members staff_members_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.staff_members
+    ADD CONSTRAINT staff_members_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: student_guardians student_guardians_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -573,6 +661,20 @@ CREATE INDEX index_assessments_on_institution_id ON public.assessments USING btr
 
 
 --
+-- Name: index_departments_on_institution_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_departments_on_institution_id ON public.departments USING btree (institution_id);
+
+
+--
+-- Name: index_departments_on_institution_id_and_code; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_departments_on_institution_id_and_code ON public.departments USING btree (institution_id, code);
+
+
+--
 -- Name: index_dietary_restrictions_on_institution_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -584,6 +686,20 @@ CREATE INDEX index_dietary_restrictions_on_institution_id ON public.dietary_rest
 --
 
 CREATE INDEX index_dietary_restrictions_on_student_id ON public.dietary_restrictions USING btree (student_id);
+
+
+--
+-- Name: index_employment_periods_on_institution_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_employment_periods_on_institution_id ON public.employment_periods USING btree (institution_id);
+
+
+--
+-- Name: index_employment_periods_on_institution_id_and_staff_member_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_employment_periods_on_institution_id_and_staff_member_id ON public.employment_periods USING btree (institution_id, staff_member_id);
 
 
 --
@@ -727,6 +843,41 @@ CREATE INDEX index_sessions_on_user_id ON public.sessions USING btree (user_id);
 
 
 --
+-- Name: index_staff_members_on_institution_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_staff_members_on_institution_id ON public.staff_members USING btree (institution_id);
+
+
+--
+-- Name: index_staff_members_on_institution_id_and_department_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_staff_members_on_institution_id_and_department_id ON public.staff_members USING btree (institution_id, department_id);
+
+
+--
+-- Name: index_staff_members_on_institution_id_and_employee_number; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_staff_members_on_institution_id_and_employee_number ON public.staff_members USING btree (institution_id, employee_number);
+
+
+--
+-- Name: index_staff_members_on_institution_id_and_institution_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_staff_members_on_institution_id_and_institution_user_id ON public.staff_members USING btree (institution_id, institution_user_id);
+
+
+--
+-- Name: index_staff_members_on_institution_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_staff_members_on_institution_user_id ON public.staff_members USING btree (institution_user_id);
+
+
+--
 -- Name: index_student_guardians_on_guardian_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -832,6 +983,13 @@ CREATE UNIQUE INDEX index_teachers_on_institution_id_and_teacher_code ON public.
 
 
 --
+-- Name: index_teachers_on_staff_member_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_teachers_on_staff_member_id ON public.teachers USING btree (staff_member_id);
+
+
+--
 -- Name: index_teaching_assignments_on_institution_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -924,11 +1082,27 @@ ALTER TABLE ONLY public.subjects
 
 
 --
+-- Name: employment_periods fk_rails_271ac67781; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.employment_periods
+    ADD CONSTRAINT fk_rails_271ac67781 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: teachers fk_rails_2fabb62d4c; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.teachers
     ADD CONSTRAINT fk_rails_2fabb62d4c FOREIGN KEY (institution_id) REFERENCES public.institutions(id);
+
+
+--
+-- Name: departments fk_rails_33e5ee827a; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.departments
+    ADD CONSTRAINT fk_rails_33e5ee827a FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
 
 
 --
@@ -945,6 +1119,14 @@ ALTER TABLE ONLY public.student_guardians
 
 ALTER TABLE ONLY public.guardians
     ADD CONSTRAINT fk_rails_3bb3ecce67 FOREIGN KEY (institution_id) REFERENCES public.institutions(id);
+
+
+--
+-- Name: staff_members fk_rails_3c2c49abc0; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.staff_members
+    ADD CONSTRAINT fk_rails_3c2c49abc0 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
 
 
 --
@@ -988,6 +1170,14 @@ ALTER TABLE ONLY public.institution_settings
 
 
 --
+-- Name: staff_members fk_rails_6b44b8a383; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.staff_members
+    ADD CONSTRAINT fk_rails_6b44b8a383 FOREIGN KEY (department_id) REFERENCES public.departments(id) ON DELETE SET NULL;
+
+
+--
 -- Name: sessions fk_rails_758836b4f0; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1009,6 +1199,14 @@ ALTER TABLE ONLY public.sessions
 
 ALTER TABLE ONLY public.sections
     ADD CONSTRAINT fk_rails_7a7057fef3 FOREIGN KEY (institution_id) REFERENCES public.institutions(id);
+
+
+--
+-- Name: staff_members fk_rails_7d2a281eaa; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.staff_members
+    ADD CONSTRAINT fk_rails_7d2a281eaa FOREIGN KEY (institution_user_id) REFERENCES public.institution_users(id) ON DELETE CASCADE;
 
 
 --
@@ -1100,6 +1298,14 @@ ALTER TABLE ONLY public.faculties
 
 
 --
+-- Name: employment_periods fk_rails_daffc2b6c8; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.employment_periods
+    ADD CONSTRAINT fk_rails_daffc2b6c8 FOREIGN KEY (staff_member_id) REFERENCES public.staff_members(id) ON DELETE CASCADE;
+
+
+--
 -- Name: subjects fk_rails_e2fd7aa72b; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1124,6 +1330,14 @@ ALTER TABLE ONLY public.enrollments
 
 
 --
+-- Name: teachers fk_rails_f0edb92a45; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.teachers
+    ADD CONSTRAINT fk_rails_f0edb92a45 FOREIGN KEY (staff_member_id) REFERENCES public.staff_members(id) ON DELETE SET NULL;
+
+
+--
 -- Name: subjects fk_rails_fba2424889; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1145,6 +1359,19 @@ CREATE POLICY assessments_tenant_isolation ON public.assessments USING ((institu
 
 
 --
+-- Name: departments; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.departments ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: departments departments_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY departments_tenant_isolation ON public.departments USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
 -- Name: dietary_restrictions; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -1155,6 +1382,19 @@ ALTER TABLE public.dietary_restrictions ENABLE ROW LEVEL SECURITY;
 --
 
 CREATE POLICY dietary_restrictions_tenant_isolation ON public.dietary_restrictions USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: employment_periods; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.employment_periods ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: employment_periods employment_periods_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY employment_periods_tenant_isolation ON public.employment_periods USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
 
 
 --
@@ -1262,6 +1502,19 @@ CREATE POLICY sections_tenant_isolation ON public.sections USING ((institution_i
 
 
 --
+-- Name: staff_members; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.staff_members ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: staff_members staff_members_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY staff_members_tenant_isolation ON public.staff_members USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
 -- Name: student_guardians; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -1333,6 +1586,8 @@ CREATE POLICY teaching_assignments_tenant_isolation ON public.teaching_assignmen
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260706000002'),
+('20260706000001'),
 ('20260703000014'),
 ('20260703000013'),
 ('20260703000012'),
