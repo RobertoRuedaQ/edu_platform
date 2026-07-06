@@ -1,0 +1,20 @@
+<%# locals: (permissions: [], show_state: false) -%>
+<%#
+  permissions: array of { key:, description:, granted: (bool, optional) }.
+  When show_state, grant state is icon + text (never color alone).
+-%>
+<ul class="permission-list">
+  <% Array(permissions).each do |p| -%>
+    <li class="permission-list__item">
+      <% if show_state -%>
+        <% granted = p[:granted] -%>
+        <span class="permission-list__state <%= granted ? "is-granted" : "is-denied" %>">
+          <%= ui_icon(granted ? "check-circle" : "x", size: 16) %>
+          <span class="visually-hidden"><%= granted ? "Concedido" : "No concedido" %></span>
+        </span>
+      <% end -%>
+      <code class="permission-list__key"><%= p[:key] %></code>
+      <span class="permission-list__desc"><%= p[:description] %></span>
+    </li>
+  <% end -%>
+</ul>

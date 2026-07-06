@@ -1,0 +1,15 @@
+<%# locals: (person_name:, role_name:, scope_label: "Toda la institución", system: false, email: nil) -%>
+<%# A person × role × scope row, for a table of assignments. -%>
+<tr>
+  <td>
+    <span class="ia-person">
+      <%= ui_avatar person_name, size: :sm %>
+      <span class="ia-person__text">
+        <span class="ia-person__name"><%= person_name %></span>
+        <% if email.present? -%><span class="ia-person__email"><%= email %></span><% end -%>
+      </span>
+    </span>
+  </td>
+  <td><%= render "identity_access/role_badge", role_name: role_name, system: system %></td>
+  <td><%= scope_label %></td>
+</tr>

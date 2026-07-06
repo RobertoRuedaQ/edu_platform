@@ -241,6 +241,19 @@ CREATE TABLE public.institutions (
 
 
 --
+-- Name: permissions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.permissions (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    key character varying NOT NULL,
+    description character varying,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
 -- Name: programs; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -256,6 +269,60 @@ CREATE TABLE public.programs (
 );
 
 ALTER TABLE ONLY public.programs FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: role_assignments; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.role_assignments (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    institution_user_id uuid NOT NULL,
+    role_id uuid NOT NULL,
+    scope_department_id uuid,
+    scope_grade_level_id uuid,
+    scope_group_id uuid,
+    idempotency_key character varying,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+ALTER TABLE ONLY public.role_assignments FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: role_permissions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.role_permissions (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    role_id uuid NOT NULL,
+    permission_id uuid NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+ALTER TABLE ONLY public.role_permissions FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: roles; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.roles (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    key character varying NOT NULL,
+    name character varying NOT NULL,
+    description character varying,
+    system boolean DEFAULT false NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+ALTER TABLE ONLY public.roles FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -538,11 +605,43 @@ ALTER TABLE ONLY public.institutions
 
 
 --
+-- Name: permissions permissions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.permissions
+    ADD CONSTRAINT permissions_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: programs programs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.programs
     ADD CONSTRAINT programs_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: role_assignments role_assignments_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.role_assignments
+    ADD CONSTRAINT role_assignments_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: role_permissions role_permissions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.role_permissions
+    ADD CONSTRAINT role_permissions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: roles roles_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.roles
+    ADD CONSTRAINT roles_pkey PRIMARY KEY (id);
 
 
 --
@@ -644,6 +743,48 @@ CREATE UNIQUE INDEX idx_on_institution_id_student_id_subject_id_d3059c6cb5 ON pu
 --
 
 CREATE UNIQUE INDEX idx_on_institution_id_teacher_id_subject_id_b6a57dc73b ON public.teaching_assignments USING btree (institution_id, teacher_id, subject_id);
+
+
+--
+-- Name: idx_ra_idempotency; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_ra_idempotency ON public.role_assignments USING btree (institution_id, idempotency_key);
+
+
+--
+-- Name: idx_ra_inst_role; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_ra_inst_role ON public.role_assignments USING btree (institution_id, role_id);
+
+
+--
+-- Name: idx_ra_inst_user; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_ra_inst_user ON public.role_assignments USING btree (institution_id, institution_user_id);
+
+
+--
+-- Name: idx_ra_unique_scope; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_ra_unique_scope ON public.role_assignments USING btree (institution_id, institution_user_id, role_id, scope_department_id, scope_grade_level_id, scope_group_id) NULLS NOT DISTINCT;
+
+
+--
+-- Name: idx_rp_inst_permission; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_rp_inst_permission ON public.role_permissions USING btree (institution_id, permission_id);
+
+
+--
+-- Name: idx_rp_unique; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_rp_unique ON public.role_permissions USING btree (institution_id, role_id, permission_id);
 
 
 --
@@ -794,6 +935,13 @@ CREATE UNIQUE INDEX index_institutions_on_slug ON public.institutions USING btre
 
 
 --
+-- Name: index_permissions_on_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_permissions_on_key ON public.permissions USING btree (key);
+
+
+--
 -- Name: index_programs_on_faculty_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -812,6 +960,34 @@ CREATE INDEX index_programs_on_institution_id ON public.programs USING btree (in
 --
 
 CREATE UNIQUE INDEX index_programs_on_institution_id_and_code ON public.programs USING btree (institution_id, code);
+
+
+--
+-- Name: index_role_assignments_on_institution_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_role_assignments_on_institution_id ON public.role_assignments USING btree (institution_id);
+
+
+--
+-- Name: index_role_permissions_on_institution_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_role_permissions_on_institution_id ON public.role_permissions USING btree (institution_id);
+
+
+--
+-- Name: index_roles_on_institution_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_roles_on_institution_id ON public.roles USING btree (institution_id);
+
+
+--
+-- Name: index_roles_on_institution_id_and_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_roles_on_institution_id_and_key ON public.roles USING btree (institution_id, key);
 
 
 --
@@ -1138,6 +1314,22 @@ ALTER TABLE ONLY public.grade_levels
 
 
 --
+-- Name: role_assignments fk_rails_402eb6a154; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.role_assignments
+    ADD CONSTRAINT fk_rails_402eb6a154 FOREIGN KEY (scope_department_id) REFERENCES public.departments(id) ON DELETE CASCADE;
+
+
+--
+-- Name: role_permissions fk_rails_439e640a3f; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.role_permissions
+    ADD CONSTRAINT fk_rails_439e640a3f FOREIGN KEY (permission_id) REFERENCES public.permissions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: institution_users fk_rails_4d086ab524; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1159,6 +1351,22 @@ ALTER TABLE ONLY public.assessments
 
 ALTER TABLE ONLY public.institution_users
     ADD CONSTRAINT fk_rails_54725f8cd2 FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: role_permissions fk_rails_60126080bd; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.role_permissions
+    ADD CONSTRAINT fk_rails_60126080bd FOREIGN KEY (role_id) REFERENCES public.roles(id) ON DELETE CASCADE;
+
+
+--
+-- Name: role_assignments fk_rails_646eed7bbc; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.role_assignments
+    ADD CONSTRAINT fk_rails_646eed7bbc FOREIGN KEY (scope_grade_level_id) REFERENCES public.grade_levels(id) ON DELETE CASCADE;
 
 
 --
@@ -1207,6 +1415,14 @@ ALTER TABLE ONLY public.sections
 
 ALTER TABLE ONLY public.staff_members
     ADD CONSTRAINT fk_rails_7d2a281eaa FOREIGN KEY (institution_user_id) REFERENCES public.institution_users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: role_permissions fk_rails_92f10f160c; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.role_permissions
+    ADD CONSTRAINT fk_rails_92f10f160c FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
 
 
 --
@@ -1266,6 +1482,14 @@ ALTER TABLE ONLY public.students
 
 
 --
+-- Name: roles fk_rails_c08d8438fe; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.roles
+    ADD CONSTRAINT fk_rails_c08d8438fe FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: teachers fk_rails_c43d25a88a; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1287,6 +1511,14 @@ ALTER TABLE ONLY public.students
 
 ALTER TABLE ONLY public.student_guardians
     ADD CONSTRAINT fk_rails_c768bff12d FOREIGN KEY (student_id) REFERENCES public.students(id);
+
+
+--
+-- Name: role_assignments fk_rails_c81e0ed360; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.role_assignments
+    ADD CONSTRAINT fk_rails_c81e0ed360 FOREIGN KEY (institution_user_id) REFERENCES public.institution_users(id) ON DELETE CASCADE;
 
 
 --
@@ -1314,6 +1546,22 @@ ALTER TABLE ONLY public.subjects
 
 
 --
+-- Name: role_assignments fk_rails_e4bfc1cd2c; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.role_assignments
+    ADD CONSTRAINT fk_rails_e4bfc1cd2c FOREIGN KEY (role_id) REFERENCES public.roles(id) ON DELETE CASCADE;
+
+
+--
+-- Name: role_assignments fk_rails_ebf84047d2; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.role_assignments
+    ADD CONSTRAINT fk_rails_ebf84047d2 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: programs fk_rails_ed68a5b16c; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1335,6 +1583,14 @@ ALTER TABLE ONLY public.enrollments
 
 ALTER TABLE ONLY public.teachers
     ADD CONSTRAINT fk_rails_f0edb92a45 FOREIGN KEY (staff_member_id) REFERENCES public.staff_members(id) ON DELETE SET NULL;
+
+
+--
+-- Name: role_assignments fk_rails_f2c879ee03; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.role_assignments
+    ADD CONSTRAINT fk_rails_f2c879ee03 FOREIGN KEY (scope_group_id) REFERENCES public.sections(id) ON DELETE CASCADE;
 
 
 --
@@ -1489,6 +1745,45 @@ CREATE POLICY programs_tenant_isolation ON public.programs USING ((institution_i
 
 
 --
+-- Name: role_assignments; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.role_assignments ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: role_assignments role_assignments_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY role_assignments_tenant_isolation ON public.role_assignments USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: role_permissions; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.role_permissions ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: role_permissions role_permissions_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY role_permissions_tenant_isolation ON public.role_permissions USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: roles; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.roles ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: roles roles_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY roles_tenant_isolation ON public.roles USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
 -- Name: sections; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -1586,6 +1881,7 @@ CREATE POLICY teaching_assignments_tenant_isolation ON public.teaching_assignmen
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260706000003'),
 ('20260706000002'),
 ('20260706000001'),
 ('20260703000014'),

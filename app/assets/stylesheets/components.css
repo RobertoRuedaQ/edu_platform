@@ -550,4 +550,28 @@
   .staff-card__id { flex: 1; min-width: 0; }
   .staff-card__name { font-size: var(--text-lg); margin-bottom: var(--space-1); }
   .staff-row__person { display: inline-flex; align-items: center; gap: var(--space-2); }
+
+  /* --- Domain-local: identity_access ------------------------------------- */
+  .role-badge { display: inline-flex; align-items: center; gap: var(--space-2); }
+  .role-badge__scope { font-size: var(--text-xs); color: var(--color-text-muted); }
+  .ia-person { display: inline-flex; align-items: center; gap: var(--space-2); }
+  .ia-person__text { display: flex; flex-direction: column; }
+  .ia-person__name { font-weight: var(--weight-medium); }
+  .ia-person__email { font-size: var(--text-xs); color: var(--color-text-muted); }
+  .scope-selector { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: var(--space-4); }
+  .permission-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+  .permission-list__item { display: flex; align-items: center; gap: var(--space-2); }
+  .permission-list__state { display: inline-flex; flex: none; }
+  .permission-list__state.is-granted { color: var(--color-success); }
+  .permission-list__state.is-denied { color: var(--color-text-subtle); }
+  .permission-list__key { font-size: var(--text-sm); }
+  .permission-list__desc { font-size: var(--text-sm); color: var(--color-text-muted); }
+  .identity-card .card__body { display: flex; flex-direction: column; gap: var(--space-4); }
+  .identity-card__head { display: flex; align-items: center; gap: var(--space-3); }
+  .identity-card__name { font-size: var(--text-lg); }
+  .identity-card__email { font-size: var(--text-sm); color: var(--color-text-muted); }
+  .identity-card__roles { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+  .assignment-form { display: flex; flex-direction: column; gap: var(--space-4); }
+  .assignment-form__scope { border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-4); }
+  .assignment-form__actions { display: flex; justify-content: flex-end; }
 }
