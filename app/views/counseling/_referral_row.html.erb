@@ -1,0 +1,9 @@
+<%# locals: (referred_to:, status:, reason: nil) -%>
+<%# A referral as a table row. -%>
+<% status_variant = { "pending" => :warning, "accepted" => :info, "completed" => :success, "declined" => :neutral }.fetch(status.to_s, :neutral) -%>
+<% status_label = { "pending" => "Pendiente", "accepted" => "Aceptada", "completed" => "Completada", "declined" => "Rechazada" }.fetch(status.to_s, status.to_s.humanize) -%>
+<tr>
+  <td><%= referred_to %></td>
+  <td><%= reason %></td>
+  <td><%= ui_badge status_label, variant: status_variant %></td>
+</tr>

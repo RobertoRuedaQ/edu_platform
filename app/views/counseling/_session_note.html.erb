@@ -1,0 +1,10 @@
+<%# locals: (author:, occurred_at:, body:, confidential: true) -%>
+<%# A session note. Designed to sit inside a shared/_timeline item body. -%>
+<div class="session-note">
+  <div class="session-note__head">
+    <span class="session-note__author"><%= author %></span>
+    <% if occurred_at.present? -%><time class="session-note__time"><%= occurred_at %></time><% end -%>
+    <%= render "counseling/confidentiality_badge", confidential: confidential %>
+  </div>
+  <p class="session-note__body"><%= body %></p>
+</div>

@@ -1,0 +1,11 @@
+<%# locals: (student_name:, category:, status:, opened_at: nil, confidential: true) -%>
+<%# A counseling case as a table row. -%>
+<% status_variant = { "open" => :info, "in_progress" => :warning, "closed" => :neutral }.fetch(status.to_s, :neutral) -%>
+<% status_label = { "open" => "Abierto", "in_progress" => "En curso", "closed" => "Cerrado" }.fetch(status.to_s, status.to_s.humanize) -%>
+<tr>
+  <td><%= student_name %></td>
+  <td><%= category %></td>
+  <td><%= ui_badge status_label, variant: status_variant %></td>
+  <td><%= opened_at %></td>
+  <td><%= render "counseling/confidentiality_badge", confidential: confidential %></td>
+</tr>
