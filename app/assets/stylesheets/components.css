@@ -574,4 +574,10 @@
   .assignment-form { display: flex; flex-direction: column; gap: var(--space-4); }
   .assignment-form__scope { border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-4); }
   .assignment-form__actions { display: flex; justify-content: flex-end; }
+
+  /* --- Domain-local: finance --------------------------------------------- */
+  .finance-amount { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+  .payment-plan-card .card__body { display: flex; flex-direction: column; gap: var(--space-4); }
+  .payment-plan-card__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+  .payment-plan-card__total { font-family: var(--font-display); font-size: var(--text-xl); font-weight: var(--weight-semibold); font-variant-numeric: tabular-nums; }
 }

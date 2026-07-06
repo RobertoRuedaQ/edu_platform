@@ -1,0 +1,27 @@
+<%# locals: (name:, total_amount:, status:, currency: "COP", installments: [], **attrs) -%>
+<%#
+  Payment plan (pensión) with its installments. installments: array of
+  { sequence:, amount:, due_on:, status: } hashes (stub or model attrs).
+  # TODO: alimentar desde Finance::PaymentPlan.
+-%>
+<%= render layout: "shared/card", locals: { class: "payment-plan-card", title: name } do -%>
+  <div class="payment-plan-card__head">
+    <span class="payment-plan-card__total"><%= money(total_amount, currency: currency) %></span>
+    <%= render "finance/payment_status_badge", status: status %>
+  </div>
+
+  <% if installments.any? -%>
+    <%= render layout: "shared/table", locals: { headers: ["#", "Vence", "Monto", "Estado"] } do -%>
+      <% installments.each do |i| -%>
+        <tr>
+          <td><%= i[:sequence] %></td>
+          <td><%= i[:due_on] %></td>
+          <td class="finance-amount"><%= money(i[:amount], currency: currency) %></td>
+          <td><%= render "finance/payment_status_badge", status: i[:status] %></td>
+        </tr>
+      <% end -%>
+    <% end -%>
+  <% else -%>
+    <%= render "shared/empty_state", title: "Sin cuotas", icon: "calendar" %>
+  <% end -%>
+<% end -%>

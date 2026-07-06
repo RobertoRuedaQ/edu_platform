@@ -1,0 +1,9 @@
+<%# locals: (status:, **attrs) -%>
+<%# Status -> badge for charges/payments/installments. Text carries meaning. -%>
+<% variant = { "pending" => :warning, "overdue" => :danger, "failed" => :danger,
+               "paid" => :success, "completed" => :success,
+               "void" => :neutral, "cancelled" => :neutral, "active" => :info }.fetch(status.to_s, :neutral) -%>
+<% label = { "pending" => "Pendiente", "overdue" => "En mora", "failed" => "Fallido",
+             "paid" => "Pagado", "completed" => "Completado", "void" => "Anulado",
+             "cancelled" => "Cancelado", "active" => "Activo" }.fetch(status.to_s, status.to_s.humanize) -%>
+<%= ui_badge label, variant: variant, **attrs %>

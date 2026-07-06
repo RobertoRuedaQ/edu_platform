@@ -64,6 +64,29 @@ ALTER TABLE ONLY public.assessments FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: charges; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.charges (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    student_id uuid NOT NULL,
+    invoice_number character varying NOT NULL,
+    description character varying,
+    amount numeric(12,2) NOT NULL,
+    currency character varying NOT NULL,
+    due_on date,
+    status character varying DEFAULT 'pending'::character varying NOT NULL,
+    idempotency_key character varying,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT charges_status_check CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'paid'::character varying, 'overdue'::character varying, 'void'::character varying])::text[])))
+);
+
+ALTER TABLE ONLY public.charges FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: departments; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -192,6 +215,26 @@ ALTER TABLE ONLY public.guardians FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: installments; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.installments (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    payment_plan_id uuid NOT NULL,
+    sequence integer NOT NULL,
+    amount numeric(12,2) NOT NULL,
+    due_on date NOT NULL,
+    status character varying DEFAULT 'pending'::character varying NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT installments_status_check CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'paid'::character varying, 'overdue'::character varying])::text[])))
+);
+
+ALTER TABLE ONLY public.installments FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: institution_settings; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -202,7 +245,8 @@ CREATE TABLE public.institution_settings (
     locale character varying DEFAULT 'en'::character varying NOT NULL,
     features jsonb DEFAULT '{}'::jsonb NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
-    updated_at timestamp(6) without time zone NOT NULL
+    updated_at timestamp(6) without time zone NOT NULL,
+    default_currency character varying DEFAULT 'COP'::character varying NOT NULL
 );
 
 ALTER TABLE ONLY public.institution_settings FORCE ROW LEVEL SECURITY;
@@ -238,6 +282,51 @@ CREATE TABLE public.institutions (
     kind character varying NOT NULL,
     CONSTRAINT institutions_kind_check CHECK (((kind)::text = ANY ((ARRAY['school'::character varying, 'university'::character varying])::text[])))
 );
+
+
+--
+-- Name: payment_plans; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.payment_plans (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    student_id uuid NOT NULL,
+    name character varying NOT NULL,
+    total_amount numeric(12,2) NOT NULL,
+    currency character varying NOT NULL,
+    status character varying DEFAULT 'active'::character varying NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT payment_plans_status_check CHECK (((status)::text = ANY ((ARRAY['active'::character varying, 'completed'::character varying, 'cancelled'::character varying])::text[])))
+);
+
+ALTER TABLE ONLY public.payment_plans FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: payments; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.payments (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    student_account_id uuid NOT NULL,
+    charge_id uuid,
+    amount numeric(12,2) NOT NULL,
+    currency character varying NOT NULL,
+    method character varying NOT NULL,
+    status character varying DEFAULT 'completed'::character varying NOT NULL,
+    paid_at timestamp(6) without time zone,
+    idempotency_key character varying,
+    lock_version integer DEFAULT 0 NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT payments_method_check CHECK (((method)::text = ANY ((ARRAY['cash'::character varying, 'card'::character varying, 'transfer'::character varying, 'other'::character varying])::text[]))),
+    CONSTRAINT payments_status_check CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'completed'::character varying, 'failed'::character varying, 'void'::character varying])::text[])))
+);
+
+ALTER TABLE ONLY public.payments FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -391,6 +480,24 @@ ALTER TABLE ONLY public.staff_members FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: student_accounts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.student_accounts (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    student_id uuid NOT NULL,
+    balance numeric(12,2) DEFAULT 0.0 NOT NULL,
+    currency character varying NOT NULL,
+    lock_version integer DEFAULT 0 NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+ALTER TABLE ONLY public.student_accounts FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: student_guardians; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -525,6 +632,14 @@ ALTER TABLE ONLY public.assessments
 
 
 --
+-- Name: charges charges_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.charges
+    ADD CONSTRAINT charges_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: departments departments_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -581,6 +696,14 @@ ALTER TABLE ONLY public.guardians
 
 
 --
+-- Name: installments installments_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.installments
+    ADD CONSTRAINT installments_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: institution_settings institution_settings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -602,6 +725,22 @@ ALTER TABLE ONLY public.institution_users
 
 ALTER TABLE ONLY public.institutions
     ADD CONSTRAINT institutions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: payment_plans payment_plans_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payment_plans
+    ADD CONSTRAINT payment_plans_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: payments payments_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payments
+    ADD CONSTRAINT payments_pkey PRIMARY KEY (id);
 
 
 --
@@ -677,6 +816,14 @@ ALTER TABLE ONLY public.staff_members
 
 
 --
+-- Name: student_accounts student_accounts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.student_accounts
+    ADD CONSTRAINT student_accounts_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: student_guardians student_guardians_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -725,6 +872,20 @@ ALTER TABLE ONLY public.users
 
 
 --
+-- Name: idx_charges_idempotency; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_charges_idempotency ON public.charges USING btree (institution_id, idempotency_key);
+
+
+--
+-- Name: idx_installments_seq; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_installments_seq ON public.installments USING btree (institution_id, payment_plan_id, sequence);
+
+
+--
 -- Name: idx_on_institution_id_student_id_guardian_id_6bb82a7a17; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -743,6 +904,13 @@ CREATE UNIQUE INDEX idx_on_institution_id_student_id_subject_id_d3059c6cb5 ON pu
 --
 
 CREATE UNIQUE INDEX idx_on_institution_id_teacher_id_subject_id_b6a57dc73b ON public.teaching_assignments USING btree (institution_id, teacher_id, subject_id);
+
+
+--
+-- Name: idx_payments_idempotency; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_payments_idempotency ON public.payments USING btree (institution_id, idempotency_key);
 
 
 --
@@ -799,6 +967,27 @@ CREATE INDEX index_assessments_on_enrollment_id ON public.assessments USING btre
 --
 
 CREATE INDEX index_assessments_on_institution_id ON public.assessments USING btree (institution_id);
+
+
+--
+-- Name: index_charges_on_institution_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_charges_on_institution_id ON public.charges USING btree (institution_id);
+
+
+--
+-- Name: index_charges_on_institution_id_and_invoice_number; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_charges_on_institution_id_and_invoice_number ON public.charges USING btree (institution_id, invoice_number);
+
+
+--
+-- Name: index_charges_on_institution_id_and_student_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_charges_on_institution_id_and_student_id ON public.charges USING btree (institution_id, student_id);
 
 
 --
@@ -900,6 +1089,13 @@ CREATE INDEX index_guardians_on_institution_id ON public.guardians USING btree (
 
 
 --
+-- Name: index_installments_on_institution_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_installments_on_institution_id ON public.installments USING btree (institution_id);
+
+
+--
 -- Name: index_institution_settings_on_institution_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -932,6 +1128,34 @@ CREATE UNIQUE INDEX index_institutions_on_code ON public.institutions USING btre
 --
 
 CREATE UNIQUE INDEX index_institutions_on_slug ON public.institutions USING btree (slug);
+
+
+--
+-- Name: index_payment_plans_on_institution_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_payment_plans_on_institution_id ON public.payment_plans USING btree (institution_id);
+
+
+--
+-- Name: index_payment_plans_on_institution_id_and_student_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_payment_plans_on_institution_id_and_student_id ON public.payment_plans USING btree (institution_id, student_id);
+
+
+--
+-- Name: index_payments_on_institution_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_payments_on_institution_id ON public.payments USING btree (institution_id);
+
+
+--
+-- Name: index_payments_on_institution_id_and_student_account_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_payments_on_institution_id_and_student_account_id ON public.payments USING btree (institution_id, student_account_id);
 
 
 --
@@ -1051,6 +1275,20 @@ CREATE UNIQUE INDEX index_staff_members_on_institution_id_and_institution_user_i
 --
 
 CREATE INDEX index_staff_members_on_institution_user_id ON public.staff_members USING btree (institution_user_id);
+
+
+--
+-- Name: index_student_accounts_on_institution_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_student_accounts_on_institution_id ON public.student_accounts USING btree (institution_id);
+
+
+--
+-- Name: index_student_accounts_on_institution_id_and_student_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_student_accounts_on_institution_id_and_student_id ON public.student_accounts USING btree (institution_id, student_id);
 
 
 --
@@ -1258,6 +1496,14 @@ ALTER TABLE ONLY public.subjects
 
 
 --
+-- Name: student_accounts fk_rails_26abc07ba9; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.student_accounts
+    ADD CONSTRAINT fk_rails_26abc07ba9 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: employment_periods fk_rails_271ac67781; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1266,11 +1512,27 @@ ALTER TABLE ONLY public.employment_periods
 
 
 --
+-- Name: payments fk_rails_2f2f391007; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payments
+    ADD CONSTRAINT fk_rails_2f2f391007 FOREIGN KEY (charge_id) REFERENCES public.charges(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: teachers fk_rails_2fabb62d4c; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.teachers
     ADD CONSTRAINT fk_rails_2fabb62d4c FOREIGN KEY (institution_id) REFERENCES public.institutions(id);
+
+
+--
+-- Name: payment_plans fk_rails_316ebe4c27; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payment_plans
+    ADD CONSTRAINT fk_rails_316ebe4c27 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
 
 
 --
@@ -1311,6 +1573,14 @@ ALTER TABLE ONLY public.staff_members
 
 ALTER TABLE ONLY public.grade_levels
     ADD CONSTRAINT fk_rails_3d56a40347 FOREIGN KEY (institution_id) REFERENCES public.institutions(id);
+
+
+--
+-- Name: charges fk_rails_3d9614692c; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.charges
+    ADD CONSTRAINT fk_rails_3d9614692c FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE RESTRICT;
 
 
 --
@@ -1418,6 +1688,14 @@ ALTER TABLE ONLY public.staff_members
 
 
 --
+-- Name: installments fk_rails_91c63f70fd; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.installments
+    ADD CONSTRAINT fk_rails_91c63f70fd FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: role_permissions fk_rails_92f10f160c; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1442,6 +1720,22 @@ ALTER TABLE ONLY public.teaching_assignments
 
 
 --
+-- Name: student_accounts fk_rails_a63606332a; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.student_accounts
+    ADD CONSTRAINT fk_rails_a63606332a FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: payments fk_rails_a9b0755c20; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payments
+    ADD CONSTRAINT fk_rails_a9b0755c20 FOREIGN KEY (student_account_id) REFERENCES public.student_accounts(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: dietary_restrictions fk_rails_b2a3dacafe; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1455,6 +1749,14 @@ ALTER TABLE ONLY public.dietary_restrictions
 
 ALTER TABLE ONLY public.students
     ADD CONSTRAINT fk_rails_b2fee63e99 FOREIGN KEY (program_id) REFERENCES public.programs(id);
+
+
+--
+-- Name: payments fk_rails_b439880051; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payments
+    ADD CONSTRAINT fk_rails_b439880051 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
 
 
 --
@@ -1490,6 +1792,14 @@ ALTER TABLE ONLY public.roles
 
 
 --
+-- Name: installments fk_rails_c437a1a46c; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.installments
+    ADD CONSTRAINT fk_rails_c437a1a46c FOREIGN KEY (payment_plan_id) REFERENCES public.payment_plans(id) ON DELETE CASCADE;
+
+
+--
 -- Name: teachers fk_rails_c43d25a88a; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1503,6 +1813,14 @@ ALTER TABLE ONLY public.teachers
 
 ALTER TABLE ONLY public.students
     ADD CONSTRAINT fk_rails_c6f327792b FOREIGN KEY (grade_level_id) REFERENCES public.grade_levels(id);
+
+
+--
+-- Name: payment_plans fk_rails_c72ffb7be9; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payment_plans
+    ADD CONSTRAINT fk_rails_c72ffb7be9 FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE RESTRICT;
 
 
 --
@@ -1543,6 +1861,14 @@ ALTER TABLE ONLY public.employment_periods
 
 ALTER TABLE ONLY public.subjects
     ADD CONSTRAINT fk_rails_e2fd7aa72b FOREIGN KEY (grade_level_id) REFERENCES public.grade_levels(id);
+
+
+--
+-- Name: charges fk_rails_e47d53b4c6; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.charges
+    ADD CONSTRAINT fk_rails_e47d53b4c6 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
 
 
 --
@@ -1612,6 +1938,19 @@ ALTER TABLE public.assessments ENABLE ROW LEVEL SECURITY;
 --
 
 CREATE POLICY assessments_tenant_isolation ON public.assessments USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: charges; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.charges ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: charges charges_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY charges_tenant_isolation ON public.charges USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
 
 
 --
@@ -1706,6 +2045,19 @@ CREATE POLICY guardians_tenant_isolation ON public.guardians USING ((institution
 
 
 --
+-- Name: installments; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.installments ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: installments installments_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY installments_tenant_isolation ON public.installments USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
 -- Name: institution_settings; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -1729,6 +2081,32 @@ ALTER TABLE public.institution_users ENABLE ROW LEVEL SECURITY;
 --
 
 CREATE POLICY institution_users_tenant_isolation ON public.institution_users USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: payment_plans; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.payment_plans ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: payment_plans payment_plans_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY payment_plans_tenant_isolation ON public.payment_plans USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: payments; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.payments ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: payments payments_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY payments_tenant_isolation ON public.payments USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
 
 
 --
@@ -1810,6 +2188,19 @@ CREATE POLICY staff_members_tenant_isolation ON public.staff_members USING ((ins
 
 
 --
+-- Name: student_accounts; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.student_accounts ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: student_accounts student_accounts_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY student_accounts_tenant_isolation ON public.student_accounts USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
 -- Name: student_guardians; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -1881,6 +2272,8 @@ CREATE POLICY teaching_assignments_tenant_isolation ON public.teaching_assignmen
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260706000005'),
+('20260706000004'),
 ('20260706000003'),
 ('20260706000002'),
 ('20260706000001'),
