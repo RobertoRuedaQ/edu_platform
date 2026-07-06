@@ -1,0 +1,11 @@
+<% content_for :title, "Buscar" %>
+
+<%= render "shared/page_header", title: "Buscar",
+      subtitle: @query.present? ? "Resultados para “#{@query}”" : nil %>
+
+<%# STUB: search is not implemented yet. Empty state, not a blank page. %>
+<%= render "shared/empty_state",
+      icon: "search",
+      title: "Búsqueda pendiente",
+      description: "La búsqueda global aún no está disponible. Usa la navegación " \
+                   "para llegar a la sección que necesitas." %>

@@ -29,11 +29,9 @@
       <header class="app-header">
         <div class="container app-header__inner">
           <%= render "shared/wordmark" %>
-          <nav class="app-nav" aria-label="Principal">
-            <%# Real destinations land with the routes added in Part 6. %>
-            <%= link_to "Estudiantes", "/core/students", class: "app-nav__link" %>
-            <%= link_to "Catálogo", "/core/courses", class: "app-nav__link" %>
-          </nav>
+          <%= render "shared/global_search" %>
+          <%= render "shared/nav" %>
+          <%= render "shared/role_switcher" %>
         </div>
       </header>
 

@@ -1,0 +1,11 @@
+<%#
+  Global search — the escape hatch from the 3-click rule for users who already
+  know what they want. Plain GET form, fully usable with JS off. In this phase
+  the results page is a stub (empty state); real search lands later.
+-%>
+<form class="app-search" role="search" action="<%= search_path %>" method="get">
+  <label class="visually-hidden" for="global-search">Buscar</label>
+  <span class="app-search__icon" aria-hidden="true"><%= ui_icon "search", size: 18 %></span>
+  <input class="app-search__input" type="search" id="global-search" name="q"
+         placeholder="Buscar…" autocomplete="off" enterkeyhint="search">
+</form>

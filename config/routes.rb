@@ -10,7 +10,12 @@ Rails.application.routes.draw do
   # get "service-worker" => "rails/pwa#service_worker", as: :pwa_service_worker
 
   # Defines the root path route ("/")
-  # root "posts#index"
+  # root "posts#index"  # -> dashboard#show lands in Part 3
+
+  # --- Role-aware shell (Part 2) --------------------------------------------
+  # Global search escape hatch (stub results) + institution switcher (stub).
+  get "search", to: "search#index", as: :search
+  resource :institution_switch, only: :create
 
   # --- Control plane (super-admin, cross-tenant, above RLS) -----------------
   # Its own namespace, mounted at /control_plane. NOT a tenant domain: no RLS

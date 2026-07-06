@@ -1,0 +1,27 @@
+<%#
+  Institution switcher. Conceptually sets app.current_institution_id for the
+  session; a STUB in this phase (no session yet) — it flashes and returns.
+  Shown ONLY when the actor belongs to >1 institution; otherwise the current
+  institution is static context. Progressive: a real POST form with a submit
+  button, usable with JS off (no auto-submit-on-change dependency).
+
+  NOTE: an optional "acting as role" selector is deferred — by default a view
+  unions the scopes of all the actor's roles, so it is only needed later to
+  disambiguate. TODO: añadir selector de rol si el multi-rol lo exige.
+-%>
+<div class="role-switcher">
+  <% if current_actor.multiple_institutions? -%>
+    <%= form_with url: institution_switch_path, method: :post, class: "role-switcher__form" do |f| %>
+      <%= f.label :institution_id, "Institución", class: "visually-hidden" %>
+      <%= f.select :institution_id,
+            options_for_select(
+              current_actor.institutions.map { |i| [i.name, i.id] },
+              current_actor.current_institution.id
+            ),
+            {}, class: "role-switcher__select" %>
+      <%= ui_button "Cambiar", type: "submit", variant: :secondary, size: :sm %>
+    <% end %>
+  <% else -%>
+    <span class="role-switcher__current"><%= current_actor.current_institution.name %></span>
+  <% end -%>
+</div>
