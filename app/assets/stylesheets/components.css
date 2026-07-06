@@ -373,4 +373,58 @@
   }
   .time-range__days { font-weight: var(--weight-medium); color: var(--color-text); }
   .time-range__hours { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  /* --- Allergen flag ----------------------------------------------------- */
+  /* Sober treatment: colored left rule + icon, not a full alarmist fill.
+     Severity color is one local var so the rules stay DRY. */
+  .allergen {
+    --_severity: var(--color-warning);
+    display: flex;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-border);
+    border-inline-start: 3px solid var(--_severity);
+    border-radius: var(--radius-md);
+  }
+  .allergen--mild        { --_severity: var(--color-info); }
+  .allergen--moderate    { --_severity: var(--color-warning); }
+  .allergen--severe      { --_severity: var(--color-danger); }
+  .allergen--anaphylaxis { --_severity: var(--color-danger); }
+  .allergen__icon { color: var(--_severity); flex: none; margin-top: 2px; }
+  .allergen__head { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+  .allergen__name { font-weight: var(--weight-medium); }
+  .allergen__reaction { font-size: var(--text-sm); color: var(--color-text-muted); margin-top: var(--space-1); }
+  .allergen__note { font-size: var(--text-xs); color: var(--color-text-subtle); margin-top: var(--space-1); }
+
+  /* --- Timeline ---------------------------------------------------------- */
+  .timeline { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: var(--space-4); }
+  .timeline__item { position: relative; display: grid; grid-template-columns: 1.75rem 1fr; gap: var(--space-3); }
+  .timeline__marker {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: var(--radius-full);
+    background: var(--color-primary-subtle);
+    color: var(--color-primary);
+    flex: none;
+    position: relative;
+    z-index: 1;
+  }
+  /* Connecting line between markers. */
+  .timeline__item:not(:last-child)::before {
+    content: "";
+    position: absolute;
+    left: calc(1.75rem / 2 - 1px);
+    top: 1.75rem;
+    bottom: calc(-1 * var(--space-4));
+    width: 2px;
+    background: var(--color-border);
+  }
+  .timeline__head { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+  .timeline__title { font-weight: var(--weight-medium); }
+  .timeline__meta { font-size: var(--text-xs); color: var(--color-text-subtle); }
+  .timeline__body { font-size: var(--text-sm); color: var(--color-text-muted); margin-top: var(--space-1); }
 }
