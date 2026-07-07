@@ -1,0 +1,23 @@
+<% content_for :title, "Calificaciones" %>
+
+<%= render "shared/page_header",
+      title: "Calificaciones",
+      subtitle: "Cursos dentro de tu alcance." %>
+
+<% if @subjects.any? -%>
+  <%= render layout: "shared/table",
+        locals: { headers: ["Curso", "Grupo", "Periodo"] } do -%>
+    <% @subjects.each do |subject| -%>
+      <tr>
+        <td><%= link_to subject.name, schedules_subject_path(subject.id) %></td>
+        <td><%= subject.group_name %></td>
+        <td><%= subject.term %></td>
+      </tr>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state",
+        icon: "alert-circle",
+        title: "No hay cursos en tu alcance",
+        description: "No ves cursos fuera de tu grupo o institución." %>
+<% end -%>

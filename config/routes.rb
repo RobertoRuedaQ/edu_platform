@@ -51,6 +51,21 @@ Rails.application.routes.draw do
     end
   end
 
+  # --- schedules (domain views, Prompt Unificado) ---------------------------
+  # Two features under one domain: grades (real Subject/Enrollment/Assessment
+  # models; "grades" path fulfills the Fase 0 pre-wired "Calificaciones" nav)
+  # and timetable/rooms (Apéndice A; fully stub — no periods/rooms table
+  # exists at all). schedule.view is the actor's OWN group's slots;
+  # timetable.manage is the institution-wide builder view.
+  namespace :schedules do
+    resources :subjects, only: %i[index show], path: "grades" do
+      resources :grade_entries, only: %i[new create]
+    end
+    resource :my_schedule, only: :show, controller: "my_schedule"
+    resource :timetable, only: :show, controller: "timetables"
+    resources :rooms, only: %i[index show]
+  end
+
   # --- Control plane (super-admin, cross-tenant, above RLS) -----------------
   # Its own namespace, mounted at /control_plane. NOT a tenant domain: no RLS
   # scoping applies. Controllers live in app/control_plane/control_plane/ and

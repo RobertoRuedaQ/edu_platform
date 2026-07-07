@@ -1,0 +1,25 @@
+<% content_for :title, @room.name %>
+
+<%= render "shared/page_header", title: @room.name, subtitle: @room.building %>
+
+<%= render "shared/detail_list", items: {
+      "Tipo"       => @room.kind.humanize,
+      "Capacidad"  => @room.capacity,
+      "Bloque"     => @room.building
+    } %>
+
+<h3>Uso en el horario</h3>
+<% if @events.any? -%>
+  <%= render layout: "shared/table", locals: { headers: ["Día", "Hora", "Curso", "Grupo"] } do -%>
+    <% @events.each do |event| -%>
+      <tr>
+        <td><%= event.day %></td>
+        <td><%= render "shared/time_range", starts: event.starts_at, ends: event.ends_at %></td>
+        <td><%= event.subject_name %></td>
+        <td><%= event.group_name %></td>
+      </tr>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state", title: "Sin uso programado" %>
+<% end -%>

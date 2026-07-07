@@ -1,0 +1,16 @@
+<% content_for :title, "Registrar calificación · #{@subject.name}" %>
+
+<%= render "shared/page_header",
+      title: "Registrar calificación",
+      subtitle: "#{@subject.name} · #{@subject.group_name}" %>
+
+<%= form_with url: schedules_subject_grade_entries_path(@subject), method: :post do %>
+  <%= render "shared/field", label: "Estudiante", name: "student_id",
+        placeholder: "Código del estudiante", required: true %>
+  <%= render "shared/field", label: "Actividad", name: "title",
+        placeholder: "Ej. Parcial 1, Quiz 2", required: true %>
+  <%= render "shared/field", label: "Nota (0.0–5.0)", name: "score", type: "number",
+        hint: "Mínimo para aprobar: 3.0", required: true %>
+
+  <%= ui_button "Guardar calificación", type: "submit", variant: :primary %>
+<% end %>

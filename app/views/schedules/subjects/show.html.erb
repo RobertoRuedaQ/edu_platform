@@ -1,0 +1,23 @@
+<% content_for :title, @subject.name %>
+
+<%= render "shared/page_header",
+      title: @subject.name,
+      subtitle: "#{@subject.group_name} · #{@subject.term}",
+      actions: (can?("grades.write", @subject) ? ui_button("Registrar calificación", href: new_schedules_subject_grade_entry_path(@subject), variant: :primary) : nil) %>
+
+<% students = @grades.group_by(&:student_id).values -%>
+<% if students.any? -%>
+  <%= render layout: "shared/table",
+        locals: { headers: ["Estudiante", "Parcial 1", "Parcial 2"] } do -%>
+    <% students.each do |rows| -%>
+      <tr>
+        <td><%= rows.first.student_name %></td>
+        <% rows.each do |row| -%>
+          <td><%= grade_score_badge(row.score) %></td>
+        <% end -%>
+      </tr>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state", title: "Sin estudiantes matriculados" %>
+<% end -%>

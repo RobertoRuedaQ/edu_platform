@@ -1,0 +1,23 @@
+<% content_for :title, "Horario institucional" %>
+
+<%= render "shared/page_header",
+      title: "Horario institucional",
+      subtitle: "Vista de lectura: refleja conflictos ya marcados, no los calcula.",
+      actions: (can?("rooms.view") ? ui_button("Salones", href: schedules_rooms_path, variant: :secondary) : nil) %>
+
+<% if @events.any? -%>
+  <%= render layout: "shared/table",
+        locals: { headers: ["Día", "Hora", "Curso", "Grupo", "Salón"] } do -%>
+    <% @events.each do |event| -%>
+      <tr>
+        <td><%= event.day %></td>
+        <td><%= render "shared/time_range", starts: event.starts_at, ends: event.ends_at %></td>
+        <td><%= event.subject_name %></td>
+        <td><%= event.group_name %></td>
+        <td><%= schedule_event_badge(event) %></td>
+      </tr>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state", title: "Sin eventos programados" %>
+<% end -%>
