@@ -1,0 +1,35 @@
+<% content_for :title, "Bienestar estudiantil" %>
+
+<%= render "shared/page_header",
+      title: "Bienestar estudiantil",
+      subtitle: "Casos, acomodaciones y convivencia dentro de tu alcance." %>
+
+<div class="tile-grid">
+  <%= render "shared/stat", value: @open_cases.size.to_s, label: "Casos de orientación abiertos" %>
+  <%= render "shared/stat", value: @active_accommodations.size.to_s, label: "Acomodaciones vigentes" %>
+  <%= render "shared/stat", value: @recent_logs.size.to_s, label: "Registros de convivencia recientes" %>
+</div>
+
+<h3>Casos abiertos</h3>
+<% if @open_cases.any? -%>
+  <%= render layout: "shared/table", locals: { headers: ["Estudiante", "Categoría", "Estado"] } do -%>
+    <% @open_cases.each do |kase| -%>
+      <tr>
+        <td><%= link_to kase.student_name, counseling_case_path(kase.id) %></td>
+        <td><%= kase.category.humanize %></td>
+        <td><%= counseling_case_status_badge(kase.status) %></td>
+      </tr>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state", title: "Sin casos abiertos en tu alcance" %>
+<% end -%>
+
+<h3>Convivencia reciente</h3>
+<% if @recent_logs.any? -%>
+  <%= render "shared/timeline", items: @recent_logs.map { |log|
+        { title: log.category.humanize, meta: datetime(log.occurred_at, format: :date), body: log.description }
+      } %>
+<% else -%>
+  <%= render "shared/empty_state", title: "Sin registros de convivencia recientes" %>
+<% end -%>

@@ -605,6 +605,11 @@
   .membership-row { display: flex; align-items: center; gap: var(--space-2); padding-block: var(--space-1); }
   .membership-row__code { color: var(--color-text-muted); font-size: var(--text-xs); }
 
+  /* --- Domain-local: student_support / counseling -------------------------- */
+  .accommodation-item__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+  .accommodation-item__kind { font-weight: var(--weight-medium); }
+  .accommodation-item__desc { color: var(--color-text-muted); font-size: var(--text-sm); margin-block: var(--space-2); }
+
   /* --- Shared: audit entry row (who / what / when) ----------------------- */
   .audit-entry {
     display: flex;

@@ -1,0 +1,20 @@
+<% content_for :title, @case.student_name %>
+
+<%= render "shared/page_header",
+      title: @case.student_name,
+      subtitle: "Caso de orientación · #{@case.category.humanize}" %>
+
+<%= render "shared/detail_list", items: {
+      "Categoría" => @case.category.humanize,
+      "Estado"    => counseling_case_status_badge(@case.status),
+      "Abierto"   => datetime(@case.opened_at, format: :date)
+    } %>
+
+<h3>Notas de seguimiento</h3>
+<% if @case.notes.any? -%>
+  <%= render "shared/timeline", items: @case.notes.map { |note|
+        { title: note.author, meta: datetime(note.occurred_at, format: :date), body: note.body }
+      } %>
+<% else -%>
+  <%= render "shared/empty_state", title: "Sin notas de seguimiento" %>
+<% end -%>

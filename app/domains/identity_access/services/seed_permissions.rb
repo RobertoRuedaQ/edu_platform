@@ -21,6 +21,12 @@ module IdentityAccess
       "finance.write"     => "Registrar cargos y pagos",
       "counseling.read"   => "Ver orientación (confidencial)",
       "counseling.write"  => "Registrar notas de orientación",
+      "medical_history.view"         => "Ver historia médica completa (personal médico)",
+      "medical_history.view_summary" => "Ver solo alergias/contraindicaciones",
+      "accommodations.view"    => "Ver acomodaciones/adaptaciones",
+      "accommodations.manage"  => "Gestionar acomodaciones/adaptaciones",
+      "disciplinary_logs.manage" => "Ver y registrar convivencia/disciplina",
+      "support_dashboard.view"   => "Ver el tablero de bienestar estudiantil",
       "roles.manage"      => "Administrar roles y asignaciones"
     }.freeze
 

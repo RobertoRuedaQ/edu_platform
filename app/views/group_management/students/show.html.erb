@@ -3,9 +3,10 @@
 <%= render "shared/page_header", title: @student.name, subtitle: @student.group_name %>
 
 <%#
-  Perfil y Matrícula son datos propios/cross-domain en stub (schedules). Las
-  pestañas de convivencia/acomodaciones (student_support) se agregan cuando
-  corra ese dominio — son datos sensibles que ese prompt gatea aparte.
+  Perfil y Matrícula son datos propios/cross-domain en stub (schedules).
+  Convivencia/Acomodaciones son cross-domain en stub (student_support) —
+  gateadas por su propio permiso, ausentes (no deshabilitadas) si el actor no
+  lo tiene, igual que el resto de la nav.
 -%>
 <% panels = {} -%>
 
@@ -33,6 +34,36 @@
     <% end -%>
   <% else -%>
     <%= render "shared/empty_state", title: "Sin materias matriculadas" %>
+  <% end -%>
+<% end -%>
+
+<% if can?("disciplinary_logs.manage", @student) -%>
+  <% panels["Convivencia"] = capture do %>
+    <% logs = StudentSupport::DisciplinaryLogRoster.for_student(@student.id) -%>
+    <% if logs.any? -%>
+      <%= render "shared/timeline", items: logs.map { |log|
+            { title: log.category.humanize, meta: datetime(log.occurred_at, format: :date), body: log.description }
+          } %>
+    <% else -%>
+      <%= render "shared/empty_state", title: "Sin registros de convivencia" %>
+    <% end -%>
+    <%= ui_button "Ver convivencia completa", href: student_support_student_disciplinary_logs_path(@student.id),
+          variant: :secondary, size: :sm %>
+  <% end -%>
+<% end -%>
+
+<% if can?("accommodations.view", @student) -%>
+  <% panels["Acomodaciones"] = capture do %>
+    <% accommodations = StudentSupport::AccommodationRoster.for_student(@student.id).select { |a| a.status == "active" } -%>
+    <% if accommodations.any? -%>
+      <% accommodations.each do |accommodation| -%>
+        <p><strong><%= accommodation.kind.humanize %>:</strong> <%= accommodation.description %></p>
+      <% end -%>
+    <% else -%>
+      <%= render "shared/empty_state", title: "Sin acomodaciones vigentes" %>
+    <% end -%>
+    <%= ui_button "Ver acomodaciones", href: student_support_student_accommodations_path(@student.id),
+          variant: :secondary, size: :sm %>
   <% end -%>
 <% end -%>
 

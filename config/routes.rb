@@ -66,6 +66,31 @@ Rails.application.routes.draw do
     resources :rooms, only: %i[index show]
   end
 
+  # --- counseling (domain views, Prompt Unificado) --------------------------
+  # Fulfills the "Orientación" nav Fase 0 pre-wired (permission counseling.read)
+  # at the EXACT pre-wired path (path: "" keeps cases#index at /counseling
+  # itself, not /counseling/cases). Absorbed from Apéndice A's student_support
+  # bullet — the real Case/SessionNote/Referral models live in this separate,
+  # more-sensitive domain (see app/domains/counseling/README.md).
+  namespace :counseling do
+    resources :cases, only: %i[index show], path: ""
+  end
+
+  # --- student_support (domain views, Prompt Unificado) ---------------------
+  # SENSIBLE. medical_history/accommodations/disciplinary_logs are per-student,
+  # nested under students (student_support does not own the Student resource —
+  # group_management does — so only the id param is nested here, no
+  # students#index/show of its own).
+  namespace :student_support do
+    get "dashboard", to: "support_dashboard#show", as: "support_dashboard"
+
+    resources :students, only: [] do
+      resource :medical_history, only: :show, controller: "medical_history"
+      resources :accommodations, only: %i[index edit update]
+      resources :disciplinary_logs, only: %i[index create]
+    end
+  end
+
   # --- Control plane (super-admin, cross-tenant, above RLS) -----------------
   # Its own namespace, mounted at /control_plane. NOT a tenant domain: no RLS
   # scoping applies. Controllers live in app/control_plane/control_plane/ and

@@ -1,0 +1,24 @@
+<% content_for :title, "Orientación" %>
+
+<%= render "shared/page_header",
+      title: "Orientación",
+      subtitle: "Casos de orientación dentro de tu alcance (confidencial)." %>
+
+<% if @cases.any? -%>
+  <%= render layout: "shared/table",
+        locals: { headers: ["Estudiante", "Categoría", "Estado", "Abierto"] } do -%>
+    <% @cases.each do |kase| -%>
+      <tr>
+        <td><%= link_to kase.student_name, counseling_case_path(kase.id) %></td>
+        <td><%= kase.category.humanize %></td>
+        <td><%= counseling_case_status_badge(kase.status) %></td>
+        <td><%= datetime(kase.opened_at, format: :date) %></td>
+      </tr>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state",
+        icon: "alert-circle",
+        title: "No hay casos en tu alcance",
+        description: "No ves casos fuera de tu grupo o institución." %>
+<% end -%>
