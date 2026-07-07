@@ -1,0 +1,39 @@
+<% content_for :title, "Nuevo checkout" %>
+
+<%= render "shared/page_header", title: "Nuevo checkout", subtitle: "Busca al estudiante para iniciar la compra." %>
+
+<%= form_with url: new_cafeteria_checkout_path, method: :get do %>
+  <%= render "shared/field", label: "Código del estudiante", name: "student_id",
+        value: params[:student_id], placeholder: "Ej. s-1", required: true %>
+  <%= ui_button "Buscar", type: "submit", variant: :secondary %>
+<% end %>
+
+<% if params[:student_id].present? && @student.nil? -%>
+  <%= render "shared/alert", variant: :warning, message: "No se encontró un estudiante con ese código." %>
+<% end -%>
+
+<% if @student -%>
+  <h3>Comprando para <%= @student.name %></h3>
+
+  <%= form_with url: cafeteria_checkouts_path, method: :post do %>
+    <%= hidden_field_tag :student_id, @student.id %>
+
+    <% @items.each do |item| -%>
+      <% allergen_names = Cafeteria::DietaryRestrictionRoster.blocking_allergen_names(@student.id) -%>
+      <% blocked = item.allergens.any? { |allergen| allergen_names.include?(allergen.name) } -%>
+      <div class="checkout-line-row">
+        <% unless blocked -%>
+          <label class="checkout-line-row__select">
+            <input type="checkbox" name="item_ids[]" value="<%= item.id %>">
+            <span class="visually-hidden">Seleccionar <%= item.name %></span>
+          </label>
+        <% end -%>
+        <%= render "cafeteria/checkout_line",
+              name: item.name, unit_price: item.price, blocked: blocked,
+              allergens: item.allergens.map { |a| { name: a.name, severity: a.severity, reaction: a.reaction } } %>
+      </div>
+    <% end -%>
+
+    <%= ui_button "Confirmar compra", type: "submit", variant: :primary %>
+  <% end %>
+<% end -%>

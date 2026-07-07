@@ -19,6 +19,8 @@ module IdentityAccess
       "departments.view"  => "Ver departamentos/áreas",
       "finance.read"      => "Ver cartera y pagos",
       "finance.write"     => "Registrar cargos y pagos",
+      "menu.view"         => "Ver el menú de cafetería",
+      "checkout.manage"   => "Registrar compras en cafetería",
       "counseling.read"   => "Ver orientación (confidencial)",
       "counseling.write"  => "Registrar notas de orientación",
       "medical_history.view"         => "Ver historia médica completa (personal médico)",

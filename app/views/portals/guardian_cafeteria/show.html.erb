@@ -1,0 +1,8 @@
+<% content_for :title, "Cafetería" %>
+
+<div class="tile-grid">
+  <% @accounts.each do |account| -%>
+    <%= render "shared/stat", value: money(account.balance, currency: account.currency),
+          label: "#{account.child_name} · saldo disponible" %>
+  <% end -%>
+</div>

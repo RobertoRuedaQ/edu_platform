@@ -1,0 +1,18 @@
+<% content_for :title, "Menú" %>
+
+<%= render "shared/page_header",
+      title: "Menú de cafetería",
+      subtitle: "Disponible hoy.",
+      actions: ([
+        (ui_button("Saldos", href: cafeteria_balances_path, variant: :secondary) if can?("finance.read")),
+        (ui_button("Nuevo checkout", href: new_cafeteria_checkout_path, variant: :primary) if can?("checkout.manage"))
+      ].compact.then { |buttons| safe_join(buttons) if buttons.any? }) %>
+
+<div class="tile-grid">
+  <% @items.each do |item| -%>
+    <%= render "cafeteria/menu_item",
+          name: item.name, price: item.price, category: item.category,
+          dietary_tags: item.dietary_tags, available: item.available,
+          allergens: item.allergens.map { |a| { name: a.name, severity: a.severity, reaction: a.reaction } } %>
+  <% end -%>
+</div>

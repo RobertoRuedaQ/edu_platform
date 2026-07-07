@@ -23,8 +23,12 @@ Rails.application.routes.draw do
   # never by role_assignments — see Portals::StudentPortalController /
   # Portals::GuardianPortalController.
   scope path: "portal", module: "portals", as: "portal" do
-    resource :student, only: :show, controller: "student_portal"
-    resource :guardian, only: :show, controller: "guardian_portal"
+    resource :student, only: :show, controller: "student_portal" do
+      resource :cafeteria, only: :show, controller: "student_cafeteria"
+    end
+    resource :guardian, only: :show, controller: "guardian_portal" do
+      resource :cafeteria, only: :show, controller: "guardian_cafeteria"
+    end
   end
 
   # --- teacher_management (domain views, Prompt Unificado) ------------------
@@ -89,6 +93,19 @@ Rails.application.routes.draw do
       resources :accommodations, only: %i[index edit update]
       resources :disciplinary_logs, only: %i[index create]
     end
+  end
+
+  # --- cafeteria (domain views, Prompt Unificado) ---------------------------
+  # Only DietaryRestriction is real (seeded); Menu/Purchase/StudentAccount
+  # don't exist as models. The checkout block is genuine logic (cross-
+  # referencing the student's allergies against the menu item), not cosmetic —
+  # _checkout_line only ever REFLECTS the flag this controller computes.
+  # balance.view reuses the existing finance.read (treasury already owns
+  # "cartera y pagos"); menu has no group/department dimension to scope by.
+  namespace :cafeteria do
+    get "menu", to: "menu#index", as: "menu"
+    resources :checkouts, only: %i[new create]
+    resources :balances, only: :index
   end
 
   # --- Control plane (super-admin, cross-tenant, above RLS) -----------------

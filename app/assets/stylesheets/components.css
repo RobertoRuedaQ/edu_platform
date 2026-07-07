@@ -470,6 +470,10 @@
   .checkout-line__price { font-variant-numeric: tabular-nums; font-weight: var(--weight-medium); }
   .checkout-line.is-blocked .checkout-line__name { color: var(--color-text-muted); text-decoration: line-through; }
 
+  .checkout-line-row { display: flex; align-items: flex-start; gap: var(--space-3); }
+  .checkout-line-row__select { flex: none; padding-top: var(--space-3); }
+  .checkout-line-row .checkout-line { flex: 1; }
+
   /* --- Notification (presentational item) -------------------------------- */
   .notification {
     display: flex;
