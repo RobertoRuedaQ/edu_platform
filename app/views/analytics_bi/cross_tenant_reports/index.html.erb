@@ -1,0 +1,25 @@
+<% content_for :title, "Reportes cross-tenant" %>
+
+<%= render "shared/page_header", title: "Reportes cross-tenant", subtitle: "Rol auditado — lectura entre instituciones." %>
+
+<%= render "shared/alert",
+      variant: :warning,
+      role: "alert",
+      title: "Modo auditoría",
+      message: "Estás viendo datos de todas las instituciones a través del rol auditado con BYPASSRLS. " \
+               "Este acceso queda registrado." %>
+
+<%= render "shared/bar_chart", title: "Estudiantes por institución", orientation: :horizontal,
+      series: @reports.map { |r| { label: r.institution_name, value: r.student_count } } %>
+
+<%= render layout: "shared/table",
+      locals: { headers: ["Institución", "Tipo", "Estudiantes", "Nota promedio"] } do -%>
+  <% @reports.each do |report| -%>
+    <tr>
+      <td><%= report.institution_name %></td>
+      <td><%= report.institution_kind.humanize %></td>
+      <td><%= report.student_count %></td>
+      <td><%= report.avg_grade %></td>
+    </tr>
+  <% end -%>
+<% end -%>

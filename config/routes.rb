@@ -122,6 +122,16 @@ Rails.application.routes.draw do
     resources :boarding_events, only: :create
   end
 
+  # --- analytics_bi (domain views, Prompt Unificado) ------------------------
+  # SENSIBLE. cross_tenant_reports is the ONE sanctioned cross-tenant path
+  # (edu_bi_reader, BYPASSRLS, audited — see lib/tasks/roles.rake); the normal
+  # app connection (edu_app_runtime) NEVER gets that. Still fully stub in this
+  # views-only phase, same deferral control_plane already documents.
+  namespace :analytics_bi do
+    get "dashboard", to: "institution_dashboard#show", as: "institution_dashboard"
+    resources :cross_tenant_reports, only: :index
+  end
+
   # --- staff_management (closes an orphaned Fase 0 nav entry) ---------------
   # Not one of the 9 domains in the Prompt Unificado list, but "Personal" has
   # sat unfulfilled since Fase 0 — same class of gap as Calificaciones/

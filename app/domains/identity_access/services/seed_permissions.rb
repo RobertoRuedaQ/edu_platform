@@ -31,6 +31,11 @@ module IdentityAccess
       "accommodations.manage"  => "Gestionar acomodaciones/adaptaciones",
       "disciplinary_logs.manage" => "Ver y registrar convivencia/disciplina",
       "support_dashboard.view"   => "Ver el tablero de bienestar estudiantil",
+      "institution_dashboard.view" => "Ver KPIs de la propia institución",
+      # SOLO bi_auditor. NUNCA sumar esta clave a institution_admin ni a
+      # ningún rol de runtime normal — es el único camino cross-tenant
+      # sancionado, y debe quedar auditado (ver edu_bi_reader en roles.rake).
+      "cross_tenant_reports.view" => "Ver reportes cross-tenant (rol auditado BYPASSRLS)",
       "roles.manage"      => "Administrar roles y asignaciones"
     }.freeze
 
