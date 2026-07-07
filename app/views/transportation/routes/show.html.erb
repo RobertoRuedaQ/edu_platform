@@ -1,0 +1,26 @@
+<% content_for :title, @route.name %>
+
+<%= render "shared/page_header", title: @route.name, subtitle: "Vehículo #{@route.vehicle_plate}" %>
+
+<%= render "shared/detail_list", items: {
+      "Conductor"  => @route.driver_name,
+      "Vehículo"   => @route.vehicle_plate,
+      "Capacidad"  => @route.capacity
+    } %>
+
+<h3>Paradas</h3>
+<%= render "shared/timeline", items: @route.stops.map { |stop| { title: stop.name, meta: stop.time } } %>
+
+<h3>Estudiantes en esta ruta</h3>
+<% if @riders.any? -%>
+  <%= render layout: "shared/table", locals: { headers: ["Estudiante", "Parada"] } do -%>
+    <% @riders.each do |rider| -%>
+      <tr>
+        <td><%= rider.student_name %></td>
+        <td><%= rider.stop_name %></td>
+      </tr>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state", title: "Sin estudiantes asignados" %>
+<% end -%>

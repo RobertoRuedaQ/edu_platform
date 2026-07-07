@@ -1,0 +1,10 @@
+<% content_for :title, "Transporte" %>
+
+<% @infos.each do |info| -%>
+  <h3><%= info.child_name %></h3>
+  <%= render "shared/detail_list", items: {
+        "Ruta"     => info.route_name,
+        "Parada"   => info.stop_name,
+        "Hora de recogida" => info.pickup_time
+      } %>
+<% end -%>

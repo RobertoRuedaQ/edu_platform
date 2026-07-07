@@ -21,6 +21,8 @@ module IdentityAccess
       "finance.write"     => "Registrar cargos y pagos",
       "menu.view"         => "Ver el menú de cafetería",
       "checkout.manage"   => "Registrar compras en cafetería",
+      "routes.view"       => "Ver rutas de transporte",
+      "boarding.manage"   => "Registrar abordaje/descenso en una ruta",
       "counseling.read"   => "Ver orientación (confidencial)",
       "counseling.write"  => "Registrar notas de orientación",
       "medical_history.view"         => "Ver historia médica completa (personal médico)",

@@ -3,7 +3,10 @@ module Authorization
   # (a role's permission keys + a single scope) so swapping the stub for the real
   # IdentityAccess::PermissionCheck is a mechanical 1:1 change.
   #
-  # scope_type: :institution | :department | :grade_level | :group   (:group == section)
+  # scope_type: :institution | :department | :grade_level | :group | :route
+  #   (:group == section; :route == a transportation route — added for
+  #   driver/route_monitor's "own route", which is neither a department, a
+  #   grade level, nor a school section)
   Assignment = Data.define(:role_key, :permission_keys, :scope_type, :scope_id) do
     # How a resource exposes the id for each scoped grant type. A resource is
     # "covered" when its scope id matches the grant's. institution-wide grants
@@ -11,7 +14,8 @@ module Authorization
     SCOPE_READERS = {
       department:  :department_id,
       grade_level: :grade_level_id,
-      group:       :group_id
+      group:       :group_id,
+      route:       :route_id
     }.freeze
 
     def grants?(permission_key)

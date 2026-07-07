@@ -25,9 +25,11 @@ Rails.application.routes.draw do
   scope path: "portal", module: "portals", as: "portal" do
     resource :student, only: :show, controller: "student_portal" do
       resource :cafeteria, only: :show, controller: "student_cafeteria"
+      resource :transport, only: :show, controller: "student_transport"
     end
     resource :guardian, only: :show, controller: "guardian_portal" do
       resource :cafeteria, only: :show, controller: "guardian_cafeteria"
+      resource :transport, only: :show, controller: "guardian_transport"
     end
   end
 
@@ -106,6 +108,26 @@ Rails.application.routes.draw do
     get "menu", to: "menu#index", as: "menu"
     resources :checkouts, only: %i[new create]
     resources :balances, only: :index
+  end
+
+  # --- transportation (domain views, Prompt Unificado) ----------------------
+  # No models/schema at all — the most greenfield domain yet. boarding.manage
+  # introduced a new scope dimension (:route) since a bus route is neither a
+  # department, grade_level, nor school section — see
+  # Authorization::Assignment::SCOPE_READERS. boarding#show is "solo UI; sin
+  # persistencia ni broadcast" per Apéndice A.
+  namespace :transportation do
+    resources :routes, only: %i[index show]
+    resource :boarding, only: :show, controller: "boarding"
+    resources :boarding_events, only: :create
+  end
+
+  # --- staff_management (closes an orphaned Fase 0 nav entry) ---------------
+  # Not one of the 9 domains in the Prompt Unificado list, but "Personal" has
+  # sat unfulfilled since Fase 0 — same class of gap as Calificaciones/
+  # Orientación were. Minimal directory only; no Apéndice A spec exists for it.
+  namespace :staff_management do
+    get "staff", to: "staff#index", as: "staff"
   end
 
   # --- Control plane (super-admin, cross-tenant, above RLS) -----------------

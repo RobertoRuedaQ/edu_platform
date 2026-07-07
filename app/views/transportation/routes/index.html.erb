@@ -1,0 +1,21 @@
+<% content_for :title, "Rutas" %>
+
+<%= render "shared/page_header", title: "Rutas de transporte", subtitle: "Rutas dentro de tu alcance." %>
+
+<% if @routes.any? -%>
+  <%= render layout: "shared/table",
+        locals: { headers: ["Ruta", "Conductor", "Vehículo", "Capacidad"] } do -%>
+    <% @routes.each do |route| -%>
+      <tr>
+        <td><%= link_to route.name, transportation_route_path(route.id) %></td>
+        <td><%= route.driver_name %></td>
+        <td><%= route.vehicle_plate %></td>
+        <td><%= route.capacity %></td>
+      </tr>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state",
+        icon: "alert-circle",
+        title: "No hay rutas en tu alcance" %>
+<% end -%>
