@@ -599,6 +599,12 @@
   .teacher-qualifications { margin: 0; padding-inline-start: var(--space-5); }
   .teacher-qualifications li { font-size: var(--text-sm); }
 
+  /* --- Domain-local: group_management -------------------------------------- */
+  .student-row__person { display: inline-flex; align-items: center; gap: var(--space-2); }
+  .membership-fieldset { border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-4); }
+  .membership-row { display: flex; align-items: center; gap: var(--space-2); padding-block: var(--space-1); }
+  .membership-row__code { color: var(--color-text-muted); font-size: var(--text-xs); }
+
   /* --- Shared: audit entry row (who / what / when) ----------------------- */
   .audit-entry {
     display: flex;

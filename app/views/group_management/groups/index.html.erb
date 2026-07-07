@@ -1,0 +1,24 @@
+<% content_for :title, "Grupos" %>
+
+<%= render "shared/page_header",
+      title: "Grupos",
+      subtitle: "Grupos/secciones dentro de tu alcance." %>
+
+<% if @groups.any? -%>
+  <%= render layout: "shared/table",
+        locals: { headers: ["Grupo", "Grado", "Director de grupo", "Horario"] } do -%>
+    <% @groups.each do |group| -%>
+      <tr>
+        <td><%= link_to group.name, group_management_group_path(group.id) %></td>
+        <td><%= group.grade_level_name %></td>
+        <td><%= group.homeroom_teacher_name %></td>
+        <td><%= group.schedule_summary %></td>
+      </tr>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state",
+        icon: "alert-circle",
+        title: "No hay grupos en tu alcance",
+        description: "No ves grupos fuera de tu institución." %>
+<% end -%>

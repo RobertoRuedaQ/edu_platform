@@ -38,6 +38,19 @@ Rails.application.routes.draw do
     resources :departments, only: %i[index show]
   end
 
+  # --- group_management (domain views, Prompt Unificado) --------------------
+  # Absorbs the students#index/show Apéndice A wrote under "core" — the real
+  # owner is group_management (Student/Section/GradeLevel live here; see the
+  # config/navigation/group_management.rb pre-wired by Fase 0). groups.manage
+  # is a narrower permission than groups.view: viewing a roster and editing
+  # who's on it are different capabilities.
+  namespace :group_management do
+    resources :students, only: %i[index show]
+    resources :groups, only: %i[index show] do
+      resource :membership, only: %i[edit update], controller: "memberships"
+    end
+  end
+
   # --- Control plane (super-admin, cross-tenant, above RLS) -----------------
   # Its own namespace, mounted at /control_plane. NOT a tenant domain: no RLS
   # scoping applies. Controllers live in app/control_plane/control_plane/ and

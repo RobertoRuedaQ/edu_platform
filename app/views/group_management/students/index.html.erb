@@ -1,0 +1,29 @@
+<% content_for :title, "Estudiantes" %>
+
+<%= render "shared/page_header",
+      title: "Estudiantes",
+      subtitle: "Estudiantes dentro de tu alcance.",
+      actions: (can?("groups.view") ? ui_button("Grupos", href: group_management_groups_path, variant: :secondary) : nil) %>
+
+<% if @students.any? -%>
+  <%= render layout: "shared/table",
+        locals: { headers: ["Estudiante", "Grupo", "Estado"] } do -%>
+    <% @students.each do |student| -%>
+      <tr>
+        <td>
+          <%= link_to group_management_student_path(student.id), class: "student-row__person" do %>
+            <%= ui_avatar student.name, size: :sm %>
+            <span><%= student.name %></span>
+          <% end %>
+        </td>
+        <td><%= student.group_name %></td>
+        <td><%= student_status_badge(student.status) %></td>
+      </tr>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state",
+        icon: "alert-circle",
+        title: "No hay estudiantes en tu alcance",
+        description: "No ves estudiantes fuera de tu grupo o institución." %>
+<% end -%>

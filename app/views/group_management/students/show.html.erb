@@ -1,0 +1,39 @@
+<% content_for :title, @student.name %>
+
+<%= render "shared/page_header", title: @student.name, subtitle: @student.group_name %>
+
+<%#
+  Perfil y Matrícula son datos propios/cross-domain en stub (schedules). Las
+  pestañas de convivencia/acomodaciones (student_support) se agregan cuando
+  corra ese dominio — son datos sensibles que ese prompt gatea aparte.
+-%>
+<% panels = {} -%>
+
+<% panels["Perfil"] = capture do %>
+  <%= render "shared/detail_list", items: {
+        "Código"   => @student.student_code,
+        "Grupo"    => can?("groups.view") ? link_to(@student.group_name, group_management_group_path(@student.group_id)) : @student.group_name,
+        "Grado"    => @student.grade_level_name,
+        "Estado"   => student_status_badge(@student.status)
+      } %>
+<% end -%>
+
+<% panels["Matrícula"] = capture do %>
+  <%# Cross-domain (schedules) — TODO: reemplazar por Schedules::Enrollment real. %>
+  <% if @student.enrollments.any? -%>
+    <%= render layout: "shared/table", locals: { headers: ["Materia", "Periodo", "Estado"] } do -%>
+      <% @student.enrollments.each do |enrollment| -%>
+        <tr>
+          <td><%= enrollment.subject %></td>
+          <td><%= enrollment.term %></td>
+          <td><%= ui_badge enrollment.status == "enrolled" ? "Matriculado" : enrollment.status.humanize,
+                    variant: enrollment.status == "enrolled" ? :success : :neutral %></td>
+        </tr>
+      <% end -%>
+    <% end -%>
+  <% else -%>
+    <%= render "shared/empty_state", title: "Sin materias matriculadas" %>
+  <% end -%>
+<% end -%>
+
+<%= render "shared/tabs", panels: panels, id: "student-#{@student.id}", label: "Detalle del estudiante" %>

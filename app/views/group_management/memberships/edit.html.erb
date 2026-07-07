@@ -1,0 +1,23 @@
+<% content_for :title, "Matrícula de #{@group.name}" %>
+
+<%= render "shared/page_header", title: "Matrícula de #{@group.name}", subtitle: @group.grade_level_name %>
+
+<%= render "shared/alert",
+      variant: :info,
+      message: "Cambios de matrícula (stub): esta acción todavía no persiste." %>
+
+<%= form_with url: group_management_group_membership_path(@group), method: :patch do %>
+  <fieldset class="membership-fieldset">
+    <legend>Estudiantes en el grupo</legend>
+    <% (@roster + @available).each do |student| -%>
+      <label class="membership-row">
+        <input type="checkbox" name="student_ids[]" value="<%= student.id %>"
+               <%= "checked" if @roster.include?(student) %>>
+        <span><%= student.name %></span>
+        <span class="membership-row__code"><%= student.student_code %></span>
+      </label>
+    <% end -%>
+  </fieldset>
+
+  <%= ui_button "Guardar matrícula", type: "submit", variant: :primary %>
+<% end %>

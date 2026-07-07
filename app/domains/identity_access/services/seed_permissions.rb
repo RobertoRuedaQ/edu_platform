@@ -5,6 +5,8 @@ module IdentityAccess
     CATALOG = {
       "students.read"     => "Ver estudiantes",
       "students.write"    => "Crear/editar estudiantes",
+      "groups.view"       => "Ver grupos/secciones",
+      "groups.manage"     => "Gestionar matrícula de un grupo",
       "grades.read"       => "Ver calificaciones",
       "grades.write"      => "Registrar calificaciones",
       "staff.read"        => "Ver personal",

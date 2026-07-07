@@ -1,0 +1,31 @@
+<% content_for :title, @group.name %>
+
+<%= render "shared/page_header",
+      title: @group.name,
+      subtitle: @group.grade_level_name,
+      actions: (can?("groups.manage", @group) ? ui_button("Editar matrícula", href: edit_group_management_group_membership_path(@group), variant: :secondary) : nil) %>
+
+<%= render "shared/detail_list", items: {
+      "Director de grupo" => @group.homeroom_teacher_name,
+      "Horario"            => @group.schedule_summary,
+      "Año académico"      => @group.academic_year
+    } %>
+
+<h3>Estudiantes del grupo</h3>
+<% if @students.any? -%>
+  <%= render layout: "shared/table", locals: { headers: ["Estudiante", "Estado"] } do -%>
+    <% @students.each do |student| -%>
+      <tr>
+        <td>
+          <%= link_to group_management_student_path(student.id), class: "student-row__person" do %>
+            <%= ui_avatar student.name, size: :sm %>
+            <span><%= student.name %></span>
+          <% end %>
+        </td>
+        <td><%= student_status_badge(student.status) %></td>
+      </tr>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state", title: "Sin estudiantes matriculados" %>
+<% end -%>
