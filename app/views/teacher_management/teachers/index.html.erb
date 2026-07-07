@@ -1,0 +1,31 @@
+<% content_for :title, "Docentes" %>
+
+<%= render "shared/page_header",
+      title: "Docentes",
+      subtitle: "Docentes dentro de tu alcance.",
+      actions: (can?("departments.view") ? ui_button("Departamentos", href: teacher_management_departments_path, variant: :secondary) : nil) %>
+
+<% if @teachers.any? -%>
+  <%= render layout: "shared/table",
+        locals: { headers: ["Docente", "Departamento", "Materias", "Estado"] } do -%>
+    <% @teachers.each do |teacher| -%>
+      <tr>
+        <td>
+          <%= link_to teacher_management_teacher_path(teacher.id), class: "teacher-row__person" do %>
+            <%= ui_avatar teacher.name, size: :sm %>
+            <span><%= teacher.name %></span>
+          <% end %>
+        </td>
+        <td><%= teacher.department_name %></td>
+        <td><%= teacher.subjects.join(", ") %></td>
+        <td><%= teacher_status_badge(teacher.status) %></td>
+      </tr>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <%# Never a blank screen: scope excludes rows, it never hides the reason. %>
+  <%= render "shared/empty_state",
+        icon: "alert-circle",
+        title: "No hay docentes en tu alcance",
+        description: "No ves docentes fuera de tu departamento o institución." %>
+<% end -%>

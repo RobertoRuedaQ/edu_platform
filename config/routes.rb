@@ -27,6 +27,17 @@ Rails.application.routes.draw do
     resource :guardian, only: :show, controller: "guardian_portal"
   end
 
+  # --- teacher_management (domain views, Prompt Unificado) ------------------
+  # Scope is department (area_lead) or institution (coordinator/principal/HR/
+  # secretary/institution_admin) — see TeacherManagement::TeacherScope. The
+  # nested evaluation is the acceptance case: teacher.evaluate, department-scoped.
+  namespace :teacher_management do
+    resources :teachers, only: %i[index show] do
+      resources :evaluations, only: %i[new create], controller: "teacher_evaluations"
+    end
+    resources :departments, only: %i[index show]
+  end
+
   # --- Control plane (super-admin, cross-tenant, above RLS) -----------------
   # Its own namespace, mounted at /control_plane. NOT a tenant domain: no RLS
   # scoping applies. Controllers live in app/control_plane/control_plane/ and

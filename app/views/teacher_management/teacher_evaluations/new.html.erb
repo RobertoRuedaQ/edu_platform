@@ -1,0 +1,18 @@
+<% content_for :title, "Evaluar a #{@teacher.name}" %>
+
+<%= render "shared/page_header",
+      title: "Evaluar a #{@teacher.name}",
+      subtitle: @teacher.department_name %>
+
+<%= render "shared/alert",
+      variant: :info,
+      message: "Esta evaluación es un registro interno del área; el docente no la ve directamente." %>
+
+<%= form_with url: teacher_management_teacher_evaluations_path(@teacher), method: :post do %>
+  <%= render "shared/field", label: "Puntaje (1-5)", name: "score", type: "number",
+        hint: "1 = insuficiente, 5 = sobresaliente", required: true %>
+  <%= render "shared/field", label: "Comentarios", name: "comments",
+        placeholder: "Observaciones sobre el desempeño del docente" %>
+
+  <%= ui_button "Registrar evaluación", type: "submit", variant: :primary %>
+<% end %>
