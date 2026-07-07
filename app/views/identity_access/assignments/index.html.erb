@@ -1,0 +1,14 @@
+<% content_for :title, "Asignaciones de rol" %>
+
+<%= render "shared/page_header",
+      title: "Asignaciones de rol",
+      subtitle: "Quién tiene qué rol, y sobre qué alcance.",
+      actions: (can?("roles.manage") ? ui_button("Nueva asignación", href: new_identity_access_assignment_path, variant: :primary) : nil) %>
+
+<%= render layout: "shared/table", locals: { headers: ["Persona", "Rol", "Alcance"] } do -%>
+  <% @assignments.each do |assignment| -%>
+    <%= render "identity_access/role_assignment_row",
+          person_name: assignment.person_name, email: assignment.email,
+          role_name: assignment.role_name, scope_label: assignment.scope_label, system: assignment.system %>
+  <% end -%>
+<% end -%>

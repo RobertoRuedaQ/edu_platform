@@ -578,6 +578,14 @@
   .assignment-form { display: flex; flex-direction: column; gap: var(--space-4); }
   .assignment-form__scope { border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-4); }
   .assignment-form__actions { display: flex; justify-content: flex-end; }
+  .identity-card-link { display: block; text-decoration: none; color: inherit; }
+  .identity-card-link:hover .identity-card { border-color: var(--color-primary); }
+  .permission-matrix { width: 100%; border-collapse: collapse; }
+  .permission-matrix th, .permission-matrix td { padding: var(--space-2) var(--space-3); text-align: center; border-bottom: 1px solid var(--color-border); }
+  .permission-matrix th:first-child, .permission-matrix td:first-child { text-align: left; }
+  .permission-matrix__state { display: inline-flex; }
+  .permission-matrix__state.is-granted { color: var(--color-success); }
+  .permission-matrix__state.is-denied { color: var(--color-text-subtle); }
 
   /* --- Domain-local: finance --------------------------------------------- */
   .finance-amount { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }

@@ -15,7 +15,7 @@ module IdentityAccess
     # Human-readable label of the scope, for badges/rows.
     def scope_label
       return "Toda la institución" if institution_wide?
-      [scope_department&.name, scope_grade_level&.name, scope_group&.name].compact.join(" · ")
+      [ scope_department&.name, scope_grade_level&.name, scope_group&.name ].compact.join(" · ")
     end
 
     def institution_wide?

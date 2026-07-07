@@ -1,10 +1,10 @@
-<%# locals: (roles: [], departments: [], grade_levels: [], groups: [], **attrs) -%>
+<%# locals: (roles: [], departments: [], grade_levels: [], groups: [], url: "#", **attrs) -%>
 <%#
-  STUB assignment form — exercises the form markup only. url: "#" and no real
-  submit handling. roles: [label, id] pairs.
-  # TODO: conectar a modelo real (IdentityAccess::RoleAssignment) + endpoint.
+  roles: [label, id] pairs. url defaults to "#" (pure UI exercise, e.g. a
+  preview gallery); pass the real endpoint to actually submit.
+  # TODO: conectar scope_selector a datos reales (departments/grade_levels/groups).
 -%>
-<%= form_with url: "#", method: :post, class: "assignment-form" do |f| -%>
+<%= form_with url: url, method: :post, class: "assignment-form" do |f| -%>
   <div class="field">
     <label class="field__label" for="assignment-role">Rol</label>
     <select class="field__input" id="assignment-role" name="assignment[role_id]">

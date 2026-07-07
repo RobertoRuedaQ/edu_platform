@@ -1,0 +1,12 @@
+<% content_for :title, @role.name %>
+
+<%= render "shared/page_header", title: @role.name, subtitle: @role.description %>
+
+<%= render "shared/detail_list", items: {
+      "Tipo"                 => render("identity_access/role_badge", role_name: (@role.system ? "Sistema" : "Personalizado"), system: @role.system),
+      "Alcances asignables"   => @role.assignable_scope_types.map(&:to_s).join(", ")
+    } %>
+
+<h3>Permisos</h3>
+<%= render "identity_access/permission_list",
+      permissions: @permission_keys.map { |key| { key: key, description: IdentityAccess::SeedPermissions::CATALOG[key] } } %>

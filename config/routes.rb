@@ -132,6 +132,18 @@ Rails.application.routes.draw do
     resources :cross_tenant_reports, only: :index
   end
 
+  # --- identity_access (domain views, Prompt Unificado) ---------------------
+  # SENSIBLE. Admin views ONLY — the authorization gate itself (Fase 0) is
+  # untouched. roles.manage (already in the catalog, already pre-wired to
+  # "Roles y accesos" -> /identity_access/roles) covers users/roles/
+  # assignments alike: super_admin's cross-tenant view would duplicate
+  # control_plane's existing surface, so this stays institution_admin-only.
+  namespace :identity_access do
+    resources :users, only: %i[index show]
+    resources :roles, only: %i[index show]
+    resources :assignments, only: %i[index new create]
+  end
+
   # --- staff_management (closes an orphaned Fase 0 nav entry) ---------------
   # Not one of the 9 domains in the Prompt Unificado list, but "Personal" has
   # sat unfulfilled since Fase 0 — same class of gap as Calificaciones/

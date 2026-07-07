@@ -1,0 +1,13 @@
+<% content_for :title, "Usuarios" %>
+
+<%= render "shared/page_header", title: "Usuarios", subtitle: "Membresías de tu institución." %>
+
+<div class="tile-grid">
+  <% @users.each do |user| -%>
+    <%= link_to identity_access_user_path(user.id), class: "identity-card-link" do %>
+      <%= render "identity_access/user_identity_card",
+            name: user.name, email: user.email,
+            roles: user.roles.map { |r| { role_name: r.role_name, scope_label: r.scope_label, system: r.system } } %>
+    <% end %>
+  <% end -%>
+</div>
