@@ -1,0 +1,25 @@
+<% content_for :title, "Mi portal" %>
+
+<%= render "shared/page_header",
+      title: "Hola, #{@dashboard.guardian_name}",
+      subtitle: "Selecciona un hijo o hija para ver sus accesos." %>
+
+<%#
+  Child selector via the shared tabs component: accessible tablist, and a
+  progressive-enhancement fallback where every child's panel stays visible
+  with JS off — nothing is hidden behind a control that requires script.
+-%>
+<% panels = {} -%>
+<% @dashboard.children.each do |child| -%>
+  <% panels[child.name] = capture do %>
+    <p class="portal-child__section"><%= child.section_name %></p>
+    <div class="tile-grid">
+      <% child.shortcuts.each do |shortcut| -%>
+        <%= render "shared/dashboard_tile",
+              label: shortcut.label, path: shortcut.path, stat: shortcut.stat %>
+      <% end -%>
+    </div>
+  <% end -%>
+<% end -%>
+
+<%= render "shared/tabs", panels: panels, id: "guardian-children", label: "Hijos" %>

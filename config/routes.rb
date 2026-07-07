@@ -17,6 +17,16 @@ Rails.application.routes.draw do
   get "search", to: "search#index", as: :search
   resource :institution_switch, only: :create
 
+  # --- Person portals (Part 4) ----------------------------------------------
+  # Separate surfaces from the staff shell above: own minimal layout, no domain
+  # nav/search. Resolved by RELATION (students.user_id / guardian_students),
+  # never by role_assignments — see Portals::StudentPortalController /
+  # Portals::GuardianPortalController.
+  scope path: "portal", module: "portals", as: "portal" do
+    resource :student, only: :show, controller: "student_portal"
+    resource :guardian, only: :show, controller: "guardian_portal"
+  end
+
   # --- Control plane (super-admin, cross-tenant, above RLS) -----------------
   # Its own namespace, mounted at /control_plane. NOT a tenant domain: no RLS
   # scoping applies. Controllers live in app/control_plane/control_plane/ and

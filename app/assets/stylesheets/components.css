@@ -658,4 +658,11 @@
   .tile__label { font-weight: var(--weight-semibold); font-size: var(--text-lg); }
   .tile__desc { color: var(--color-text-muted); font-size: var(--text-sm); }
   .tile__stat { margin-top: var(--space-1); }
+
+  /* --- Guardian portal child panel ---------------------------------------- */
+  .portal-child__section {
+    color: var(--color-text-muted);
+    font-size: var(--text-sm);
+    margin-bottom: var(--space-3);
+  }
 }

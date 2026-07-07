@@ -1,0 +1,12 @@
+<% content_for :title, "Mi portal" %>
+
+<%= render "shared/page_header",
+      title: "Hola, #{@dashboard.student_name}",
+      subtitle: "#{@dashboard.section_name} · estos son tus accesos." %>
+
+<div class="tile-grid">
+  <% @dashboard.shortcuts.each do |shortcut| -%>
+    <%= render "shared/dashboard_tile",
+          label: shortcut.label, path: shortcut.path, stat: shortcut.stat %>
+  <% end -%>
+</div>
