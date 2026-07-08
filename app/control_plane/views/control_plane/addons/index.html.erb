@@ -1,22 +1,28 @@
 <% content_for :title, "Catálogo de addons" %>
 <%#
-  Screen 3 — addon catalog (visual CRUD, no persistence). Addon = domain 1:1.
-  Data stub via @addons. Cards via control_plane/shared/_addon_card.
+  Screen 3 — addon catalog (real CRUD, S1). Addon = domain 1:1. Soft-retire
+  only — no destroy.
 -%>
 
 <%= render "shared/page_header",
       title: "Catálogo de addons",
-      subtitle: "Addon = dominio 1:1 · datos stub",
-      actions: ui_button("Nuevo addon", href: "#", variant: :primary) %>
+      subtitle: "Addon = dominio 1:1",
+      actions: ui_button("Nuevo addon", href: new_control_plane_addon_path, variant: :primary) %>
 
-<section class="cp-section" aria-label="Addons">
-  <div class="cp-grid">
-    <% @addons.each do |addon| %>
-      <%= render "control_plane/shared/addon_card",
-            name: addon.name, status: addon.status, monthly_fee: addon.monthly_fee,
-            currency: addon.currency, metered: addon.metered?, unit: addon.unit,
-            quota: addon.quota, domain: addon.domain,
-            actions: ui_button("Editar", href: "#", variant: :ghost, size: :sm) %>
-    <% end %>
-  </div>
-</section>
+<% if @addons.none? -%>
+  <%= render "shared/empty_state", title: "Sin addons todavía",
+        description: "Crea el primero para un dominio addon-able.",
+        action: ui_button("Nuevo addon", href: new_control_plane_addon_path, variant: :primary) %>
+<% else -%>
+  <section class="cp-section" aria-label="Addons">
+    <div class="cp-grid">
+      <% @addons.each do |addon| %>
+        <%= render "control_plane/shared/addon_card",
+              name: addon.name, status: addon.status, monthly_fee: addon.monthly_fee,
+              currency: addon.currency, metered: addon.metered?, unit: addon.unit,
+              quota: addon.included_quota, domain: addon.key,
+              actions: link_to("Ver / editar", control_plane_addon_path(addon), class: "btn btn--ghost btn--sm") %>
+      <% end %>
+    </div>
+  </section>
+<% end -%>

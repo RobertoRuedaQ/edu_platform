@@ -36,4 +36,10 @@ namespace :control_plane do
 
     puts "Creado platform_admin #{admin.email} (#{admin.id})."
   end
+
+  desc "Seed the initial billing catalog (addons + example plan). Idempotent by key."
+  task seed_catalog: :environment do
+    ControlPlane::SeedCatalog.call
+    puts "Catálogo sembrado: #{ControlPlane::Addon.count} addons, #{ControlPlane::Plan.count} planes."
+  end
 end

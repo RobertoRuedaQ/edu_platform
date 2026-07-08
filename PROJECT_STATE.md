@@ -16,10 +16,10 @@
 
 | Campo | Valor |
 |---|---|
-| **Versión del documento** | `v1.1.0` |
+| **Versión del documento** | `v1.2.0` |
 | **Fecha** | 2026-07-08 |
-| **Estado del proyecto** | Identidad real ya funciona: login nativo + MFA por correo, registro por invitación, y gestión de personas (crear/invitar/suspender) corriendo contra datos reales, con tests verdes (122 runs, 0 fallos). Roster import y las vistas propias de estudiante/acudiente/docente (datos reales, no stub) siguen pendientes. |
-| **Alcance de esta versión** | Cierra (parcialmente) la iteración 8 del backlog: módulo de autenticación/onboarding. Ver §9 y §10 para el corte exacto de qué quedó real vs. qué sigue en stub o pendiente. |
+| **Estado del proyecto** | Identidad real ya funciona: login nativo + MFA por correo, registro por invitación, y gestión de personas (crear/invitar/suspender) corriendo contra datos reales. El plano de control tiene ahora auth real de `platform_admins` (MFA por correo, gestión de administradores) **y** su primer catálogo real con CRUD: `addons` + `plans`/`plan_price_tiers` (S1). Tests verdes (158 runs, 0 fallos, 1 skip preexistente). Roster import y las vistas propias de estudiante/acudiente/docente (datos reales, no stub) siguen pendientes; entitlements/subscriptions/metering/invoices del plano de control siguen en stub (S2–S4). |
+| **Alcance de esta versión** | Cierra el Slice S1 del plano de control (§12.5): catálogo de facturación (`addons`, `plans`, `plan_price_tiers`) migrado y con CRUD real, auditado. También reconcilia que S0 (auth de `platform_admins`) ya estaba real desde una iteración previa que este documento no reflejaba — ver Changelog. |
 
 ### Convención de versionado de ESTE documento
 
@@ -276,9 +276,13 @@ permiso, (5) auto-registro de navegación en archivo propio del dominio (no edit
 ## 7. Plano de control · addons, entitlements y billing de plataforma
 
 > **No es un dominio.** Vive en `app/control_plane/` (fuera de `app/domains/*`), cross-tenant, por
-> encima de RLS, servido por el rol auditado con `BYPASSRLS`. **Billing de plataforma ≠ dominio
-> `finance`**: aquí la plataforma cobra al colegio; en `finance` el colegio cobra a los acudientes.
-> **Sin cambios en esta iteración** — sigue en fase de componentes/vistas stub (ver §12).
+> encima de RLS. **Billing de plataforma ≠ dominio `finance`**: aquí la plataforma cobra al colegio;
+> en `finance` el colegio cobra a los acudientes. **Corrección de esta versión:** el auth de
+> `platform_admins` (S0) y el catálogo `addons`/`plans` (S1, esta versión) ya están migrados y con
+> CRUD real — la nota anterior ("sigue en fase de componentes/vistas stub") quedó desactualizada
+> frente al repo. `institution_entitlements`, `subscriptions`, metering e `invoices` (S2–S4) siguen
+> en fase stub (ver §12.5). Servido por el rol runtime normal (`edu_app_runtime`), **sin
+> `BYPASSRLS`** — estas tablas son globales y no necesitan cruzar tenants para leerse.
 
 ### 7.1 El gate de entitlements (dos compuertas en serie)
 
@@ -289,15 +293,23 @@ Punto único de verificación tipo `Current.institution.entitled?(:cafeteria)`: 
 solo muestra dominios habilitados; los controllers de un dominio no habilitado rechazan el acceso.
 El código de cada dominio no se ramifica — se enciende/apaga por institución desde un solo lugar.
 
-### 7.2 Modelo de datos conceptual (global / sin RLS — aún NO migraciones)
+### 7.2 Modelo de datos conceptual (global, sin RLS)
 
-- **`addons`** — catálogo. 1 addon = 1 dominio. Enriquecido: `monthly_fee`, `metered?`, y para medidos `included_quota` + `unit` + `overage_unit_price`.
-- **`plans`** — tarifa base **por alumno** + brackets de volumen. La tarifa se **congela como snapshot** en `subscriptions` al firmar.
-- **`institution_entitlements`** — institución × addon: activar/desactivar, fechado efectivo, y **overrides negociados** (precio/cupo distinto al catálogo).
-- **`student_headcount_snapshots`** — headcount **empujado por el tenant al cierre** (no lectura viva del `students` del inquilino → boundary limpio + número defendible en factura).
-- **`usage_events` / `usage_daily_rollups`** — metering. Un job diario acumula rollups; el corte de periodo suma rollups, no escanea eventos crudos.
-- **`invoices` / `invoice_line_items`** — cada línea con `kind` ∈ (`base_seats`, `addon_fee`, `usage_overage`) + FK a su origen.
-- **`platform_admins`** — super-admins de plataforma **aparte + MFA obligatorio** (no un flag sobre `users`). **Nota de esta iteración:** el MFA por correo (`IdentityAccess::Otp::Issuer/Verifier`) que se construyó para `identity_access` es genérico (recibe `user`+`institution`+`purpose`); si `platform_admins` no es un `Core::User`, no se puede reutilizar directamente sin adaptar la firma. Evaluar al implementar §12.5.
+- **`addons`** ✅ **migrado y con CRUD (S1)**. Catálogo. 1 addon = 1 dominio **addon-able** (F14 —
+  fundacionales `core`/`teacher_management`/`group_management`/`identity_access` excluidos;
+  `ControlPlane::AddonCatalog::DOMAIN_KEYS` es la lista canónica). `monthly_fee_cents` (bigint,
+  nunca float), `metered`, y para medidos `included_quota` + `unit` + `overage_unit_price_cents`.
+  Retiro suave (`status` active/retired), nunca hard-delete.
+- **`plans`** ✅ **migrado y con CRUD (S1)** — tarifa base **por alumno** (`base_price_per_student_cents`)
+  + brackets de volumen en **`plan_price_tiers`** (tabla hija explícita, no JSONB; hard-deletable,
+  a diferencia de `plans`/`addons`). No hay FK entre `plans` y `addons` (F9, catálogos
+  independientes). La tarifa se **congelará como snapshot** en `subscriptions` al firmar — **eso es
+  S2**, S1 solo almacena el pricing, no lo aplica a ningún headcount/factura.
+- **`institution_entitlements`** 🔴 pendiente (S2) — institución × addon: activar/desactivar, fechado efectivo, y **overrides negociados** (precio/cupo distinto al catálogo).
+- **`student_headcount_snapshots`** 🔴 pendiente (S3) — headcount **empujado por el tenant al cierre** (no lectura viva del `students` del inquilino → boundary limpio + número defendible en factura).
+- **`usage_events` / `usage_daily_rollups`** 🔴 pendiente (S3) — metering. Un job diario acumula rollups; el corte de periodo suma rollups, no escanea eventos crudos.
+- **`invoices` / `invoice_line_items`** 🔴 pendiente (S4) — cada línea con `kind` ∈ (`base_seats`, `addon_fee`, `usage_overage`) + FK a su origen.
+- **`platform_admins`** ✅ **migrado, con auth nativa + MFA por correo (S0, ya real desde antes de este documento)** — super-admins de plataforma aparte de `Core::User`, no un flag. El MFA propio (`ControlPlane::Otp::*`) se construyó independiente de `IdentityAccess::Otp::*` en vez de reutilizarlo — no hubo que adaptar la firma genérica, se duplicó el ~concern~ delgado.
 
 ### 7.3 Modelo de cobro: híbrido
 
@@ -467,8 +479,9 @@ buscador, tal como pide el prompt original.
 | 4 | **Organización de dominios** | `dominios_edu_platform.md`, prompt de scaffold, `notifications` → `communication` | ✅ Ejecutado (scaffold + componentes) |
 | 5 | **identity/finance/counseling** | Prompt combinado con modelos (migraciones + AR con guardrails) | ✅ Ejecutado (esquema + componentes) |
 | 6 | **Vistas + roles** | Mapa maestro, Fase 0 (shell por rol + `can?`/`authorize!` + dashboard + portales + 403), prompts por dominio | ✅ Fase 0 + dominios ejecutados (todavía sobre `StubResolver`, ver §11) |
-| 7 | **Plano de control + billing** | Estructura `app/control_plane/`, componentes stub de addons/entitlements/billing híbrido | ✅ Ejecutado (solo componentes, sin cambios esta iteración) |
+| 7 | **Plano de control + billing** | Estructura `app/control_plane/`, auth de `platform_admins` + MFA (S0), catálogo `addons`/`plans`/`plan_price_tiers` con CRUD real (S1) | 🟡 **Parcialmente ejecutado.** Real: S0 (auth+MFA+gestión de admins) y S1 (catálogo). Pendiente: `institution_entitlements`/`subscriptions` (S2), metering (S3), `invoices` (S4) — siguen en componentes/vistas stub. |
 | 8 | **Autenticación / onboarding** | Registro por invitación, login+MFA, roster import, vinculación, auditoría (externos e internos) | 🟡 **Parcialmente ejecutado.** Real: esquema, login+MFA, invitaciones, auditoría, gestión de personas, suspender/reactivar. Pendiente: roster import (CSV), `GuardianScope`, vistas de autoservicio de la persona, visores de auditoría/discrepancias. Ver §9.7 para el corte exacto. |
+| 9 | **Plano de control · S1 (catálogo)** | Migraciones `addons`/`plans`/`plan_price_tiers`, modelos con validaciones-espejo de los CHECK, CRUD auditado, seed idempotente, tests | ✅ Ejecutado — ver §7.2 y Changelog v1.2.0 |
 
 ---
 
@@ -502,16 +515,31 @@ buscador, tal como pide el prompt original.
    4. Visor de `audit_events` + bandeja de discrepancias (barato — los datos ya existen).
    5. Job recurrente para `Invitations::Expirer` y webhook real para `Invitations::BounceHandler`
       (opcional / según necesidad real de producción, no bloqueante).
-2. **Cerrar CHECKPOINT E** (`staff_management` vs `human_resources`) y, si aplica, scaffold del dominio de personal no docente. → **v1.2.0**
+2. **Cerrar CHECKPOINT E** (`staff_management` vs `human_resources`) y, si aplica, scaffold del dominio de personal no docente. *(nota: v1.2.0 terminó siendo el Slice S1 del plano de control, no este ítem — sigue pendiente y sin versión asignada).*
 3. **Cablear la puerta de auth real**: reemplazar `Authorization::StubResolver` por
    `IdentityAccess::PermissionCheck` en todas las vistas de dominio. **Elevada en prioridad** esta
    versión — con login real, el stub-fallback de §6.3/P1 ya no es un detalle de fase de vistas, es
    una superficie de sobre-otorgamiento de permisos para cualquier persona real sin `RoleAssignment`
    sembrado.
 4. **Vistas de negocio por dominio** que aún estén en stub → conectarlas a modelos reales, dominio por dominio (empezando por `core` y `teacher_management` con el caso de aceptación).
-5. **Migraciones del plano de control** (addons, entitlements, metering, invoices) + auth real de
-   `platform_admins` con MFA (evaluar reutilizar `IdentityAccess::Otp::*` — ver nota en §7.2). Hasta
-   hoy es solo componentes stub.
+5. **Migraciones del plano de control** — ✅ auth de `platform_admins` con MFA (S0) y catálogo
+   `addons`/`plans`/`plan_price_tiers` con CRUD (S1, v1.2.0) ya reales. Pendiente:
+   1. **S2 — `institution_entitlements` + `subscriptions`**: snapshot de tarifa al firmar,
+      `Current.institution.entitled?(:x)`, wireado del lado inquilino. Al construir `retire!` sobre
+      un addon con entitlements activos, agregar la validación "no retirar si hay institución
+      dependiente" (no existe ese concepto todavía, por eso S1 no la tiene).
+   2. **S3 — metering**: `student_headcount_snapshots`, `usage_events`/`usage_daily_rollups`, jobs.
+      `addons.unit` sigue **provisional** hasta cerrar **M1** (unidad de metering por dominio) — S1
+      solo declaró valores de ejemplo (`check-ins`, `mensajes`) para satisfacer el CHECK, no la
+      unidad definitiva.
+   3. **S4 — `invoices`/`invoice_line_items`**: corte de periodo, aplicar los tiers de
+      `plan_price_tiers` a un headcount real (S1 solo almacena el pricing, no lo resuelve).
+   4. **Hardening documentado, no construido en S1**: exclusion constraint `int4range` con GiST por
+      `plan_id` en `plan_price_tiers` para prohibir solapamiento a nivel de BD (hoy solo se valida en
+      la app), al estilo `WITHOUT OVERLAPS` de `schedules`.
+   5. **RBAC intra-plano** (roles/scopes de `platform_admin`) — S1 mantuvo la decisión de S0 de que
+      cualquier `platform_admin` autenticado puede administrar el catálogo. Roles finos de
+      platform_admin siguen siendo un concern futuro, no construido.
 6. **Metering real** por dominio medido: definir el evento facturable de cada uno, `usage_events` → `usage_daily_rollups` (job idempotente en Solid Queue), y el job de corte de periodo (factura borrador).
 7. **Tiempo real** (Turbo Streams sobre Solid Cable, sin Redis): `transportation` (abordaje) y `communication` (canales). Hoy diferido.
 8. **`communication` a fondo**: migraciones de `conversations`/`messages`/`tags`, mensajería con padres, canales.
@@ -540,6 +568,50 @@ buscador, tal como pide el prompt original.
 ---
 
 ## 14. Changelog
+
+### v1.2.0 — 2026-07-08
+- **Plano de control · Slice S1 (catálogo de facturación): ejecutado.** Tres migraciones nuevas
+  (`addons`, `plans`, `plan_price_tiers` — 20260708000016-018), globales, sin RLS, sin
+  `institution_id`, siguiendo el patrón de `platform_admins`. Modelos `ControlPlane::{Addon,Plan,
+  PlanPriceTier}` con validaciones-espejo de los CHECK de BD. CRUD completo (`new/create/edit/update`
+  + retiro/reactivación suaves, nunca destroy) en `ControlPlane::{Addons,Plans,PlanPriceTiers}Controller`,
+  todas las mutaciones auditadas vía `ControlPlane::Audit.log`. Seed idempotente
+  (`ControlPlane::SeedCatalog` + `bin/rails control_plane:seed_catalog`). 158 tests / 0 fallos / 1
+  skip preexistente (36 nuevos: modelo + integración).
+- **Convenciones fijadas por S1** (aplican a cualquier billing futuro): dinero siempre en
+  `*_cents bigint`, nunca float; `currency text` default `'COP'` con `CHECK (char_length = 3)`, sin
+  FX ni impuestos; `addons.key` validado contra la lista canónica de dominios addon-able
+  (`ControlPlane::AddonCatalog::DOMAIN_KEYS`, nueva — no existía ningún registro de dominios en
+  código antes de esta versión); retiro suave (`status` active/retired) para entradas de catálogo;
+  `plan_price_tiers` como tabla hija explícita (no JSONB), hard-deletable a diferencia de su plan.
+- **Reconciliación de discrepancias encontradas en recon** (el repo iba adelante de este documento):
+  1. **S0 (auth de `platform_admins` + MFA + gestión de administradores) ya estaba real** desde una
+     iteración anterior no reflejada en v1.1.0 — este documento decía "sigue en fase de
+     componentes/vistas stub" para todo el plano de control; ya no es cierto para S0 ni para S1.
+  2. **S1 no partió de cero**: ya existía un scaffold stub previo (pre-S0) con
+     `ControlPlane::{Addons,Plans}Controller#index` sirviendo `Stubs::Fixtures` y vistas con
+     vocabulario de estado `available/beta/deprecated`. Se extendieron esos archivos in-place en vez
+     de crear paralelos — el vocabulario de estado real es `active/retired` (F10); `_addon_card` se
+     actualizó para aceptar ambos vocabularios sin romper `previews#index` (galería de componentes
+     dev-only, que sigue usando los fixtures).
+  3. **El stub anterior incluía addons para `staff_management` y `teacher_management`** — ambos
+     excluidos del catálogo real por F14 (`teacher_management` es fundacional; `staff_management` es
+     CHECKPOINT E, sin resolver). El seed real solo cubre los 8 dominios addon-able confirmados.
+  4. **`plans`/`addons` dejaron de mostrarse cruzados en la misma pantalla** (el stub viejo
+     renderizaba addon cards dentro de `plans#index`) — F9 los declara catálogos independientes sin
+     FK entre sí, así que `plans#index` ya no referencia addons.
+- **Gotcha operativo nuevo:** `bin/rails test` con paralelización por fork (`workers:
+  :number_of_processors`, default cuando la suite pasa el umbral de 50 tests) **crashea el proceso
+  Ruby** en esta máquina (YJIT + fork) — reproducido dos veces de forma independiente. Con
+  `parallelize(workers: 1)` la suite completa corre limpia (158/0/0/1). No es un problema del código
+  de S1 (confirmado corriendo la suite completa sin paralelizar); es un problema de entorno a
+  investigar aparte — mientras tanto, correr la suite completa en serie si se sospecha de un fallo
+  real, no asumir que un crash de proceso es un fallo de test.
+- **Forward notes documentadas, no construidas en S1** (ver §12.5): (a) `retire!` de un addon deberá
+  verificar entitlements activos cuando exista S2; (b) exclusion constraint `int4range`+GiST para
+  no-solapamiento de tiers a nivel de BD (hoy solo se valida en la app); (c) `addons.unit` sigue
+  provisional hasta cerrar **M1**; (d) RBAC intra-plano (roles/scopes de `platform_admin`) sigue sin
+  construirse — cualquier platform_admin autenticado administra el catálogo completo.
 
 ### v1.1.0 — 2026-07-08
 - **Módulo de autenticación/onboarding: cerrado parcialmente.** Se ejecutó la mayor parte del track de identidad sobre el prompt de la iteración 8: esquema completo (`national_id`×2, `academic_terms`, `guardian_students`, `invitations`, `email_otps`, `audit_events`, `roster_import_batches/rows`, `institution_users.status` — 11 migraciones, todas con RLS+policy+índice donde aplica), auth nativa Rails 8 + MFA por correo, registro por invitación (con resolución de tenant por subdominio del link, sin BYPASSRLS), auditoría append-only real (a nivel de rol de BD), `Core::People::Resolver`, y gestión de personas (crear/invitar/reenviar/suspender/reactivar) con permiso `people.manage` nuevo. 122 tests / 0 fallos.

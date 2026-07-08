@@ -20,6 +20,15 @@
   </div>
 </section>
 
+<section class="cp-section" aria-label="Catálogo">
+  <div class="cp-grid">
+    <%= render "shared/dashboard_tile", label: "Addons", path: control_plane_addons_path,
+          description: "Catálogo de addons (1 por dominio)" %>
+    <%= render "shared/dashboard_tile", label: "Planes", path: control_plane_plans_path,
+          description: "Tarifa base por alumno + brackets de volumen" %>
+  </div>
+</section>
+
 <section class="cp-section" aria-labelledby="cp-alerts-h">
   <h2 id="cp-alerts-h">Alertas</h2>
   <div class="cp-stack">

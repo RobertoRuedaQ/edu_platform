@@ -1,0 +1,5 @@
+<% content_for :title, "Editar plan" %>
+
+<%= render "shared/page_header", title: "Editar #{@plan.name}" %>
+
+<%= render "form", plan: @plan, url: control_plane_plan_path(@plan) %>

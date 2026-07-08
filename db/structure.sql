@@ -148,6 +148,33 @@ ALTER SEQUENCE public.active_storage_variant_records_id_seq OWNED BY public.acti
 
 
 --
+-- Name: addons; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.addons (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    key public.citext NOT NULL,
+    name character varying NOT NULL,
+    description text,
+    monthly_fee_cents bigint DEFAULT 0 NOT NULL,
+    currency character varying DEFAULT 'COP'::character varying NOT NULL,
+    metered boolean DEFAULT false NOT NULL,
+    included_quota bigint,
+    unit character varying,
+    overage_unit_price_cents bigint,
+    status character varying DEFAULT 'active'::character varying NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT addons_currency_check CHECK ((char_length((currency)::text) = 3)),
+    CONSTRAINT addons_included_quota_check CHECK (((included_quota IS NULL) OR (included_quota >= 0))),
+    CONSTRAINT addons_metering_consistency_check CHECK ((((metered = false) AND (included_quota IS NULL) AND (unit IS NULL) AND (overage_unit_price_cents IS NULL)) OR ((metered = true) AND (included_quota IS NOT NULL) AND (unit IS NOT NULL) AND (overage_unit_price_cents IS NOT NULL)))),
+    CONSTRAINT addons_monthly_fee_cents_check CHECK ((monthly_fee_cents >= 0)),
+    CONSTRAINT addons_overage_unit_price_cents_check CHECK (((overage_unit_price_cents IS NULL) OR (overage_unit_price_cents >= 0))),
+    CONSTRAINT addons_status_check CHECK (((status)::text = ANY ((ARRAY['active'::character varying, 'retired'::character varying])::text[])))
+);
+
+
+--
 -- Name: ar_internal_metadata; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -616,6 +643,44 @@ CREATE TABLE public.permissions (
 
 
 --
+-- Name: plan_price_tiers; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.plan_price_tiers (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    plan_id uuid NOT NULL,
+    min_students integer NOT NULL,
+    max_students integer,
+    price_per_student_cents bigint NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT plan_price_tiers_max_students_check CHECK (((max_students IS NULL) OR (max_students > min_students))),
+    CONSTRAINT plan_price_tiers_min_students_check CHECK ((min_students >= 0)),
+    CONSTRAINT plan_price_tiers_price_per_student_cents_check CHECK ((price_per_student_cents >= 0))
+);
+
+
+--
+-- Name: plans; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.plans (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    key character varying NOT NULL,
+    name character varying NOT NULL,
+    description text,
+    base_price_per_student_cents bigint NOT NULL,
+    currency character varying DEFAULT 'COP'::character varying NOT NULL,
+    status character varying DEFAULT 'active'::character varying NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT plans_base_price_per_student_cents_check CHECK ((base_price_per_student_cents >= 0)),
+    CONSTRAINT plans_currency_check CHECK ((char_length((currency)::text) = 3)),
+    CONSTRAINT plans_status_check CHECK (((status)::text = ANY ((ARRAY['active'::character varying, 'retired'::character varying])::text[])))
+);
+
+
+--
 -- Name: platform_admins; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1041,6 +1106,14 @@ ALTER TABLE ONLY public.active_storage_variant_records
 
 
 --
+-- Name: addons addons_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.addons
+    ADD CONSTRAINT addons_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: ar_internal_metadata ar_internal_metadata_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1238,6 +1311,22 @@ ALTER TABLE ONLY public.payments
 
 ALTER TABLE ONLY public.permissions
     ADD CONSTRAINT permissions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: plan_price_tiers plan_price_tiers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.plan_price_tiers
+    ADD CONSTRAINT plan_price_tiers_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: plans plans_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.plans
+    ADD CONSTRAINT plans_pkey PRIMARY KEY (id);
 
 
 --
@@ -1524,6 +1613,13 @@ CREATE UNIQUE INDEX index_active_storage_blobs_on_key ON public.active_storage_b
 --
 
 CREATE UNIQUE INDEX index_active_storage_variant_records_uniqueness ON public.active_storage_variant_records USING btree (blob_id, variation_digest);
+
+
+--
+-- Name: index_addons_on_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_addons_on_key ON public.addons USING btree (key);
 
 
 --
@@ -1832,6 +1928,20 @@ CREATE INDEX index_payments_on_institution_id_and_student_account_id ON public.p
 --
 
 CREATE UNIQUE INDEX index_permissions_on_key ON public.permissions USING btree (key);
+
+
+--
+-- Name: index_plan_price_tiers_on_plan_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_plan_price_tiers_on_plan_id ON public.plan_price_tiers USING btree (plan_id);
+
+
+--
+-- Name: index_plans_on_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_plans_on_key ON public.plans USING btree (key);
 
 
 --
@@ -2295,6 +2405,14 @@ ALTER TABLE ONLY public.employment_periods
 
 ALTER TABLE ONLY public.guardian_students
     ADD CONSTRAINT fk_rails_27d935807b FOREIGN KEY (created_by_id) REFERENCES public.institution_users(id) ON DELETE SET NULL;
+
+
+--
+-- Name: plan_price_tiers fk_rails_2ab14ed687; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.plan_price_tiers
+    ADD CONSTRAINT fk_rails_2ab14ed687 FOREIGN KEY (plan_id) REFERENCES public.plans(id) ON DELETE CASCADE;
 
 
 --
@@ -3396,6 +3514,9 @@ CREATE POLICY teaching_assignments_tenant_isolation ON public.teaching_assignmen
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260708000018'),
+('20260708000017'),
+('20260708000016'),
 ('20260708000015'),
 ('20260708000014'),
 ('20260708000013'),

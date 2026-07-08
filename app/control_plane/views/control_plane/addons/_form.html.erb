@@ -1,0 +1,37 @@
+<%# locals: (addon:, url:) -%>
+<%= form_with model: addon, url: url, scope: :addon do |f| %>
+  <% if addon.errors.any? -%>
+    <%= render "shared/alert", variant: :danger,
+          message: addon.errors.full_messages.to_sentence %>
+  <% end -%>
+
+  <%= render "shared/field", label: "Key (dominio)", name: "addon[key]", value: addon.key,
+        required: true, hint: "Debe ser uno de: #{ControlPlane::AddonCatalog::DOMAIN_KEYS.join(', ')}" %>
+  <%= render "shared/field", label: "Nombre", name: "addon[name]", value: addon.name, required: true %>
+  <%= render "shared/field", label: "Descripción", name: "addon[description]", value: addon.description %>
+  <%= render "shared/field", label: "Tarifa mensual (centavos)", name: "addon[monthly_fee_cents]",
+        type: "number", value: addon.monthly_fee_cents,
+        hint: "Entero en la unidad menor de la moneda. Ej: 8000000 = $80.000,00." %>
+  <%= render "shared/field", label: "Moneda", name: "addon[currency]", value: addon.currency || "COP",
+        maxlength: 3, hint: "Código ISO de 3 letras." %>
+
+  <div data-controller="metered-fields">
+    <label class="field__label">
+      <input type="checkbox" name="addon[metered]" value="1" data-metered-fields-target="toggle"
+             data-action="metered-fields#sync" <%= "checked" if addon.metered %>>
+      Medido (factura overage por evento)
+    </label>
+    <input type="hidden" name="addon[metered]" value="0">
+
+    <div data-metered-fields-target="fields">
+      <%= render "shared/field", label: "Cupo incluido", name: "addon[included_quota]",
+            type: "number", value: addon.included_quota %>
+      <%= render "shared/field", label: "Unidad medida", name: "addon[unit]", value: addon.unit,
+            hint: "Provisional hasta cerrar M1 (unidad de metering por dominio)." %>
+      <%= render "shared/field", label: "Precio por unidad de overage (centavos)",
+            name: "addon[overage_unit_price_cents]", type: "number", value: addon.overage_unit_price_cents %>
+    </div>
+  </div>
+
+  <%= ui_button (addon.persisted? ? "Guardar" : "Crear addon"), type: "submit", variant: :primary %>
+<% end %>

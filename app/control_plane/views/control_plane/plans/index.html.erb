@@ -1,39 +1,39 @@
 <% content_for :title, "Planes y precios" %>
 <%#
-  Screen 5 — plans & pricing. Three orthogonal hybrid-billing pieces:
-  base por alumno (brackets) + fee por addon + cupo/overage. Data stub.
+  Screen 5 — plans & pricing (real CRUD, S1). Base por alumno + brackets.
+  Addon fees/overage live in the addon catalog — F9, no FK between them.
 -%>
 
 <%= render "shared/page_header",
       title: "Planes y precios",
-      subtitle: "Cobro híbrido: base por alumno + fee por addon + overage por uso · stub" %>
+      subtitle: "Base por alumno en brackets de volumen",
+      actions: ui_button("Nuevo plan", href: new_control_plane_plan_path, variant: :primary) %>
 
-<section class="cp-section" aria-labelledby="cp-plans-h">
-  <h2 id="cp-plans-h">Base por alumno (brackets)</h2>
-  <% @plans.each do |plan| %>
-    <%= render layout: "shared/card", locals: { title: plan.name, subtitle: plan.status } do %>
-      <%= render layout: "shared/table",
-            locals: { headers: [ "Desde", "Hasta", "Por alumno" ] } do %>
-        <% plan.brackets.each do |bracket| %>
-          <tr>
-            <td><%= number_with_delimiter(bracket.from, delimiter: ".") %></td>
-            <td><%= bracket.open_ended? ? "y más" : number_with_delimiter(bracket.to, delimiter: ".") %></td>
-            <td><%= money(bracket.per_student, currency: plan.currency) %></td>
-          </tr>
-        <% end %>
+<% if @plans.none? -%>
+  <%= render "shared/empty_state", title: "Sin planes todavía",
+        description: "Crea el primero para empezar a modelar precios.",
+        action: ui_button("Nuevo plan", href: new_control_plane_plan_path, variant: :primary) %>
+<% else -%>
+  <section class="cp-section" aria-labelledby="cp-plans-h">
+    <h2 id="cp-plans-h">Base por alumno (brackets)</h2>
+    <% @plans.each do |plan| %>
+      <%= render layout: "shared/card",
+            locals: { title: link_to(plan.name, control_plane_plan_path(plan)),
+                      subtitle: plan.active? ? "Activo" : "Retirado" } do %>
+        <p><strong>Base:</strong> <%= money(plan.base_price_per_student, currency: plan.currency) %> /alumno</p>
+        <% if plan.price_tiers.any? -%>
+          <%= render layout: "shared/table",
+                locals: { headers: [ "Desde", "Hasta", "Por alumno" ] } do %>
+            <% plan.price_tiers.each do |tier| %>
+              <tr>
+                <td><%= number_with_delimiter(tier.min_students, delimiter: ".") %></td>
+                <td><%= tier.open_ended? ? "y más" : number_with_delimiter(tier.max_students, delimiter: ".") %></td>
+                <td><%= money(tier.price_per_student, currency: plan.currency) %></td>
+              </tr>
+            <% end %>
+          <% end %>
+        <% end -%>
       <% end %>
     <% end %>
-  <% end %>
-</section>
-
-<section class="cp-section" aria-labelledby="cp-fees-h">
-  <h2 id="cp-fees-h">Fee por addon + cupo / overage</h2>
-  <div class="cp-grid">
-    <% @addons.each do |addon| %>
-      <%= render "control_plane/shared/addon_card",
-            name: addon.name, status: addon.status, monthly_fee: addon.monthly_fee,
-            currency: addon.currency, metered: addon.metered?, unit: addon.unit,
-            quota: addon.quota, domain: addon.domain %>
-    <% end %>
-  </div>
-</section>
+  </section>
+<% end -%>

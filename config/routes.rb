@@ -195,9 +195,20 @@ Rails.application.routes.draw do
     end
 
     resources :institutions, only: %i[index show]
-    resources :addons, only: %i[index]
+    resources :addons, except: %i[destroy] do
+      member do
+        patch :retire
+        patch :reactivate
+      end
+    end
     resources :entitlements, only: %i[index]   # editor per institution (?institution_id=)
-    resources :plans, only: %i[index]
+    resources :plans, except: %i[destroy] do
+      member do
+        patch :retire
+        patch :reactivate
+      end
+      resources :price_tiers, only: %i[create update destroy], controller: "plan_price_tiers"
+    end
     resource  :usage, only: %i[show], controller: "usage"  # metering (one view)
     resources :invoices, only: %i[index]
     resources :audit_entries, only: %i[index], path: "audit", controller: "audit"

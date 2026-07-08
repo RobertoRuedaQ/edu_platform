@@ -1,0 +1,56 @@
+<% content_for :title, @plan.name %>
+
+<%= render "shared/page_header", title: @plan.name, subtitle: @plan.key,
+      actions: ui_button("Editar", href: edit_control_plane_plan_path(@plan), variant: :ghost) %>
+
+<section class="cp-section" aria-label="Detalle del plan">
+  <p><strong>Estado:</strong> <%= ui_badge(@plan.active? ? "Activo" : "Retirado", variant: @plan.active? ? :success : :neutral) %></p>
+  <p><strong>Tarifa base por alumno:</strong> <%= money(@plan.base_price_per_student, currency: @plan.currency) %></p>
+  <% if @plan.description.present? -%><p><%= @plan.description %></p><% end -%>
+
+  <% if @plan.active? -%>
+    <%= button_to "Retirar", retire_control_plane_plan_path(@plan), method: :patch, class: "btn btn--secondary" %>
+  <% else -%>
+    <%= button_to "Reactivar", reactivate_control_plane_plan_path(@plan), method: :patch, class: "btn btn--secondary" %>
+  <% end -%>
+</section>
+
+<section class="cp-section" aria-labelledby="cp-tiers-h">
+  <h2 id="cp-tiers-h">Brackets de volumen</h2>
+
+  <% if @plan.price_tiers.any? -%>
+    <div class="cp-stack" aria-label="Tiers existentes">
+      <% @plan.price_tiers.each do |tier| %>
+        <div class="tier-row">
+          <%= form_with model: tier, url: control_plane_plan_price_tier_path(@plan, tier), method: :patch,
+                html: { class: "tier-row__form" } do %>
+            <%= render "shared/field", label: "Desde", name: "plan_price_tier[min_students]",
+                  id: "tier-#{tier.id}-min", type: "number", value: tier.min_students %>
+            <%= render "shared/field", label: "Hasta", name: "plan_price_tier[max_students]",
+                  id: "tier-#{tier.id}-max", type: "number", value: tier.max_students, placeholder: "sin límite" %>
+            <%= render "shared/field", label: "Por alumno (centavos)", name: "plan_price_tier[price_per_student_cents]",
+                  id: "tier-#{tier.id}-price", type: "number", value: tier.price_per_student_cents %>
+            <%= ui_button "Guardar", type: "submit", variant: :secondary, size: :sm %>
+          <% end %>
+          <%= button_to "Eliminar", control_plane_plan_price_tier_path(@plan, tier), method: :delete,
+                class: "btn btn--danger btn--sm" %>
+        </div>
+      <% end %>
+    </div>
+  <% else -%>
+    <p>Sin tiers todavía — aplica la tarifa base a cualquier headcount.</p>
+  <% end -%>
+
+  <h3>Agregar tier</h3>
+  <%= form_with url: control_plane_plan_price_tiers_path(@plan), method: :post do %>
+    <%= render "shared/field", label: "Desde (min_students)", name: "plan_price_tier[min_students]",
+          type: "number", required: true %>
+    <%= render "shared/field", label: "Hasta (max_students)", name: "plan_price_tier[max_students]",
+          type: "number", hint: "Vacío = sin límite superior." %>
+    <%= render "shared/field", label: "Por alumno (centavos)", name: "plan_price_tier[price_per_student_cents]",
+          type: "number", required: true %>
+    <%= ui_button "Agregar tier", type: "submit", variant: :primary %>
+  <% end %>
+</section>
+
+<p><%= link_to "Volver a planes", control_plane_plans_path %></p>
