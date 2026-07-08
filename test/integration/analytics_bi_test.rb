@@ -1,6 +1,7 @@
 require "test_helper"
 
 class AnalyticsBiTest < ActionDispatch::IntegrationTest
+  setup { sign_in_as_member } # auth is now required app-wide; persona still from StubAssignments
   def with_grants(*assignments)
     original = Authorization::StubAssignments.method(:all)
     Authorization::StubAssignments.define_singleton_method(:all) { assignments }

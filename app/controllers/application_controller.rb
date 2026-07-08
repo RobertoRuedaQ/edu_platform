@@ -1,4 +1,11 @@
 class ApplicationController < ActionController::Base
+  # Order matters: TenantScoped's around_action must WRAP Authentication's
+  # before_action, so the tenant GUC is set (SET LOCAL, inside the request
+  # transaction) before any auth query — session resume, membership lookup —
+  # runs. Include TenantScoped first so it registers earliest in the chain.
+  include TenantScoped
+  include Authentication
+
   # Hard authorization gate: authorize! (protection) + can? (cosmetic view helper).
   include Authorization::Controller
 

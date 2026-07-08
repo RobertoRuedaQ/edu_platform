@@ -1,6 +1,7 @@
 require "test_helper"
 
 class DashboardTest < ActionDispatch::IntegrationTest
+  setup { sign_in_as_member } # auth is now required app-wide; persona still from StubAssignments
   # Default Authorization::StubAssignments persona grants students/grades/staff/
   # counseling reads, but NOT finance.read nor roles.manage.
 

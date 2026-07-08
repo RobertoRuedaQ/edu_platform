@@ -1,6 +1,7 @@
 require "test_helper"
 
 class TeacherManagementTest < ActionDispatch::IntegrationTest
+  setup { sign_in_as_member } # auth is now required app-wide; persona still from StubAssignments
   # Installs a custom Authorization::StubAssignments persona for the duration
   # of the block, same technique as DashboardTest's empty-state test — so each
   # scenario is independent of the shared default demo persona.

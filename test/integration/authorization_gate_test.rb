@@ -4,6 +4,16 @@ require "test_helper"
 # authorize! rescuing into a 403, and can? as a non-raising boolean. Grants are
 # fixed here so the test does not depend on the StubAssignments persona.
 class AuthorizationGateProbeController < ApplicationController
+  # This probe exercises the AUTHORIZATION gate in isolation, with a fixed
+  # context (see build_authorization_context below). It is deliberately
+  # independent of authentication, so opt out of require_authentication.
+  allow_unauthenticated_access
+
+  # Shell-less layout: its 403 render must not pull in the staff shell (which
+  # needs an authenticated Current.user). In the real app a 403 only ever fires
+  # AFTER authentication, so this only matters for this unauthenticated probe.
+  layout "auth"
+
   def allowed
     authorize!("grades.write")
     render plain: "ok"

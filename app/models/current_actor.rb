@@ -1,28 +1,22 @@
-# STUB presenter of the signed-in person, for the shell only (header identity +
-# the institution switcher). No auth/session is wired yet, so this is hardcoded
-# with TWO institutions so the switcher is actually exercised.
-#
-# TODO: reemplazar por el usuario autenticado real (Core::User + memberships).
+# Presenter of the signed-in person for the shell (header identity + the
+# institution switcher). Wraps the REAL Current.user / Current.institution now
+# that authentication is wired. Only rendered on authenticated shell pages, so
+# Current.user is always present here (login/OTP pages use the `auth` layout).
 class CurrentActor
-  Institution = Data.define(:id, :name)
-
-  def name
-    "Docente de prueba"
+  def initialize(user: Current.user, institution: Current.institution)
+    @user = user
+    @institution = institution
   end
 
-  # Real data source: Core::User#memberships -> institutions.
-  def institutions
-    [
-      Institution.new(id: "stub-inst-1", name: "Colegio San Martín"),
-      Institution.new(id: "stub-inst-2", name: "Instituto Andes")
-    ]
-  end
+  def name = @user.name
 
-  def current_institution
-    institutions.first
-  end
+  # Under RLS the runtime connection only ever sees THIS tenant's membership,
+  # and login already proved membership here — so the actor's institution set is
+  # exactly the resolved current tenant. Cross-tenant switching is a separate,
+  # deferred concern (institution_switches_controller stub).
+  def institutions = @institution ? [ @institution ] : []
 
-  def multiple_institutions?
-    institutions.size > 1
-  end
+  def current_institution = @institution
+
+  def multiple_institutions? = institutions.size > 1
 end

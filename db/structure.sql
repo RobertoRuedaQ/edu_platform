@@ -29,6 +29,125 @@ SET default_tablespace = '';
 SET default_table_access_method = heap;
 
 --
+-- Name: academic_terms; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.academic_terms (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    code character varying NOT NULL,
+    name character varying NOT NULL,
+    starts_on date NOT NULL,
+    ends_on date NOT NULL,
+    status character varying DEFAULT 'upcoming'::character varying NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT academic_terms_status_check CHECK (((status)::text = ANY ((ARRAY['upcoming'::character varying, 'active'::character varying, 'closed'::character varying])::text[])))
+);
+
+ALTER TABLE ONLY public.academic_terms FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: active_storage_attachments; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.active_storage_attachments (
+    id bigint NOT NULL,
+    name character varying NOT NULL,
+    record_type character varying NOT NULL,
+    record_id uuid NOT NULL,
+    blob_id bigint NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
+-- Name: active_storage_attachments_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.active_storage_attachments_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: active_storage_attachments_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.active_storage_attachments_id_seq OWNED BY public.active_storage_attachments.id;
+
+
+--
+-- Name: active_storage_blobs; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.active_storage_blobs (
+    id bigint NOT NULL,
+    key character varying NOT NULL,
+    filename character varying NOT NULL,
+    content_type character varying,
+    metadata text,
+    service_name character varying NOT NULL,
+    byte_size bigint NOT NULL,
+    checksum character varying,
+    created_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
+-- Name: active_storage_blobs_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.active_storage_blobs_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: active_storage_blobs_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.active_storage_blobs_id_seq OWNED BY public.active_storage_blobs.id;
+
+
+--
+-- Name: active_storage_variant_records; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.active_storage_variant_records (
+    id bigint NOT NULL,
+    blob_id bigint NOT NULL,
+    variation_digest character varying NOT NULL
+);
+
+
+--
+-- Name: active_storage_variant_records_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.active_storage_variant_records_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: active_storage_variant_records_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.active_storage_variant_records_id_seq OWNED BY public.active_storage_variant_records.id;
+
+
+--
 -- Name: ar_internal_metadata; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -61,6 +180,25 @@ CREATE TABLE public.assessments (
 );
 
 ALTER TABLE ONLY public.assessments FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: audit_events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.audit_events (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    actor_institution_user_id uuid,
+    action character varying NOT NULL,
+    target_type character varying,
+    target_id uuid,
+    metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
+    ip character varying,
+    created_at timestamp(6) without time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE ONLY public.audit_events FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -144,6 +282,27 @@ ALTER TABLE ONLY public.dietary_restrictions FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: email_otps; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.email_otps (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    code_digest character varying NOT NULL,
+    purpose character varying NOT NULL,
+    expires_at timestamp(6) without time zone NOT NULL,
+    consumed_at timestamp(6) without time zone,
+    attempts integer DEFAULT 0 NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT email_otps_purpose_check CHECK (((purpose)::text = ANY ((ARRAY['login'::character varying, 'step_up'::character varying])::text[])))
+);
+
+ALTER TABLE ONLY public.email_otps FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: employment_periods; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -212,6 +371,26 @@ CREATE TABLE public.grade_levels (
 );
 
 ALTER TABLE ONLY public.grade_levels FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: guardian_students; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.guardian_students (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    guardian_user_id uuid NOT NULL,
+    student_id uuid NOT NULL,
+    relationship character varying NOT NULL,
+    status character varying DEFAULT 'active'::character varying NOT NULL,
+    created_by_id uuid,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT guardian_students_status_check CHECK (((status)::text = ANY ((ARRAY['active'::character varying, 'revoked'::character varying])::text[])))
+);
+
+ALTER TABLE ONLY public.guardian_students FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -303,6 +482,29 @@ CREATE TABLE public.institutions (
     kind character varying NOT NULL,
     CONSTRAINT institutions_kind_check CHECK (((kind)::text = ANY ((ARRAY['school'::character varying, 'university'::character varying])::text[])))
 );
+
+
+--
+-- Name: invitations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.invitations (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    email character varying NOT NULL,
+    token_digest character varying,
+    status character varying DEFAULT 'sent'::character varying NOT NULL,
+    expires_at timestamp(6) without time zone NOT NULL,
+    sent_at timestamp(6) without time zone NOT NULL,
+    completed_at timestamp(6) without time zone,
+    created_by_id uuid,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT invitations_status_check CHECK (((status)::text = ANY ((ARRAY['sent'::character varying, 'completed'::character varying, 'expired'::character varying, 'bounced'::character varying])::text[])))
+);
+
+ALTER TABLE ONLY public.invitations FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -455,6 +657,47 @@ ALTER TABLE ONLY public.roles FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: roster_import_batches; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.roster_import_batches (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    kind character varying NOT NULL,
+    academic_term_id uuid NOT NULL,
+    status character varying DEFAULT 'uploaded'::character varying NOT NULL,
+    summary jsonb DEFAULT '{}'::jsonb NOT NULL,
+    created_by_id uuid,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT roster_import_batches_kind_check CHECK (((kind)::text = ANY ((ARRAY['students'::character varying, 'guardians'::character varying])::text[]))),
+    CONSTRAINT roster_import_batches_status_check CHECK (((status)::text = ANY ((ARRAY['uploaded'::character varying, 'validated'::character varying, 'previewed'::character varying, 'committed'::character varying, 'failed'::character varying])::text[])))
+);
+
+ALTER TABLE ONLY public.roster_import_batches FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: roster_import_rows; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.roster_import_rows (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    roster_import_batch_id uuid NOT NULL,
+    line_number integer NOT NULL,
+    raw jsonb NOT NULL,
+    status character varying,
+    message character varying,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT roster_import_rows_status_check CHECK (((status)::text = ANY ((ARRAY['valid'::character varying, 'error'::character varying, 'duplicate'::character varying, 'collision'::character varying])::text[])))
+);
+
+ALTER TABLE ONLY public.roster_import_rows FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: schema_migrations; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -595,6 +838,8 @@ CREATE TABLE public.students (
     program_id uuid,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
+    national_id character varying,
+    user_id uuid,
     CONSTRAINT students_gender_check CHECK (((gender)::text = ANY ((ARRAY['male'::character varying, 'female'::character varying])::text[])))
 );
 
@@ -670,8 +915,62 @@ CREATE TABLE public.users (
     name character varying DEFAULT ''::character varying NOT NULL,
     password_digest character varying,
     created_at timestamp(6) without time zone NOT NULL,
-    updated_at timestamp(6) without time zone NOT NULL
+    updated_at timestamp(6) without time zone NOT NULL,
+    national_id character varying
 );
+
+
+--
+-- Name: active_storage_attachments id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.active_storage_attachments ALTER COLUMN id SET DEFAULT nextval('public.active_storage_attachments_id_seq'::regclass);
+
+
+--
+-- Name: active_storage_blobs id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.active_storage_blobs ALTER COLUMN id SET DEFAULT nextval('public.active_storage_blobs_id_seq'::regclass);
+
+
+--
+-- Name: active_storage_variant_records id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.active_storage_variant_records ALTER COLUMN id SET DEFAULT nextval('public.active_storage_variant_records_id_seq'::regclass);
+
+
+--
+-- Name: academic_terms academic_terms_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.academic_terms
+    ADD CONSTRAINT academic_terms_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: active_storage_attachments active_storage_attachments_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.active_storage_attachments
+    ADD CONSTRAINT active_storage_attachments_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: active_storage_blobs active_storage_blobs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.active_storage_blobs
+    ADD CONSTRAINT active_storage_blobs_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: active_storage_variant_records active_storage_variant_records_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.active_storage_variant_records
+    ADD CONSTRAINT active_storage_variant_records_pkey PRIMARY KEY (id);
 
 
 --
@@ -688,6 +987,14 @@ ALTER TABLE ONLY public.ar_internal_metadata
 
 ALTER TABLE ONLY public.assessments
     ADD CONSTRAINT assessments_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: audit_events audit_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.audit_events
+    ADD CONSTRAINT audit_events_pkey PRIMARY KEY (id);
 
 
 --
@@ -723,6 +1030,14 @@ ALTER TABLE ONLY public.dietary_restrictions
 
 
 --
+-- Name: email_otps email_otps_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.email_otps
+    ADD CONSTRAINT email_otps_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: employment_periods employment_periods_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -752,6 +1067,14 @@ ALTER TABLE ONLY public.faculties
 
 ALTER TABLE ONLY public.grade_levels
     ADD CONSTRAINT grade_levels_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: guardian_students guardian_students_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.guardian_students
+    ADD CONSTRAINT guardian_students_pkey PRIMARY KEY (id);
 
 
 --
@@ -792,6 +1115,14 @@ ALTER TABLE ONLY public.institution_users
 
 ALTER TABLE ONLY public.institutions
     ADD CONSTRAINT institutions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: invitations invitations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.invitations
+    ADD CONSTRAINT invitations_pkey PRIMARY KEY (id);
 
 
 --
@@ -856,6 +1187,22 @@ ALTER TABLE ONLY public.role_permissions
 
 ALTER TABLE ONLY public.roles
     ADD CONSTRAINT roles_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: roster_import_batches roster_import_batches_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.roster_import_batches
+    ADD CONSTRAINT roster_import_batches_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: roster_import_rows roster_import_rows_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.roster_import_rows
+    ADD CONSTRAINT roster_import_rows_pkey PRIMARY KEY (id);
 
 
 --
@@ -1039,6 +1386,48 @@ CREATE UNIQUE INDEX idx_rp_unique ON public.role_permissions USING btree (instit
 
 
 --
+-- Name: index_academic_terms_on_institution_id_and_code; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_academic_terms_on_institution_id_and_code ON public.academic_terms USING btree (institution_id, code);
+
+
+--
+-- Name: index_academic_terms_one_active_per_institution; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_academic_terms_one_active_per_institution ON public.academic_terms USING btree (institution_id) WHERE ((status)::text = 'active'::text);
+
+
+--
+-- Name: index_active_storage_attachments_on_blob_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_active_storage_attachments_on_blob_id ON public.active_storage_attachments USING btree (blob_id);
+
+
+--
+-- Name: index_active_storage_attachments_uniqueness; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_active_storage_attachments_uniqueness ON public.active_storage_attachments USING btree (record_type, record_id, name, blob_id);
+
+
+--
+-- Name: index_active_storage_blobs_on_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_active_storage_blobs_on_key ON public.active_storage_blobs USING btree (key);
+
+
+--
+-- Name: index_active_storage_variant_records_uniqueness; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_active_storage_variant_records_uniqueness ON public.active_storage_variant_records USING btree (blob_id, variation_digest);
+
+
+--
 -- Name: index_assessments_on_enrollment_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1050,6 +1439,20 @@ CREATE INDEX index_assessments_on_enrollment_id ON public.assessments USING btre
 --
 
 CREATE INDEX index_assessments_on_institution_id ON public.assessments USING btree (institution_id);
+
+
+--
+-- Name: index_audit_events_on_institution_and_action; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_audit_events_on_institution_and_action ON public.audit_events USING btree (institution_id, action);
+
+
+--
+-- Name: index_audit_events_on_institution_and_target; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_audit_events_on_institution_and_target ON public.audit_events USING btree (institution_id, target_type, target_id);
 
 
 --
@@ -1123,6 +1526,13 @@ CREATE INDEX index_dietary_restrictions_on_student_id ON public.dietary_restrict
 
 
 --
+-- Name: index_email_otps_on_institution_and_user; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_email_otps_on_institution_and_user ON public.email_otps USING btree (institution_id, user_id);
+
+
+--
 -- Name: index_employment_periods_on_institution_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1186,6 +1596,13 @@ CREATE UNIQUE INDEX index_grade_levels_on_institution_id_and_level_number ON pub
 
 
 --
+-- Name: index_guardian_students_uniqueness; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_guardian_students_uniqueness ON public.guardian_students USING btree (institution_id, guardian_user_id, student_id);
+
+
+--
 -- Name: index_guardians_on_institution_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1232,6 +1649,20 @@ CREATE UNIQUE INDEX index_institutions_on_code ON public.institutions USING btre
 --
 
 CREATE UNIQUE INDEX index_institutions_on_slug ON public.institutions USING btree (slug);
+
+
+--
+-- Name: index_invitations_on_token_digest; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_invitations_on_token_digest ON public.invitations USING btree (token_digest) WHERE (token_digest IS NOT NULL);
+
+
+--
+-- Name: index_invitations_one_live_per_user; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_invitations_one_live_per_user ON public.invitations USING btree (institution_id, user_id) WHERE ((status)::text = 'sent'::text);
 
 
 --
@@ -1330,6 +1761,20 @@ CREATE INDEX index_roles_on_institution_id ON public.roles USING btree (institut
 --
 
 CREATE UNIQUE INDEX index_roles_on_institution_id_and_key ON public.roles USING btree (institution_id, key);
+
+
+--
+-- Name: index_roster_import_batches_on_institution_and_term; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_roster_import_batches_on_institution_and_term ON public.roster_import_batches USING btree (institution_id, academic_term_id);
+
+
+--
+-- Name: index_roster_import_rows_on_institution_and_batch; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_roster_import_rows_on_institution_and_batch ON public.roster_import_rows USING btree (institution_id, roster_import_batch_id);
 
 
 --
@@ -1459,6 +1904,13 @@ CREATE INDEX index_students_on_grade_level_id ON public.students USING btree (gr
 
 
 --
+-- Name: index_students_on_institution_and_national_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_students_on_institution_and_national_id ON public.students USING btree (institution_id, national_id) WHERE (national_id IS NOT NULL);
+
+
+--
 -- Name: index_students_on_institution_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1484,6 +1936,13 @@ CREATE INDEX index_students_on_program_id ON public.students USING btree (progra
 --
 
 CREATE INDEX index_students_on_section_id ON public.students USING btree (section_id);
+
+
+--
+-- Name: index_students_on_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_students_on_user_id ON public.students USING btree (user_id) WHERE (user_id IS NOT NULL);
 
 
 --
@@ -1571,6 +2030,13 @@ CREATE UNIQUE INDEX index_users_on_email ON public.users USING btree (email);
 
 
 --
+-- Name: index_users_on_national_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_users_on_national_id ON public.users USING btree (national_id) WHERE (national_id IS NOT NULL);
+
+
+--
 -- Name: sections fk_rails_0265c1c0de; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1619,6 +2085,14 @@ ALTER TABLE ONLY public.enrollments
 
 
 --
+-- Name: students fk_rails_148c9e88f4; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.students
+    ADD CONSTRAINT fk_rails_148c9e88f4 FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE SET NULL;
+
+
+--
 -- Name: teaching_assignments fk_rails_1535481200; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1627,11 +2101,35 @@ ALTER TABLE ONLY public.teaching_assignments
 
 
 --
+-- Name: roster_import_rows fk_rails_17b37d6b3e; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.roster_import_rows
+    ADD CONSTRAINT fk_rails_17b37d6b3e FOREIGN KEY (roster_import_batch_id) REFERENCES public.roster_import_batches(id) ON DELETE CASCADE;
+
+
+--
 -- Name: subjects fk_rails_1b26c6deb0; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.subjects
     ADD CONSTRAINT fk_rails_1b26c6deb0 FOREIGN KEY (program_id) REFERENCES public.programs(id);
+
+
+--
+-- Name: roster_import_batches fk_rails_1ddd8e9cad; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.roster_import_batches
+    ADD CONSTRAINT fk_rails_1ddd8e9cad FOREIGN KEY (academic_term_id) REFERENCES public.academic_terms(id) ON DELETE CASCADE;
+
+
+--
+-- Name: invitations fk_rails_1e69da856c; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.invitations
+    ADD CONSTRAINT fk_rails_1e69da856c FOREIGN KEY (created_by_id) REFERENCES public.institution_users(id) ON DELETE SET NULL;
 
 
 --
@@ -1648,6 +2146,14 @@ ALTER TABLE ONLY public.student_accounts
 
 ALTER TABLE ONLY public.employment_periods
     ADD CONSTRAINT fk_rails_271ac67781 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: guardian_students fk_rails_27d935807b; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.guardian_students
+    ADD CONSTRAINT fk_rails_27d935807b FOREIGN KEY (created_by_id) REFERENCES public.institution_users(id) ON DELETE SET NULL;
 
 
 --
@@ -1688,6 +2194,14 @@ ALTER TABLE ONLY public.payment_plans
 
 ALTER TABLE ONLY public.departments
     ADD CONSTRAINT fk_rails_33e5ee827a FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: audit_events fk_rails_373d303452; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.audit_events
+    ADD CONSTRAINT fk_rails_373d303452 FOREIGN KEY (actor_institution_user_id) REFERENCES public.institution_users(id) ON DELETE SET NULL;
 
 
 --
@@ -1747,6 +2261,14 @@ ALTER TABLE ONLY public.role_assignments
 
 
 --
+-- Name: audit_events fk_rails_41272af5ee; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.audit_events
+    ADD CONSTRAINT fk_rails_41272af5ee FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: role_permissions fk_rails_439e640a3f; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1779,6 +2301,14 @@ ALTER TABLE ONLY public.institution_users
 
 
 --
+-- Name: email_otps fk_rails_57d2c47354; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.email_otps
+    ADD CONSTRAINT fk_rails_57d2c47354 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: role_permissions fk_rails_60126080bd; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1803,11 +2333,27 @@ ALTER TABLE ONLY public.institution_settings
 
 
 --
+-- Name: academic_terms fk_rails_69be7e5d5a; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.academic_terms
+    ADD CONSTRAINT fk_rails_69be7e5d5a FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: staff_members fk_rails_6b44b8a383; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.staff_members
     ADD CONSTRAINT fk_rails_6b44b8a383 FOREIGN KEY (department_id) REFERENCES public.departments(id) ON DELETE SET NULL;
+
+
+--
+-- Name: invitations fk_rails_6cecbd1575; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.invitations
+    ADD CONSTRAINT fk_rails_6cecbd1575 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
 
 
 --
@@ -1843,6 +2389,14 @@ ALTER TABLE ONLY public.staff_members
 
 
 --
+-- Name: invitations fk_rails_7eae413fe6; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.invitations
+    ADD CONSTRAINT fk_rails_7eae413fe6 FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
 -- Name: counseling_cases fk_rails_801b5a774d; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1856,6 +2410,14 @@ ALTER TABLE ONLY public.counseling_cases
 
 ALTER TABLE ONLY public.counseling_cases
     ADD CONSTRAINT fk_rails_8671932b08 FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: guardian_students fk_rails_8a488ba66f; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.guardian_students
+    ADD CONSTRAINT fk_rails_8a488ba66f FOREIGN KEY (guardian_user_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 
 --
@@ -1888,6 +2450,14 @@ ALTER TABLE ONLY public.programs
 
 ALTER TABLE ONLY public.teaching_assignments
     ADD CONSTRAINT fk_rails_951c063a8a FOREIGN KEY (teacher_id) REFERENCES public.teachers(id);
+
+
+--
+-- Name: active_storage_variant_records fk_rails_993965df05; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.active_storage_variant_records
+    ADD CONSTRAINT fk_rails_993965df05 FOREIGN KEY (blob_id) REFERENCES public.active_storage_blobs(id);
 
 
 --
@@ -1939,6 +2509,14 @@ ALTER TABLE ONLY public.students
 
 
 --
+-- Name: guardian_students fk_rails_b35643a6a7; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.guardian_students
+    ADD CONSTRAINT fk_rails_b35643a6a7 FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE CASCADE;
+
+
+--
 -- Name: payments fk_rails_b439880051; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1955,11 +2533,27 @@ ALTER TABLE ONLY public.teaching_assignments
 
 
 --
+-- Name: roster_import_batches fk_rails_b8dabed25c; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.roster_import_batches
+    ADD CONSTRAINT fk_rails_b8dabed25c FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: dietary_restrictions fk_rails_bc8b5d9bbf; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.dietary_restrictions
     ADD CONSTRAINT fk_rails_bc8b5d9bbf FOREIGN KEY (student_id) REFERENCES public.students(id);
+
+
+--
+-- Name: email_otps fk_rails_bf2bd8aedb; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.email_otps
+    ADD CONSTRAINT fk_rails_bf2bd8aedb FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 
 --
@@ -1984,6 +2578,14 @@ ALTER TABLE ONLY public.roles
 
 ALTER TABLE ONLY public.referrals
     ADD CONSTRAINT fk_rails_c16c5fc424 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: active_storage_attachments fk_rails_c3b3935057; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.active_storage_attachments
+    ADD CONSTRAINT fk_rails_c3b3935057 FOREIGN KEY (blob_id) REFERENCES public.active_storage_blobs(id);
 
 
 --
@@ -2035,11 +2637,27 @@ ALTER TABLE ONLY public.role_assignments
 
 
 --
+-- Name: roster_import_batches fk_rails_d389255138; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.roster_import_batches
+    ADD CONSTRAINT fk_rails_d389255138 FOREIGN KEY (created_by_id) REFERENCES public.institution_users(id) ON DELETE SET NULL;
+
+
+--
 -- Name: faculties fk_rails_d5a8b19638; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.faculties
     ADD CONSTRAINT fk_rails_d5a8b19638 FOREIGN KEY (institution_id) REFERENCES public.institutions(id);
+
+
+--
+-- Name: roster_import_rows fk_rails_d5c3ec3b1c; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.roster_import_rows
+    ADD CONSTRAINT fk_rails_d5c3ec3b1c FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
 
 
 --
@@ -2099,6 +2717,14 @@ ALTER TABLE ONLY public.programs
 
 
 --
+-- Name: guardian_students fk_rails_ed7f843d6e; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.guardian_students
+    ADD CONSTRAINT fk_rails_ed7f843d6e FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: enrollments fk_rails_f01c555e06; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2131,6 +2757,19 @@ ALTER TABLE ONLY public.subjects
 
 
 --
+-- Name: academic_terms; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.academic_terms ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: academic_terms academic_terms_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY academic_terms_tenant_isolation ON public.academic_terms USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
 -- Name: assessments; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -2141,6 +2780,19 @@ ALTER TABLE public.assessments ENABLE ROW LEVEL SECURITY;
 --
 
 CREATE POLICY assessments_tenant_isolation ON public.assessments USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: audit_events; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.audit_events ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: audit_events audit_events_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY audit_events_tenant_isolation ON public.audit_events USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
 
 
 --
@@ -2196,6 +2848,19 @@ CREATE POLICY dietary_restrictions_tenant_isolation ON public.dietary_restrictio
 
 
 --
+-- Name: email_otps; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.email_otps ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: email_otps email_otps_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY email_otps_tenant_isolation ON public.email_otps USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
 -- Name: employment_periods; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -2248,6 +2913,19 @@ CREATE POLICY grade_levels_tenant_isolation ON public.grade_levels USING ((insti
 
 
 --
+-- Name: guardian_students; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.guardian_students ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: guardian_students guardian_students_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY guardian_students_tenant_isolation ON public.guardian_students USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
 -- Name: guardians; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -2297,6 +2975,19 @@ ALTER TABLE public.institution_users ENABLE ROW LEVEL SECURITY;
 --
 
 CREATE POLICY institution_users_tenant_isolation ON public.institution_users USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: invitations; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.invitations ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: invitations invitations_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY invitations_tenant_isolation ON public.invitations USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
 
 
 --
@@ -2388,6 +3079,32 @@ ALTER TABLE public.roles ENABLE ROW LEVEL SECURITY;
 --
 
 CREATE POLICY roles_tenant_isolation ON public.roles USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: roster_import_batches; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.roster_import_batches ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: roster_import_batches roster_import_batches_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY roster_import_batches_tenant_isolation ON public.roster_import_batches USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: roster_import_rows; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.roster_import_rows ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: roster_import_rows roster_import_rows_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY roster_import_rows_tenant_isolation ON public.roster_import_rows USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
 
 
 --
@@ -2514,6 +3231,17 @@ CREATE POLICY teaching_assignments_tenant_isolation ON public.teaching_assignmen
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260708000010'),
+('20260708000009'),
+('20260708000008'),
+('20260708000007'),
+('20260708000006'),
+('20260708000005'),
+('20260708000004'),
+('20260708000003'),
+('20260708000002'),
+('20260708000001'),
+('20260707230312'),
 ('20260706000006'),
 ('20260706000005'),
 ('20260706000004'),

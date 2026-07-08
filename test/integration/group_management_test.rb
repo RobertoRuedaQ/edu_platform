@@ -1,6 +1,7 @@
 require "test_helper"
 
 class GroupManagementTest < ActionDispatch::IntegrationTest
+  setup { sign_in_as_member } # auth is now required app-wide; persona still from StubAssignments
   # Same technique as TeacherManagementTest: install a custom
   # Authorization::StubAssignments persona for the block, independent of the
   # shared default demo persona.

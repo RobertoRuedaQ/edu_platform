@@ -1,6 +1,7 @@
 require "test_helper"
 
 class PortalsTest < ActionDispatch::IntegrationTest
+  setup { sign_in_as_member } # portals have no authorize! gate, but auth is now required to reach them
   # Person portals are resolved by relation, not by role_assignments, so they
   # render the same regardless of the actor's Authorization::StubAssignments
   # persona — there is no authorize! gate on either action.

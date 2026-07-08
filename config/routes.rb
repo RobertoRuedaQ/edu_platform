@@ -12,6 +12,12 @@ Rails.application.routes.draw do
   # Role-aware landing (clic 0) for staff users.
   root to: "dashboard#show"
 
+  # --- Authentication (per-subdomain login + mandatory email OTP) -----------
+  # Singular resources, matching the institution_switch style below. new/create
+  # run pre-session (allow_unauthenticated_access); destroy requires a session.
+  resource :session, only: %i[new create destroy]
+  resource :email_otp, only: %i[new create]
+
   # --- Role-aware shell (Part 2) --------------------------------------------
   # Global search escape hatch (stub results) + institution switcher (stub).
   get "search", to: "search#index", as: :search
