@@ -225,6 +225,54 @@ ALTER TABLE ONLY public.charges FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: control_plane_audit_events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.control_plane_audit_events (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    platform_admin_id uuid,
+    action character varying NOT NULL,
+    target_type character varying,
+    target_id uuid,
+    metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
+    ip_address character varying,
+    created_at timestamp(6) without time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: control_plane_email_otps; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.control_plane_email_otps (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    platform_admin_id uuid NOT NULL,
+    code_digest character varying NOT NULL,
+    purpose character varying NOT NULL,
+    expires_at timestamp(6) without time zone NOT NULL,
+    consumed_at timestamp(6) without time zone,
+    attempts integer DEFAULT 0 NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT control_plane_email_otps_purpose_check CHECK (((purpose)::text = 'sign_in'::text))
+);
+
+
+--
+-- Name: control_plane_sessions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.control_plane_sessions (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    platform_admin_id uuid NOT NULL,
+    ip_address character varying,
+    user_agent character varying,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
 -- Name: counseling_cases; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -564,6 +612,23 @@ CREATE TABLE public.permissions (
     description character varying,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
+-- Name: platform_admins; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.platform_admins (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    email public.citext NOT NULL,
+    password_digest character varying NOT NULL,
+    name character varying NOT NULL,
+    status character varying DEFAULT 'active'::character varying NOT NULL,
+    last_sign_in_at timestamp(6) without time zone,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT platform_admins_status_check CHECK (((status)::text = ANY ((ARRAY['active'::character varying, 'suspended'::character varying])::text[])))
 );
 
 
@@ -1008,6 +1073,30 @@ ALTER TABLE ONLY public.charges
 
 
 --
+-- Name: control_plane_audit_events control_plane_audit_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.control_plane_audit_events
+    ADD CONSTRAINT control_plane_audit_events_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: control_plane_email_otps control_plane_email_otps_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.control_plane_email_otps
+    ADD CONSTRAINT control_plane_email_otps_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: control_plane_sessions control_plane_sessions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.control_plane_sessions
+    ADD CONSTRAINT control_plane_sessions_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: counseling_cases counseling_cases_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1149,6 +1238,14 @@ ALTER TABLE ONLY public.payments
 
 ALTER TABLE ONLY public.permissions
     ADD CONSTRAINT permissions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: platform_admins platform_admins_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.platform_admins
+    ADD CONSTRAINT platform_admins_pkey PRIMARY KEY (id);
 
 
 --
@@ -1479,6 +1576,27 @@ CREATE INDEX index_charges_on_institution_id_and_student_id ON public.charges US
 
 
 --
+-- Name: index_control_plane_email_otps_on_expires_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_control_plane_email_otps_on_expires_at ON public.control_plane_email_otps USING btree (expires_at);
+
+
+--
+-- Name: index_control_plane_email_otps_on_platform_admin_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_control_plane_email_otps_on_platform_admin_id ON public.control_plane_email_otps USING btree (platform_admin_id);
+
+
+--
+-- Name: index_control_plane_sessions_on_platform_admin_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_control_plane_sessions_on_platform_admin_id ON public.control_plane_sessions USING btree (platform_admin_id);
+
+
+--
 -- Name: index_counseling_cases_on_institution_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1497,6 +1615,20 @@ CREATE INDEX index_counseling_cases_on_institution_id_and_student_id ON public.c
 --
 
 CREATE INDEX index_counseling_cases_on_opened_by_id ON public.counseling_cases USING btree (opened_by_id);
+
+
+--
+-- Name: index_cp_audit_events_on_platform_admin_and_action; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_cp_audit_events_on_platform_admin_and_action ON public.control_plane_audit_events USING btree (platform_admin_id, action);
+
+
+--
+-- Name: index_cp_audit_events_on_target; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_cp_audit_events_on_target ON public.control_plane_audit_events USING btree (target_type, target_id);
 
 
 --
@@ -1700,6 +1832,13 @@ CREATE INDEX index_payments_on_institution_id_and_student_account_id ON public.p
 --
 
 CREATE UNIQUE INDEX index_permissions_on_key ON public.permissions USING btree (key);
+
+
+--
+-- Name: index_platform_admins_on_email; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_platform_admins_on_email ON public.platform_admins USING btree (email);
 
 
 --
@@ -2311,6 +2450,14 @@ ALTER TABLE ONLY public.email_otps
 
 
 --
+-- Name: control_plane_audit_events fk_rails_5d30c7a0fb; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.control_plane_audit_events
+    ADD CONSTRAINT fk_rails_5d30c7a0fb FOREIGN KEY (platform_admin_id) REFERENCES public.platform_admins(id) ON DELETE SET NULL;
+
+
+--
 -- Name: role_permissions fk_rails_60126080bd; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2463,6 +2610,14 @@ ALTER TABLE ONLY public.active_storage_variant_records
 
 
 --
+-- Name: control_plane_sessions fk_rails_a14868e66d; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.control_plane_sessions
+    ADD CONSTRAINT fk_rails_a14868e66d FOREIGN KEY (platform_admin_id) REFERENCES public.platform_admins(id) ON DELETE CASCADE;
+
+
+--
 -- Name: referrals fk_rails_a2adb603c5; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2564,6 +2719,14 @@ ALTER TABLE ONLY public.email_otps
 
 ALTER TABLE ONLY public.students
     ADD CONSTRAINT fk_rails_c00693d6db FOREIGN KEY (section_id) REFERENCES public.sections(id);
+
+
+--
+-- Name: control_plane_email_otps fk_rails_c03c816fa4; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.control_plane_email_otps
+    ADD CONSTRAINT fk_rails_c03c816fa4 FOREIGN KEY (platform_admin_id) REFERENCES public.platform_admins(id) ON DELETE CASCADE;
 
 
 --
@@ -3233,6 +3396,10 @@ CREATE POLICY teaching_assignments_tenant_isolation ON public.teaching_assignmen
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260708000015'),
+('20260708000014'),
+('20260708000013'),
+('20260708000012'),
 ('20260708000011'),
 ('20260708000010'),
 ('20260708000009'),

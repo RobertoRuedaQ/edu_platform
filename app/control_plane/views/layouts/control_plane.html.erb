@@ -30,15 +30,13 @@
           <span class="cp-band__mark">EduPlatform</span>
           <span class="cp-band__tag">Plano de control</span>
 
-          <%# STUB: shown until the real platform_admin session + MFA guard lands. %>
-          <span class="cp-band__stub" title="Auth y rol auditado BYPASSRLS aún son stub">
-            SIN AUTH · datos stub
-          </span>
-
-          <span class="cp-band__admin">
-            <%# TODO: reemplazar por ControlPlane::PlatformAdmin actual. %>
-            super-admin (stub)
-          </span>
+          <% if current_platform_admin %>
+            <span class="cp-band__admin">
+              Sesión de <%= current_platform_admin.email %>
+              <%= button_to "Cerrar sesión", control_plane_session_path, method: :delete,
+                    class: "btn btn--ghost btn--sm" %>
+            </span>
+          <% end %>
         </div>
       </header>
 

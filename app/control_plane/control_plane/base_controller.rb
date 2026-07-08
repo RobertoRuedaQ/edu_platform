@@ -6,13 +6,18 @@ module ControlPlane
   # This plane is CROSS-TENANT and lives ABOVE row-level security. It is NOT a
   # tenant domain, so it deliberately does NOT inherit from ApplicationController
   # and does NOT include TenantScoped: `institution_id` here is a global FK, never
-  # an RLS scope key. In production it will be served by an audited Postgres role
-  # with BYPASSRLS (never edu_app_runtime) — not wired in this views-only phase.
+  # an RLS scope key.
   #
-  # TODO(auth): super-admins are `platform_admins` (separate table, mandatory
-  #   MFA), NOT `users`. Replace `require_platform_admin!` with the real guard.
-  # TODO(db): connect the audited BYPASSRLS role here; no DB access this phase.
+  # S0 note: this plane's own tables (platform_admins, control_plane_sessions,
+  # control_plane_email_otps, control_plane_audit_events) are global, RLS-free,
+  # and served by the normal edu_app_runtime role — NOT by an audited BYPASSRLS
+  # role. BYPASSRLS stays reserved for analytics_bi's edu_bi_reader; it is never
+  # used here (see PROJECT_STATE.md §7 reconciliation). A dedicated cross-tenant
+  # write role for future S1+ tenant-facing reads is a documented hardening idea,
+  # not something this slice builds.
   class BaseController < ActionController::Base
+    include ControlPlane::Authentication
+
     layout "control_plane"
 
     # Platform templates + layout live under app/control_plane/views, kept out of
@@ -21,19 +26,12 @@ module ControlPlane
 
     # Control-plane view helpers, scoped to this plane only.
     helper ControlPlane::NavHelper
-
-    before_action :require_platform_admin!
+    helper_method :current_platform_admin
 
     private
 
-    # STUB GUARD — intentionally a no-op so the screens are browsable in this
-    # phase. The real version authenticates a ControlPlane::PlatformAdmin session
-    # (separate from tenant users) and enforces MFA.
-    #
-    # TODO: reemplazar por guard real (ControlPlane::PlatformAdmin + MFA) y el
-    #       rol Postgres auditado con BYPASSRLS.
-    def require_platform_admin!
-      true
+    def current_platform_admin
+      ControlPlane::Current.platform_admin
     end
   end
 end

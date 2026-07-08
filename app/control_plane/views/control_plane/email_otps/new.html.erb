@@ -1,0 +1,21 @@
+<% content_for :title, "Verificación" %>
+
+<section class="auth-card">
+  <h1>Ingresa tu código</h1>
+  <p class="auth-card__hint">Te enviamos un código de 6 dígitos a tu correo.</p>
+
+  <%= form_with url: control_plane_email_otp_path, method: :post, class: "auth-form" do |f| %>
+    <div class="field">
+      <%= f.label :code, "Código" %>
+      <%= f.text_field :code, autocomplete: "one-time-code", inputmode: "numeric",
+            pattern: "[0-9]*", autofocus: true, required: true %>
+    </div>
+
+    <%= ui_button "Verificar", type: "submit", variant: :primary %>
+  <% end %>
+
+  <%# Resend: re-POST with no code -> Issuer reissues. %>
+  <%= form_with url: control_plane_email_otp_path, method: :post, class: "auth-form__resend" do %>
+    <%= ui_button "Reenviar código", type: "submit", variant: :secondary, size: :sm %>
+  <% end %>
+</section>

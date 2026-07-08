@@ -180,10 +180,13 @@ Rails.application.routes.draw do
   # --- Control plane (super-admin, cross-tenant, above RLS) -----------------
   # Its own namespace, mounted at /control_plane. NOT a tenant domain: no RLS
   # scoping applies. Controllers live in app/control_plane/control_plane/ and
-  # resolve to ControlPlane::*Controller. Auth guard + audited BYPASSRLS role
-  # are still stubs in this phase (see ControlPlane::BaseController).
+  # resolve to ControlPlane::*Controller. S0 auth (platform_admins + email
+  # MFA) is real as of this slice — see ControlPlane::BaseController.
   namespace :control_plane do
     root to: "dashboard#show"
+
+    resource  :session, only: %i[new create destroy]
+    resource  :email_otp, only: %i[new create]
 
     resources :institutions, only: %i[index show]
     resources :addons, only: %i[index]
