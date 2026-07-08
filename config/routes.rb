@@ -155,6 +155,18 @@ Rails.application.routes.draw do
     resources :users, only: %i[index show]
     resources :roles, only: %i[index show]
     resources :assignments, only: %i[index new create]
+
+    # Gestión de personas/cuentas: crear (Core::People::Resolver), invitar/
+    # reenviar (Issuer), suspender/reactivar (InstitutionUser). people.manage
+    # is a DIFFERENT capability from roles.manage above — onboarding a human
+    # isn't the same as granting institution_admin.
+    resources :people, only: %i[index new create] do
+      member do
+        post :resend_invitation
+        post :suspend
+        post :reactivate
+      end
+    end
   end
 
   # --- staff_management (closes an orphaned Fase 0 nav entry) ---------------

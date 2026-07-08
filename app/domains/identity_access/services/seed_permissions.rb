@@ -36,7 +36,11 @@ module IdentityAccess
       # ningún rol de runtime normal — es el único camino cross-tenant
       # sancionado, y debe quedar auditado (ver edu_bi_reader en roles.rake).
       "cross_tenant_reports.view" => "Ver reportes cross-tenant (rol auditado BYPASSRLS)",
-      "roles.manage"      => "Administrar roles y asignaciones"
+      "roles.manage"      => "Administrar roles y asignaciones",
+      # Distinct from roles.manage: onboarding a human (crear/invitar/suspender
+      # su cuenta) is not the same capability as granting institution_admin —
+      # a registrar can do the former without the latter.
+      "people.manage"     => "Crear personas, invitar y suspender/reactivar cuentas"
     }.freeze
 
     def self.call

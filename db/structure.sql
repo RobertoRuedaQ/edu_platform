@@ -462,7 +462,9 @@ CREATE TABLE public.institution_users (
     user_id uuid NOT NULL,
     role character varying DEFAULT 'member'::character varying NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
-    updated_at timestamp(6) without time zone NOT NULL
+    updated_at timestamp(6) without time zone NOT NULL,
+    status character varying DEFAULT 'active'::character varying NOT NULL,
+    CONSTRAINT institution_users_status_check CHECK (((status)::text = ANY ((ARRAY['active'::character varying, 'suspended'::character varying])::text[])))
 );
 
 ALTER TABLE ONLY public.institution_users FORCE ROW LEVEL SECURITY;
@@ -3231,6 +3233,7 @@ CREATE POLICY teaching_assignments_tenant_isolation ON public.teaching_assignmen
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260708000011'),
 ('20260708000010'),
 ('20260708000009'),
 ('20260708000008'),

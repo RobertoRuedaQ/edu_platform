@@ -40,8 +40,13 @@ class Current < ActiveSupport::CurrentAttributes
   # runs first (idempotent, no-ops until both sides are present). The lookup
   # runs against the RLS-scoped institution_users, so it only ever returns the
   # current tenant's membership — exactly what the gate needs.
+  #
+  # Scoped to ACTIVE memberships: a suspended membership must lose every grant
+  # on its very next request, not just be blocked from a future login — this
+  # is the one seam that makes InstitutionUser#suspend! actually bite for an
+  # already-open Core::Session, without having to hunt down and destroy it.
   def resolve_institution_user
     return if user.nil? || institution.nil?
-    self.institution_user = user.memberships.find_by(institution_id: institution_id)
+    self.institution_user = user.memberships.active.find_by(institution_id: institution_id)
   end
 end

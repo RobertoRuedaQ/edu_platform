@@ -34,7 +34,7 @@ class SessionsController < ApplicationController
   def authenticate_credentials
     user = Core::User.find_by(email: params[:email].to_s.downcase.strip)
     return unless user&.authenticate(params[:password])
-    return unless user.memberships.exists?(institution_id: Current.institution_id)
+    return unless user.memberships.active.exists?(institution_id: Current.institution_id)
 
     user
   end

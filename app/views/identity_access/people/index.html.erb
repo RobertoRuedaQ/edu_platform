@@ -1,0 +1,46 @@
+<% content_for :title, "Personas" %>
+
+<%= render "shared/page_header", title: "Personas", subtitle: "Cuentas de tu institución.",
+      actions: ui_button("Nueva persona", href: new_identity_access_person_path, variant: :primary) %>
+
+<% if @memberships.empty? -%>
+  <%= render "shared/empty_state", title: "Todavía no hay personas registradas", icon: "users" %>
+<% else -%>
+  <%= render layout: "shared/table", locals: { headers: ["Nombre", "Correo", "Estado", "Invitación", ""] } do -%>
+    <% @memberships.each do |membership| -%>
+      <% invitation = @invitations_by_user[membership.user_id] -%>
+      <tr>
+        <td><%= membership.user.name %></td>
+        <td><%= membership.user.email %></td>
+        <td>
+          <% if membership.active? -%>
+            <%= render "shared/badge", label: "Activa", variant: :success %>
+          <% else -%>
+            <%= render "shared/badge", label: "Suspendida", variant: :danger %>
+          <% end -%>
+        </td>
+        <td>
+          <% if invitation.nil? -%>
+            <%= render "shared/badge", label: "Sin invitar", variant: :neutral %>
+          <% else -%>
+            <%= render "shared/badge",
+                  label: { "sent" => "Enviada", "completed" => "Completada", "expired" => "Vencida", "bounced" => "Rebotada" }.fetch(invitation.status, invitation.status),
+                  variant: { "sent" => :info, "completed" => :success, "expired" => :warning, "bounced" => :danger }.fetch(invitation.status, :neutral) %>
+          <% end -%>
+        </td>
+        <td>
+          <div class="table-actions">
+            <% if invitation.nil? || invitation.status != "completed" -%>
+              <%= button_to "Reenviar invitación", resend_invitation_identity_access_person_path(membership), method: :post, class: "btn btn--secondary btn--sm" %>
+            <% end -%>
+            <% if membership.active? -%>
+              <%= button_to "Suspender", suspend_identity_access_person_path(membership), method: :post, class: "btn btn--danger btn--sm" %>
+            <% else -%>
+              <%= button_to "Reactivar", reactivate_identity_access_person_path(membership), method: :post, class: "btn btn--secondary btn--sm" %>
+            <% end -%>
+          </div>
+        </td>
+      </tr>
+    <% end -%>
+  <% end -%>
+<% end -%>

@@ -1,0 +1,16 @@
+<% content_for :title, "Nueva persona" %>
+
+<%= render "shared/page_header", title: "Nueva persona", subtitle: "La institución crea la cuenta; la persona solo la completa por invitación." %>
+
+<% if @error -%>
+  <%= render "shared/alert", variant: :danger, message: @error %>
+<% end -%>
+
+<%= form_with url: identity_access_people_path, method: :post do |f| %>
+  <%= render "shared/field", label: "Nombre completo", name: "name", required: true %>
+  <%= render "shared/field", label: "Correo", name: "email", type: "email", required: true %>
+  <%= render "shared/field", label: "Documento", name: "national_id",
+        hint: "Opcional. Sirve para conciliar con importaciones de roster futuras." %>
+
+  <%= ui_button "Crear e invitar", type: "submit", variant: :primary %>
+<% end %>
