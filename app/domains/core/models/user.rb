@@ -4,7 +4,16 @@ module Core
   class User < ApplicationRecord
     self.table_name = "users"
 
-    has_secure_password
+    # validations: false — nadie se autorregistra: the institution creates
+    # this row (roster import / admin provisioning) with NO password at all,
+    # and IdentityAccess::Invitations::Completer is the only path that ever
+    # sets one later. The default has_secure_password validation requires
+    # password_digest presence unconditionally, which would make that
+    # password-less row un-persistable. Confirmation/length still apply
+    # whenever a password IS being set.
+    has_secure_password validations: false
+    validates :password, confirmation: true, allow_nil: true
+    validates :password, length: { maximum: ActiveModel::SecurePassword::MAX_PASSWORD_LENGTH_ALLOWED }, allow_nil: true
 
     # Deterministic so the partial unique index on national_id can enforce
     # uniqueness against the stored ciphertext.

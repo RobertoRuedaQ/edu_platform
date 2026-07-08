@@ -18,6 +18,13 @@ Rails.application.routes.draw do
   resource :session, only: %i[new create destroy]
   resource :email_otp, only: %i[new create]
 
+  # Registro por invitación: token-keyed, not id-keyed — nobody browses these
+  # by id. Reachable pre-session (allow_unauthenticated_access); the tenant
+  # resolves from the link's subdomain, same as login.
+  resources :invitations, only: %i[edit update], param: :token do
+    member { post :discrepancy }
+  end
+
   # --- Role-aware shell (Part 2) --------------------------------------------
   # Global search escape hatch (stub results) + institution switcher (stub).
   get "search", to: "search#index", as: :search
