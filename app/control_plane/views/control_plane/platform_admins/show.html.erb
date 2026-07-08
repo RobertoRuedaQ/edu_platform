@@ -1,0 +1,25 @@
+<% content_for :title, @platform_admin.email %>
+
+<%= render "shared/page_header",
+      title: @platform_admin.email,
+      subtitle: @platform_admin.name %>
+
+<section class="cp-section" aria-label="Detalle del administrador">
+  <div class="cp-stack">
+    <p><strong>Estado:</strong> <%= ui_badge(@platform_admin.active? ? "Activo" : "Suspendido", variant: @platform_admin.active? ? :success : :neutral) %></p>
+    <p><strong>Último acceso:</strong> <%= datetime(@platform_admin.last_sign_in_at) %></p>
+    <p><strong>Creado:</strong> <%= datetime(@platform_admin.created_at) %></p>
+  </div>
+
+  <% if @platform_admin == current_platform_admin %>
+    <p class="hint">No puedes suspender tu propia cuenta.</p>
+  <% elsif @platform_admin.active? %>
+    <%= button_to "Suspender", suspend_control_plane_platform_admin_path(@platform_admin), method: :patch,
+          class: "btn btn--secondary" %>
+  <% else %>
+    <%= button_to "Reactivar", reactivate_control_plane_platform_admin_path(@platform_admin), method: :patch,
+          class: "btn btn--secondary" %>
+  <% end %>
+</section>
+
+<p><%= link_to "Volver a administradores", control_plane_platform_admins_path %></p>

@@ -10,6 +10,7 @@ module ControlPlane
     def cp_nav_items
       [
         [ "Dashboard",       control_plane_root_path ],
+        [ "Administradores", control_plane_platform_admins_path ],
         [ "Instituciones",   control_plane_institutions_path ],
         [ "Catálogo addons", control_plane_addons_path ],
         [ "Entitlements",    control_plane_entitlements_path ],

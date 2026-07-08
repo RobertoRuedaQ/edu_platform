@@ -187,6 +187,12 @@ Rails.application.routes.draw do
 
     resource  :session, only: %i[new create destroy]
     resource  :email_otp, only: %i[new create]
+    resources :platform_admins, only: %i[index show] do
+      member do
+        patch :suspend
+        patch :reactivate
+      end
+    end
 
     resources :institutions, only: %i[index show]
     resources :addons, only: %i[index]
