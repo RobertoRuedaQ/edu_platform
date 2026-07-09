@@ -16,10 +16,10 @@
 
 | Campo | Valor |
 |---|---|
-| **Versión del documento** | `v1.2.0` |
-| **Fecha** | 2026-07-08 |
-| **Estado del proyecto** | Identidad real ya funciona: login nativo + MFA por correo, registro por invitación, y gestión de personas (crear/invitar/suspender) corriendo contra datos reales. El plano de control tiene ahora auth real de `platform_admins` (MFA por correo, gestión de administradores) **y** su primer catálogo real con CRUD: `addons` + `plans`/`plan_price_tiers` (S1). Tests verdes (158 runs, 0 fallos, 1 skip preexistente). Roster import y las vistas propias de estudiante/acudiente/docente (datos reales, no stub) siguen pendientes; entitlements/subscriptions/metering/invoices del plano de control siguen en stub (S2–S4). |
-| **Alcance de esta versión** | Cierra el Slice S1 del plano de control (§12.5): catálogo de facturación (`addons`, `plans`, `plan_price_tiers`) migrado y con CRUD real, auditado. También reconcilia que S0 (auth de `platform_admins`) ya estaba real desde una iteración previa que este documento no reflejaba — ver Changelog. |
+| **Versión del documento** | `v1.3.0` |
+| **Fecha** | 2026-07-09 |
+| **Estado del proyecto** | Identidad real ya funciona: login nativo + MFA por correo, registro por invitación, y gestión de personas (crear/invitar/suspender) corriendo contra datos reales. El plano de control tiene auth real de `platform_admins`, catálogo `addons`/`plans`/`plan_price_tiers` con CRUD (S1), y ahora también `subscriptions`/`institution_entitlements` con CRUD real y snapshot de tarifa inmutable (S2a). La **primera compuerta de acceso ya es real de punta a punta**: `Core::Institution#entitled?` + el gate `Entitlement::Controller` + la nav filtrada deciden, con datos reales, si una institución puede usar un dominio addon-gated — antes de que la segunda compuerta (RBAC) entre a jugar, la cual **sigue** sobre `Authorization::StubResolver` (S2b; P1 sin tocar). Tests verdes (202 runs, 0 fallos, 1 skip preexistente). Roster import y las vistas propias de estudiante/acudiente/docente siguen pendientes; metering/invoices del plano de control siguen en stub (S3–S4). |
+| **Alcance de esta versión** | Cierra el track S2 del plano de control (§12.5.1) en dos slices: **S2a** — tablas globales `subscriptions`/`institution_entitlements` + CRUD de super-admin + el predicado `ControlPlane::Entitlements::Check`, y **S2b** — el wireado de esa primera compuerta en el lado del inquilino (`app/domains/*`, transversal): `Core::Institution#entitled?`, el memo `Current.entitled_addon_keys`, el concern único `Entitlement::Controller`, la nav filtrada, y la página "módulo no habilitado". También reconcilia que S2a se había mergeado sin actualizar este documento — ver Changelog. |
 
 ### Convención de versionado de ESTE documento
 
@@ -232,6 +232,15 @@ en ese punto `Current.user` todavía no existe.
 
 ### 6.3 Puerta de autorización
 
+> **Nuevo en v1.3.0 — las dos compuertas en serie ya existen, pero con madurez distinta.** La
+> **compuerta #1** (`¿la institución puede usar este dominio?`) es real de punta a punta desde S2b:
+> `Entitlement::Controller` (concern único, incluido en `ApplicationController`) corre un
+> `before_action` que consulta `Current.entitled_addon_keys` (memo por request sobre
+> `Core::Institution#entitled?` → `ControlPlane::Entitlements::Check`, S2a) y corta con la página
+> "módulo no habilitado" **antes** de que la acción llegue a `authorize!`. La **compuerta #2** (RBAC,
+> descrita abajo) sigue sin cambios — sobre `StubResolver` salvo `RoleAssignment` reales. Ver §7.1 y
+> §12.5.1 para el detalle del wireado.
+
 - **`IdentityAccess::PermissionCheck`** (query object): resuelve *"¿puede U ejecutar A sobre R?"* con scope. Se carga **una vez por request** y se resuelve en memoria. **Todavía no existe** — ver §11.
 - **`can?(permission, resource = nil)`** (helper de vista): mostrar/ocultar acciones — **solo cosmética**.
 - **`authorize!(permission, resource)`** (concern de controlador): **puerta dura al inicio de cada acción** — la que protege de verdad. Implementado en `Authorization::Controller`; hoy resuelve contra `Authorization::StubResolver` a menos que existan `RoleAssignment` reales para el actor.
@@ -278,20 +287,36 @@ permiso, (5) auto-registro de navegación en archivo propio del dominio (no edit
 > **No es un dominio.** Vive en `app/control_plane/` (fuera de `app/domains/*`), cross-tenant, por
 > encima de RLS. **Billing de plataforma ≠ dominio `finance`**: aquí la plataforma cobra al colegio;
 > en `finance` el colegio cobra a los acudientes. **Corrección de esta versión:** el auth de
-> `platform_admins` (S0) y el catálogo `addons`/`plans` (S1, esta versión) ya están migrados y con
-> CRUD real — la nota anterior ("sigue en fase de componentes/vistas stub") quedó desactualizada
-> frente al repo. `institution_entitlements`, `subscriptions`, metering e `invoices` (S2–S4) siguen
-> en fase stub (ver §12.5). Servido por el rol runtime normal (`edu_app_runtime`), **sin
-> `BYPASSRLS`** — estas tablas son globales y no necesitan cruzar tenants para leerse.
+> `platform_admins` (S0), el catálogo `addons`/`plans` (S1) y ahora `subscriptions`/
+> `institution_entitlements` con CRUD real (S2a, esta versión) — la nota anterior ("sigue en fase de
+> componentes/vistas stub") quedó desactualizada frente al repo para todo el track S0–S2. Metering e
+> `invoices` (S3–S4) siguen en fase stub (ver §12.5). Servido por el rol runtime normal
+> (`edu_app_runtime`), **sin `BYPASSRLS`** — estas tablas son globales y no necesitan cruzar tenants
+> para leerse.
 
 ### 7.1 El gate de entitlements (dos compuertas en serie)
 
 1. **Entitlement** (control plane): *¿la institución PUEDE usar este dominio?* → contrato/plan.
 2. **RBAC con scope** (`identity_access`): *¿el usuario DENTRO puede?* → rol + alcance.
 
-Punto único de verificación tipo `Current.institution.entitled?(:cafeteria)`: la nav del inquilino
-solo muestra dominios habilitados; los controllers de un dominio no habilitado rechazan el acceso.
-El código de cada dominio no se ramifica — se enciende/apaga por institución desde un solo lugar.
+**Real de punta a punta desde S2b (esta versión) — con datos reales, no solo diseño.** El punto único
+de verificación es `Core::Institution#entitled?(addon_key)` (delega en
+`ControlPlane::Entitlements::Check` de S2a); `Current.entitled_addon_keys` lo memoiza una vez por
+request (`Core::Access::EntitledAddonKeys.for(institution)`). Del lado del inquilino, **una sola
+pieza** — el concern `Entitlement::Controller`, incluido una vez en `ApplicationController` — infiere
+el `addon_key` del namespace del controller y corta con la página "módulo no habilitado" **antes**
+de que la acción llegue a `authorize!`; la nav (`ApplicationHelper#nav_items`) filtra por el mismo
+memo antes de aplicar el `can?` cosmético existente. Los fundacionales (`core`,
+`teacher_management`, `group_management`, `identity_access`) **nunca** pasan por este gate — su
+ausencia de `Entitlement::Registry` (declaración tenant-side propia, `config/entitlements/*.rb`, un
+archivo por dominio addon-gated) ES la señal de "no gateado", sin necesitar una lista aparte.
+`Entitlement::Registry` **no referencia `ControlPlane::AddonCatalog::DOMAIN_KEYS` en runtime** — solo
+un test (`test/models/entitlement/registry_consistency_test.rb`) cruza ambas listas para atrapar
+drift; así el runtime del inquilino nunca se acopla a una constante del plano de control. El código
+de cada dominio no se ramifica — se enciende/apaga por institución desde un solo lugar, y ningún
+archivo de `cafeteria`/`transportation`/`schedules`/`student_support`/`counseling`/`finance`/
+`communication`/`analytics_bi` fue tocado para lograrlo. **Gate #2 (RBAC) sigue sobre
+`Authorization::StubResolver`** — P1 no se tocó.
 
 ### 7.2 Modelo de datos conceptual (global, sin RLS)
 
@@ -304,8 +329,20 @@ El código de cada dominio no se ramifica — se enciende/apaga por institución
   + brackets de volumen en **`plan_price_tiers`** (tabla hija explícita, no JSONB; hard-deletable,
   a diferencia de `plans`/`addons`). No hay FK entre `plans` y `addons` (F9, catálogos
   independientes). La tarifa se **congelará como snapshot** en `subscriptions` al firmar — **eso es
-  S2**, S1 solo almacena el pricing, no lo aplica a ningún headcount/factura.
-- **`institution_entitlements`** 🔴 pendiente (S2) — institución × addon: activar/desactivar, fechado efectivo, y **overrides negociados** (precio/cupo distinto al catálogo).
+  S2a**, S1 solo almacenaba el pricing, no lo aplicaba a ningún headcount/factura.
+- **`subscriptions`** ✅ **migrado y con CRUD (S2a)** — contrato institución↔plataforma. **Snapshot
+  inmutable** al firmar (`plan_key`, `base_price_per_student_cents`, `currency` escalares +
+  `price_tiers_snapshot` jsonb); `plan_id` es solo provenance (nullable). Una sola activa por
+  institución (índice único parcial). `institution_id` aquí es **FK a la tabla global `institutions`,
+  nunca tenancy** — sin RLS/policy/FORCE, sin GUC (mismo patrón que `platform_admins`/`addons`).
+- **`institution_entitlements`** ✅ **migrado y con CRUD (S2a)** — institución × addon: conceder/
+  revocar/reactivar, fechado (`valid_from`/`valid_until`), y **overrides negociados** (precio/cupo
+  distinto al catálogo, **almacenados, no aplicados** hasta S4). Un solo entitlement activo por
+  institución+addon (índice único parcial). El predicado de lectura,
+  `ControlPlane::Entitlements::Check.entitled?(institution:, addon_key:, at:)`, ignora overrides y
+  `addon.status` a propósito — retirar un addon con entitlements activos se **bloquea**
+  (`ControlPlane::Addon#retire!`, F10-bis, cerrado en S2a). **S2b (esta versión)** conectó este
+  predicado al lado del inquilino — ver §7.1.
 - **`student_headcount_snapshots`** 🔴 pendiente (S3) — headcount **empujado por el tenant al cierre** (no lectura viva del `students` del inquilino → boundary limpio + número defendible en factura).
 - **`usage_events` / `usage_daily_rollups`** 🔴 pendiente (S3) — metering. Un job diario acumula rollups; el corte de periodo suma rollups, no escanea eventos crudos.
 - **`invoices` / `invoice_line_items`** 🔴 pendiente (S4) — cada línea con `kind` ∈ (`base_seats`, `addon_fee`, `usage_overage`) + FK a su origen.
@@ -479,9 +516,11 @@ buscador, tal como pide el prompt original.
 | 4 | **Organización de dominios** | `dominios_edu_platform.md`, prompt de scaffold, `notifications` → `communication` | ✅ Ejecutado (scaffold + componentes) |
 | 5 | **identity/finance/counseling** | Prompt combinado con modelos (migraciones + AR con guardrails) | ✅ Ejecutado (esquema + componentes) |
 | 6 | **Vistas + roles** | Mapa maestro, Fase 0 (shell por rol + `can?`/`authorize!` + dashboard + portales + 403), prompts por dominio | ✅ Fase 0 + dominios ejecutados (todavía sobre `StubResolver`, ver §11) |
-| 7 | **Plano de control + billing** | Estructura `app/control_plane/`, auth de `platform_admins` + MFA (S0), catálogo `addons`/`plans`/`plan_price_tiers` con CRUD real (S1) | 🟡 **Parcialmente ejecutado.** Real: S0 (auth+MFA+gestión de admins) y S1 (catálogo). Pendiente: `institution_entitlements`/`subscriptions` (S2), metering (S3), `invoices` (S4) — siguen en componentes/vistas stub. |
+| 7 | **Plano de control + billing** | Estructura `app/control_plane/`, auth de `platform_admins` + MFA (S0), catálogo `addons`/`plans`/`plan_price_tiers` con CRUD real (S1), `subscriptions`/`institution_entitlements` con CRUD real (S2a), gate de entitlement wireado en el inquilino (S2b) | 🟡 **Parcialmente ejecutado.** Real: S0, S1, S2 completo (S2a+S2b). Pendiente: metering (S3), `invoices` (S4) — siguen en componentes/vistas stub. |
 | 8 | **Autenticación / onboarding** | Registro por invitación, login+MFA, roster import, vinculación, auditoría (externos e internos) | 🟡 **Parcialmente ejecutado.** Real: esquema, login+MFA, invitaciones, auditoría, gestión de personas, suspender/reactivar. Pendiente: roster import (CSV), `GuardianScope`, vistas de autoservicio de la persona, visores de auditoría/discrepancias. Ver §9.7 para el corte exacto. |
 | 9 | **Plano de control · S1 (catálogo)** | Migraciones `addons`/`plans`/`plan_price_tiers`, modelos con validaciones-espejo de los CHECK, CRUD auditado, seed idempotente, tests | ✅ Ejecutado — ver §7.2 y Changelog v1.2.0 |
+| 10 | **Plano de control · S2a (subscriptions + entitlements)** | Migraciones `subscriptions`/`institution_entitlements` (globales, sin RLS), modelos con snapshot inmutable y validaciones-espejo, CRUD auditado, predicado `ControlPlane::Entitlements::Check`, bloqueo de `retire!` con entitlements activos (F10-bis), tests | ✅ Ejecutado — ver §7.2 y Changelog v1.3.0 |
+| 11 | **Plano de control · S2b (gate en el inquilino)** | `Core::Institution#entitled?`, `Current.entitled_addon_keys`, concern único `Entitlement::Controller` (antes de `authorize!`), nav filtrada, página "módulo no habilitado", `Entitlement::Registry` + test de consistencia vs. `DOMAIN_KEYS` | ✅ Ejecutado — primer slice que toca `app/domains/*` de forma transversal (una sola pieza + nav central). Ver §7.1 y Changelog v1.3.0 |
 
 ---
 
@@ -516,30 +555,33 @@ buscador, tal como pide el prompt original.
    5. Job recurrente para `Invitations::Expirer` y webhook real para `Invitations::BounceHandler`
       (opcional / según necesidad real de producción, no bloqueante).
 2. **Cerrar CHECKPOINT E** (`staff_management` vs `human_resources`) y, si aplica, scaffold del dominio de personal no docente. *(nota: v1.2.0 terminó siendo el Slice S1 del plano de control, no este ítem — sigue pendiente y sin versión asignada).*
-3. **Cablear la puerta de auth real**: reemplazar `Authorization::StubResolver` por
+3. **Cablear la puerta de auth real (gate #2, RBAC)**: reemplazar `Authorization::StubResolver` por
    `IdentityAccess::PermissionCheck` en todas las vistas de dominio. **Elevada en prioridad** esta
-   versión — con login real, el stub-fallback de §6.3/P1 ya no es un detalle de fase de vistas, es
-   una superficie de sobre-otorgamiento de permisos para cualquier persona real sin `RoleAssignment`
-   sembrado.
+   versión — con login real y con el **gate #1 (entitlement) ya real** desde S2b, el stub-fallback de
+   §6.3/P1 es ahora la **única** compuerta que sigue sin dientes: cualquier persona autenticada sin
+   `RoleAssignment` sembrado recibe la persona stub genérica, no cero permisos. Al cerrar esto,
+   **verificar que el orden entitlement→`authorize!` sigue intacto** (forward-note de S2b).
 4. **Vistas de negocio por dominio** que aún estén en stub → conectarlas a modelos reales, dominio por dominio (empezando por `core` y `teacher_management` con el caso de aceptación).
-5. **Migraciones del plano de control** — ✅ auth de `platform_admins` con MFA (S0) y catálogo
-   `addons`/`plans`/`plan_price_tiers` con CRUD (S1, v1.2.0) ya reales. Pendiente:
-   1. **S2 — `institution_entitlements` + `subscriptions`**: snapshot de tarifa al firmar,
-      `Current.institution.entitled?(:x)`, wireado del lado inquilino. Al construir `retire!` sobre
-      un addon con entitlements activos, agregar la validación "no retirar si hay institución
-      dependiente" (no existe ese concepto todavía, por eso S1 no la tiene).
-   2. **S3 — metering**: `student_headcount_snapshots`, `usage_events`/`usage_daily_rollups`, jobs.
+5. **Migraciones del plano de control** — ✅ auth de `platform_admins` con MFA (S0), catálogo
+   `addons`/`plans`/`plan_price_tiers` con CRUD (S1), y **S2 completo (S2a+S2b, v1.3.0)**:
+   `subscriptions`/`institution_entitlements` con CRUD real + snapshot inmutable + predicado
+   `ControlPlane::Entitlements::Check`, y el gate wireado en el inquilino (`Entitlement::Controller` +
+   nav filtrada). Pendiente:
+   1. **S3 — metering**: `student_headcount_snapshots`, `usage_events`/`usage_daily_rollups`, jobs.
       `addons.unit` sigue **provisional** hasta cerrar **M1** (unidad de metering por dominio) — S1
       solo declaró valores de ejemplo (`check-ins`, `mensajes`) para satisfacer el CHECK, no la
       unidad definitiva.
-   3. **S4 — `invoices`/`invoice_line_items`**: corte de periodo, aplicar los tiers de
-      `plan_price_tiers` a un headcount real (S1 solo almacena el pricing, no lo resuelve).
-   4. **Hardening documentado, no construido en S1**: exclusion constraint `int4range` con GiST por
-      `plan_id` en `plan_price_tiers` para prohibir solapamiento a nivel de BD (hoy solo se valida en
-      la app), al estilo `WITHOUT OVERLAPS` de `schedules`.
-   5. **RBAC intra-plano** (roles/scopes de `platform_admin`) — S1 mantuvo la decisión de S0 de que
-      cualquier `platform_admin` autenticado puede administrar el catálogo. Roles finos de
-      platform_admin siguen siendo un concern futuro, no construido.
+   2. **S4 — `invoices`/`invoice_line_items`**: corte de periodo, aplicar los tiers de
+      `plan_price_tiers` y los overrides de `institution_entitlements` (S2a los almacena, no los
+      aplica) a un headcount real.
+   3. **Hardening documentado, no construido en S1/S2a**: exclusion constraint `int4range`/`daterange`
+      con GiST por `plan_id` (tiers) o por `(institution_id, addon_id)` (entitlements) para prohibir
+      solapamiento a nivel de BD (hoy solo se valida en la app), al estilo `WITHOUT OVERLAPS` de
+      `schedules`.
+   4. **RBAC intra-plano** (roles/scopes de `platform_admin`) — sigue sin construirse; cualquier
+      `platform_admin` autenticado administra el catálogo/subscriptions/entitlements completos.
+   5. **Provisioning de instituciones** (crear/editar una institución desde el control plane) — S2a
+      solo las lista read-only.
 6. **Metering real** por dominio medido: definir el evento facturable de cada uno, `usage_events` → `usage_daily_rollups` (job idempotente en Solid Queue), y el job de corte de periodo (factura borrador).
 7. **Tiempo real** (Turbo Streams sobre Solid Cable, sin Redis): `transportation` (abordaje) y `communication` (canales). Hoy diferido.
 8. **`communication` a fondo**: migraciones de `conversations`/`messages`/`tags`, mensajería con padres, canales.
@@ -564,10 +606,83 @@ buscador, tal como pide el prompt original.
 - Cross-domain siempre por **FK + stub** hasta que exista el modelo real; no inventar tablas de otros dominios.
 - El **plano de control fuera de `app/domains/*`** — no scopearlo por `institution_id` por costumbre.
 - **Zeitwerk colapsa `app/domains/*/{models,queries,services,jobs,policies}`** — un archivo en `app/domains/<d>/services/<ns>/foo.rb` define `<D>::<Ns>::Foo`, NO `<D>::Services::<Ns>::Foo`. Verificar con `bin/rails zeitwerk:check` antes de dar por buena una constante nueva.
+- **Gate #1 (entitlement) siempre antes de gate #2 (RBAC)** — `Entitlement::Controller` (una sola pieza, incluida una vez en `ApplicationController`) corre antes de que la acción llegue a `authorize!`; un módulo no habilitado nunca revela detalles de RBAC. Ver §7.1.
+- **Los dominios fundacionales nunca se gatean por entitlement** — su ausencia de `Entitlement::Registry` (`config/entitlements/*.rb`) ES la señal de "no gateado"; no existe (ni debe crearse) una lista aparte de "fundacionales".
+- **`Entitlement::Registry` no referencia `ControlPlane::AddonCatalog::DOMAIN_KEYS` en runtime** — solo `test/models/entitlement/registry_consistency_test.rb` cruza ambas listas. No "simplificar" el runtime del inquilino para que lea la constante del control plane directamente; ese acoplamiento es exactamente lo que este seam evita.
+- **`sign_in_as_member` (test helper) otorga entitlement de todos los dominios gateados por defecto** desde S2b — la institución efímera de test se comporta como un tenant completamente aprovisionado. Un test que necesite el escenario "no entitled" debe **revocar** el dominio específico, no asumir que parte sin ninguno.
 
 ---
 
 ## 14. Changelog
+
+### v1.3.0 — 2026-07-09
+- **Plano de control · Slice S2a (subscriptions + institution_entitlements): ejecutado.** Dos
+  migraciones nuevas (`subscriptions`, `institution_entitlements` — 20260709000001-002), globales,
+  sin RLS/policy/FORCE, `institution_id` como **FK a `institutions`, nunca tenancy** (mismo patrón
+  que `addons`/`plans`/`platform_admins`). `ControlPlane::Subscription.sign!` congela un **snapshot
+  inmutable** de la tarifa del plan (escalares + `price_tiers_snapshot` jsonb) al firmar — editar el
+  plan vivo después no toca subscriptions ya firmadas. `ControlPlane::Entitlement` (table_name
+  `institution_entitlements`, nombrado así para coincidir con el scaffolding stub previo, no
+  `InstitutionEntitlement`) con `grant`/`revoke!`/`reactivate!`, fechado, y overrides negociados
+  (almacenados, no aplicados hasta S4). Índices únicos parciales: una subscription activa por
+  institución, un entitlement activo por institución+addon. Predicado
+  `ControlPlane::Entitlements::Check.entitled?(institution:, addon_key:, at:)` — ignora overrides y
+  `addon.status` a propósito. F10-bis cerrado: `AddonsController#retire` rechaza si hay entitlements
+  activos dependientes. CRUD real bajo `/control_plane` (institutions read-only como hub;
+  subscriptions anidadas; entitlements extendido de index-stub a CRUD completo), todo auditado. 192
+  tests / 0 fallos / 1 skip preexistente (34 nuevos).
+- **Plano de control · Slice S2b (gate de entitlement en el inquilino): ejecutado.** Primer slice que
+  toca `app/domains/*` de forma transversal — con una sola pieza, no ramificación por dominio.
+  `Core::Institution#entitled?(addon_key)` (delega en `ControlPlane::Entitlements::Check`);
+  `Core::Access::EntitledAddonKeys.for(institution)` construye el Set de addons entitled;
+  `Current.entitled_addon_keys` lo memoiza una vez por request (patrón `attribute` + `super ||
+  self.attr = ...`, no un ivar plano, para que `CurrentAttributes#reset` lo limpie entre requests —
+  un ivar plano habría sobrevivido al reset y filtrado entitlements revocados a la siguiente
+  request). `Entitlement::Controller` (concern único, incluido una vez en `ApplicationController`)
+  infiere el `addon_key` del namespace del controller (`Cafeteria::MenuController` → `"cafeteria"`) y
+  corta con la página `errors/module_not_entitled` **antes** de que la acción llegue a `authorize!`.
+  `Entitlement::Registry` (tenant-side, `config/entitlements/*.rb`, un archivo por dominio
+  addon-gated, mismo patrón lazy-load que `Navigation::Registry`) es la lista que el runtime del
+  inquilino consulta — **nunca** referencia `ControlPlane::AddonCatalog::DOMAIN_KEYS` en runtime, solo
+  un test (`registry_consistency_test.rb`) cruza ambas listas para atrapar drift. `nav_items`
+  (`ApplicationHelper`) filtra por el mismo memo antes del `can?` cosmético existente, reutilizando el
+  `domain:` que `Navigation::Item` ya traía. Ningún archivo de dominio addon-gated
+  (`cafeteria`/`transportation`/`schedules`/`student_support`/`counseling`/`finance`/`communication`/
+  `analytics_bi`) fue tocado — el único touch en `app/domains/*` fue en `core` (dueño de identidad),
+  exactamente como S2a lo había dejado pendiente. 202 tests / 0 fallos / 1 skip preexistente (10
+  nuevos).
+- **Dos bugs reales corregidos en S2b durante la verificación, no solo happy-path:**
+  1. El diseño inicial usaba `prepend_before_action` para el gate (siguiendo la instrucción literal
+     de "correr antes de `authorize!`") — pero `authorize!` se llama a mano dentro de cada acción, no
+     es un `before_action`, así que prepender no aportaba nada para ese objetivo y en cambio saltaba
+     por delante de `TenantScoped`'s `around_action`, rompiendo la propia resolución de
+     `Current.institution` que el gate necesita. Corregido a `before_action` normal, incluido al
+     final de `ApplicationController` (después de `TenantScoped` y `Authentication`).
+  2. La página "módulo no habilitado" podía reventar (`NoMethodError` sobre `nil.name`) cuando
+     disparaba con `Current.institution` nil (fail-closed, E6): `shared/_role_switcher` asume un
+     actor autenticado con institución. Solución: usar el layout `auth` (el mismo de las pantallas
+     pre-login) en ese caso específico, sin tocar `_role_switcher`.
+  3. **Regresión real detectada en 27 tests preexistentes** (`cafeteria`, `transportation`,
+     `student_support`, `schedules`, `analytics_bi`): con el gate activo, la institución efímera de
+     `sign_in_as_member` no tenía ningún entitlement, así que todo dominio gateado empezó a responder
+     "no habilitado" en tests escritos antes de que el gate existiera. Arreglado en el helper
+     compartido (`grant_full_entitlements`, otorga los 8 dominios por defecto) — no archivo por
+     archivo, manteniendo el "toque uniforme" también en infraestructura de test.
+- **Reconciliación de discrepancia encontrada en recon:** S2a se había mergeado (commit `93cfdfd`)
+  sin actualizar este documento — v1.2.0 seguía describiendo `institution_entitlements`/
+  `subscriptions` como 🔴 pendientes. Este bump reconcilia ambos slices de una vez.
+- **Convenciones fijadas por S2a/S2b** (aplican a cualquier gate futuro del control plane hacia el
+  inquilino): snapshot inmutable de tarifa en `subscriptions`; `institution_id` como FK global
+  no-tenancy en tablas de control plane; una subscription activa por institución, un entitlement
+  activo por institución+addon; overrides almacenados-no-aplicados-hasta-S4; gate #1 (entitlement)
+  siempre antes de gate #2 (RBAC), como una sola pieza incluida una vez; fundacionales nunca gatean
+  por ausencia de registro, no por allowlist; el runtime del inquilino nunca referencia una constante
+  del control plane, solo un test de consistencia.
+- **Forward notes documentadas, no construidas en S2:** (a) verificar el orden entitlement→
+  `authorize!` cuando P1 (RBAC real) cierre; (b) S3 (metering, arrastra M1) y S4 (invoices, aplica
+  snapshot/overrides) siguen pendientes; (c) exclusion constraint `daterange`+GiST para periodos de
+  entitlement, documentada no construida; (d) provisioning de instituciones (crear/editar desde el
+  control plane) sigue sin existir; (e) RBAC intra-plano (`platform_admin`) sigue sin construirse.
 
 ### v1.2.0 — 2026-07-08
 - **Plano de control · Slice S1 (catálogo de facturación): ejecutado.** Tres migraciones nuevas

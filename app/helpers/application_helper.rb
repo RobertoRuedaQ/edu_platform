@@ -8,10 +8,17 @@ module ApplicationHelper
     page.present? ? "#{page} · #{APP_NAME}" : APP_NAME
   end
 
-  # Registry entries the current actor may see, ordered. Filtered with can?
-  # (cosmetic show/hide only) — every destination still gates with authorize!.
+  # Registry entries the current actor may see, ordered. Double gate, same
+  # order as the controller concern: entitlement first (a module the
+  # institution hasn't contracted disappears entirely, foundational domains
+  # skip this check), then can? (cosmetic show/hide only) — every destination
+  # still gates for real with authorize!.
   def nav_items
-    Navigation::Registry.sorted.select { |item| can?(item.permission) }
+    Navigation::Registry.sorted.select { |item| entitled_for_nav?(item) && can?(item.permission) }
+  end
+
+  def entitled_for_nav?(item)
+    !Entitlement::Registry.gated?(item.domain) || Current.entitled_addon_keys.include?(item.domain)
   end
 
   # STUB signed-in person for the shell header/switcher.

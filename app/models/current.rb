@@ -4,6 +4,7 @@ class Current < ActiveSupport::CurrentAttributes
   attribute :institution, :institution_id
   attribute :institution_user, :institution_user_id
   attribute :session
+  attribute :entitled_addon_keys
 
   # Request path assigns the record; keep institution_id in lock-step.
   # Job path (no record loaded) assigns institution_id directly.
@@ -32,6 +33,16 @@ class Current < ActiveSupport::CurrentAttributes
 
   # Derived from the session; nil when unauthenticated.
   def user = session&.user
+
+  # Memoized Set of addon keys entitled for `institution`, computed once per
+  # request (reset with everything else declared via `attribute` — a plain
+  # ivar would NOT be cleared between requests by CurrentAttributes#reset, so
+  # this deliberately goes through the generated attribute writer instead of
+  # `@entitled_addon_keys ||=`). Empty Set (not nil) once computed, including
+  # when institution is nil, so this never recomputes twice in one request.
+  def entitled_addon_keys
+    super || self.entitled_addon_keys = Core::Access::EntitledAddonKeys.for(institution)
+  end
 
   private
 

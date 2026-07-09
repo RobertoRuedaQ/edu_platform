@@ -56,6 +56,15 @@ class ActionDispatch::IntegrationTest
   # returns [] (same as the old nil-institution_user state), so the shared
   # Authorization::StubAssignments persona still drives can?/authorize! exactly
   # as these view tests assert. Returns [user, institution].
+  #
+  # Since S2b, every addon-gated domain also requires a real
+  # ControlPlane::Entitlement row before its controllers respond at all. This
+  # institution is meant to behave like a fully-provisioned tenant for RBAC
+  # tests (true of every domain test file written before S2b existed), so
+  # grant_full_entitlements makes that true again in one place rather than
+  # have each domain's test file duplicate it. Tests exercising the
+  # entitlement gate ITSELF (test/integration/entitlement_gate_test.rb) revoke
+  # the specific domain they need "not entitled" from this default.
   def sign_in_as_member
     slug = "t#{SecureRandom.hex(4)}"
     institution = Core::Institution.create!(name: "Colegio #{slug}", slug: slug,
@@ -66,7 +75,18 @@ class ActionDispatch::IntegrationTest
       Tenant::Guc.set_local(institution.id)
       institution.memberships.create!(user: user)
     end
+    grant_full_entitlements(institution)
     sign_in_as(user, institution: institution, password: "password-123456")
     [ user, institution ]
+  end
+
+  def grant_full_entitlements(institution)
+    Entitlement::Registry.domains.each do |key|
+      addon = ControlPlane::Addon.find_or_create_by!(key: key) do |a|
+        a.name = key.humanize
+        a.currency = "COP"
+      end
+      ControlPlane::Entitlement.create!(institution: institution, addon: addon, valid_from: Date.current)
+    end
   end
 end
