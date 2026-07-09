@@ -976,6 +976,24 @@ ALTER TABLE ONLY public.student_guardians FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: student_headcount_snapshots; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.student_headcount_snapshots (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    as_of_date date NOT NULL,
+    headcount integer NOT NULL,
+    academic_term_label text,
+    breakdown jsonb DEFAULT '{}'::jsonb NOT NULL,
+    source text DEFAULT 'tenant_push'::text NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT student_headcount_snapshots_headcount_check CHECK ((headcount >= 0))
+);
+
+
+--
 -- Name: students; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1087,6 +1105,44 @@ CREATE TABLE public.teaching_assignments (
 );
 
 ALTER TABLE ONLY public.teaching_assignments FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: usage_daily_rollups; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.usage_daily_rollups (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    addon_id uuid NOT NULL,
+    unit text NOT NULL,
+    usage_date date NOT NULL,
+    total_quantity bigint DEFAULT 0 NOT NULL,
+    event_count integer DEFAULT 0 NOT NULL,
+    rolled_up_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT usage_daily_rollups_event_count_check CHECK ((event_count >= 0)),
+    CONSTRAINT usage_daily_rollups_total_quantity_check CHECK ((total_quantity >= 0))
+);
+
+
+--
+-- Name: usage_events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.usage_events (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    addon_id uuid NOT NULL,
+    unit text NOT NULL,
+    quantity bigint DEFAULT 1 NOT NULL,
+    occurred_at timestamp with time zone NOT NULL,
+    idempotency_key text NOT NULL,
+    metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT usage_events_quantity_check CHECK ((quantity > 0))
+);
 
 
 --
@@ -1510,6 +1566,14 @@ ALTER TABLE ONLY public.student_guardians
 
 
 --
+-- Name: student_headcount_snapshots student_headcount_snapshots_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.student_headcount_snapshots
+    ADD CONSTRAINT student_headcount_snapshots_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: students students_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1547,6 +1611,22 @@ ALTER TABLE ONLY public.teachers
 
 ALTER TABLE ONLY public.teaching_assignments
     ADD CONSTRAINT teaching_assignments_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: usage_daily_rollups usage_daily_rollups_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.usage_daily_rollups
+    ADD CONSTRAINT usage_daily_rollups_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: usage_events usage_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.usage_events
+    ADD CONSTRAINT usage_events_pkey PRIMARY KEY (id);
 
 
 --
@@ -1915,6 +1995,13 @@ CREATE INDEX index_guardians_on_institution_id ON public.guardians USING btree (
 
 
 --
+-- Name: index_headcount_snapshots_on_institution_and_date; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_headcount_snapshots_on_institution_and_date ON public.student_headcount_snapshots USING btree (institution_id, as_of_date);
+
+
+--
 -- Name: index_installments_on_institution_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2244,6 +2331,13 @@ CREATE INDEX index_student_guardians_on_student_id ON public.student_guardians U
 
 
 --
+-- Name: index_student_headcount_snapshots_on_institution_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_student_headcount_snapshots_on_institution_id ON public.student_headcount_snapshots USING btree (institution_id);
+
+
+--
 -- Name: index_students_on_grade_level_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2391,6 +2485,55 @@ CREATE INDEX index_teaching_assignments_on_teacher_id ON public.teaching_assignm
 
 
 --
+-- Name: index_usage_daily_rollups_on_addon_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_usage_daily_rollups_on_addon_id ON public.usage_daily_rollups USING btree (addon_id);
+
+
+--
+-- Name: index_usage_daily_rollups_on_bucket; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_usage_daily_rollups_on_bucket ON public.usage_daily_rollups USING btree (institution_id, addon_id, unit, usage_date);
+
+
+--
+-- Name: index_usage_daily_rollups_on_institution_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_usage_daily_rollups_on_institution_id ON public.usage_daily_rollups USING btree (institution_id);
+
+
+--
+-- Name: index_usage_events_for_rollup; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_usage_events_for_rollup ON public.usage_events USING btree (institution_id, addon_id, occurred_at);
+
+
+--
+-- Name: index_usage_events_on_addon_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_usage_events_on_addon_id ON public.usage_events USING btree (addon_id);
+
+
+--
+-- Name: index_usage_events_on_idempotency; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_usage_events_on_idempotency ON public.usage_events USING btree (institution_id, addon_id, idempotency_key);
+
+
+--
+-- Name: index_usage_events_on_institution_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_usage_events_on_institution_id ON public.usage_events USING btree (institution_id);
+
+
+--
 -- Name: index_users_on_email; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2442,6 +2585,14 @@ ALTER TABLE ONLY public.enrollments
 
 ALTER TABLE ONLY public.students
     ADD CONSTRAINT fk_rails_10eda8df32 FOREIGN KEY (institution_id) REFERENCES public.institutions(id);
+
+
+--
+-- Name: usage_daily_rollups fk_rails_11b586ee6f; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.usage_daily_rollups
+    ADD CONSTRAINT fk_rails_11b586ee6f FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE RESTRICT;
 
 
 --
@@ -2725,6 +2876,14 @@ ALTER TABLE ONLY public.role_assignments
 
 
 --
+-- Name: usage_events fk_rails_68b7a87222; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.usage_events
+    ADD CONSTRAINT fk_rails_68b7a87222 FOREIGN KEY (addon_id) REFERENCES public.addons(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: institution_settings fk_rails_693e18446a; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2869,6 +3028,14 @@ ALTER TABLE ONLY public.active_storage_variant_records
 
 
 --
+-- Name: usage_daily_rollups fk_rails_9acf8873cf; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.usage_daily_rollups
+    ADD CONSTRAINT fk_rails_9acf8873cf FOREIGN KEY (addon_id) REFERENCES public.addons(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: control_plane_sessions fk_rails_a14868e66d; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2954,6 +3121,14 @@ ALTER TABLE ONLY public.teaching_assignments
 
 ALTER TABLE ONLY public.roster_import_batches
     ADD CONSTRAINT fk_rails_b8dabed25c FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: usage_events fk_rails_bc377e8add; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.usage_events
+    ADD CONSTRAINT fk_rails_bc377e8add FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE RESTRICT;
 
 
 --
@@ -3090,6 +3265,14 @@ ALTER TABLE ONLY public.roster_import_rows
 
 ALTER TABLE ONLY public.employment_periods
     ADD CONSTRAINT fk_rails_daffc2b6c8 FOREIGN KEY (staff_member_id) REFERENCES public.staff_members(id) ON DELETE CASCADE;
+
+
+--
+-- Name: student_headcount_snapshots fk_rails_dfadb12276; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.student_headcount_snapshots
+    ADD CONSTRAINT fk_rails_dfadb12276 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE RESTRICT;
 
 
 --
@@ -3671,6 +3854,9 @@ CREATE POLICY teaching_assignments_tenant_isolation ON public.teaching_assignmen
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260710000003'),
+('20260710000002'),
+('20260710000001'),
 ('20260709000002'),
 ('20260709000001'),
 ('20260708000018'),

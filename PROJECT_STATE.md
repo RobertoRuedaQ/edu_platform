@@ -16,10 +16,10 @@
 
 | Campo | Valor |
 |---|---|
-| **Versión del documento** | `v1.3.0` |
-| **Fecha** | 2026-07-09 |
-| **Estado del proyecto** | Identidad real ya funciona: login nativo + MFA por correo, registro por invitación, y gestión de personas (crear/invitar/suspender) corriendo contra datos reales. El plano de control tiene auth real de `platform_admins`, catálogo `addons`/`plans`/`plan_price_tiers` con CRUD (S1), y ahora también `subscriptions`/`institution_entitlements` con CRUD real y snapshot de tarifa inmutable (S2a). La **primera compuerta de acceso ya es real de punta a punta**: `Core::Institution#entitled?` + el gate `Entitlement::Controller` + la nav filtrada deciden, con datos reales, si una institución puede usar un dominio addon-gated — antes de que la segunda compuerta (RBAC) entre a jugar, la cual **sigue** sobre `Authorization::StubResolver` (S2b; P1 sin tocar). Tests verdes (202 runs, 0 fallos, 1 skip preexistente). Roster import y las vistas propias de estudiante/acudiente/docente siguen pendientes; metering/invoices del plano de control siguen en stub (S3–S4). |
-| **Alcance de esta versión** | Cierra el track S2 del plano de control (§12.5.1) en dos slices: **S2a** — tablas globales `subscriptions`/`institution_entitlements` + CRUD de super-admin + el predicado `ControlPlane::Entitlements::Check`, y **S2b** — el wireado de esa primera compuerta en el lado del inquilino (`app/domains/*`, transversal): `Core::Institution#entitled?`, el memo `Current.entitled_addon_keys`, el concern único `Entitlement::Controller`, la nav filtrada, y la página "módulo no habilitado". También reconcilia que S2a se había mergeado sin actualizar este documento — ver Changelog. |
+| **Versión del documento** | `v1.4.0` |
+| **Fecha** | 2026-07-10 |
+| **Estado del proyecto** | Identidad real ya funciona: login nativo + MFA por correo, registro por invitación, y gestión de personas (crear/invitar/suspender) corriendo contra datos reales. El plano de control tiene auth real de `platform_admins`, catálogo `addons`/`plans`/`plan_price_tiers` con CRUD (S1), `subscriptions`/`institution_entitlements` con CRUD real y snapshot de tarifa inmutable (S2a), y la primera compuerta de acceso (`entitled?`) real de punta a punta en el lado del inquilino (S2b) — la segunda compuerta (RBAC) **sigue** sobre `Authorization::StubResolver` (P1 sin tocar). **Nuevo en esta versión (S3a):** el headcount de alumnos se **empuja** desde el inquilino (bajo su propio GUC) hacia el plano de control, y existe un **pipe genérico de metering** (ingestión idempotente + rollup diario idempotente) probado con eventos sintéticos — **ningún dominio emite eventos reales todavía** (S3b) y la unidad de metering por dominio (**M1**) sigue sin cerrar. Tests verdes (233 runs, 0 fallos, 1 skip preexistente). Roster import y las vistas propias de estudiante/acudiente/docente siguen pendientes; `invoices`/corte de periodo del plano de control siguen en stub (S4). |
+| **Alcance de esta versión** | Cierra **S3a** del plano de control (§12.5.2): `student_headcount_snapshots` + `Core::Headcount::Snapshotter`/`SnapshotJob` (el primer job real que fija y libera el GUC del tenant fuera de un request — ver §9.7-7), y `usage_events`/`usage_daily_rollups` + `ControlPlane::Usage::Ingest`/`RollupJob` (pipe agnóstico de dominio, sin GUC). Corrige además un bug real de fuga de GUC encontrado al testear `SnapshotJob` — ver Changelog. **S3b** (emisión real por dominio, requiere cerrar M1) y **S4** (invoices) quedan pendientes. |
 
 ### Convención de versionado de ESTE documento
 
@@ -343,8 +343,23 @@ archivo de `cafeteria`/`transportation`/`schedules`/`student_support`/`counselin
   `addon.status` a propósito — retirar un addon con entitlements activos se **bloquea**
   (`ControlPlane::Addon#retire!`, F10-bis, cerrado en S2a). **S2b (esta versión)** conectó este
   predicado al lado del inquilino — ver §7.1.
-- **`student_headcount_snapshots`** 🔴 pendiente (S3) — headcount **empujado por el tenant al cierre** (no lectura viva del `students` del inquilino → boundary limpio + número defendible en factura).
-- **`usage_events` / `usage_daily_rollups`** 🔴 pendiente (S3) — metering. Un job diario acumula rollups; el corte de periodo suma rollups, no escanea eventos crudos.
+- **`student_headcount_snapshots`** ✅ **migrado (S3a)** — headcount **empujado por el tenant** (no
+  lectura viva del `students` del inquilino desde el control plane → boundary limpio + número
+  defendible en factura). `Core::Headcount::Snapshotter` cuenta `GroupManagement::Student` con
+  `status: "active"` para la institución (decisión de S3a: `enrollments.term` es un string libre sin
+  FK a `academic_terms`, así que "matrícula activa en el término activo" no es un join real en el
+  esquema actual — `academic_term_label` es solo una etiqueta descriptiva del término activo, no un
+  filtro). Un snapshot por `(institution_id, as_of_date)` — re-correr actualiza, no duplica.
+  `Core::Headcount::SnapshotJob` (hereda `ApplicationJob`) es el **primer job real** que fija y
+  libera el GUC del tenant fuera de un request — ver §9.7-7.
+- **`usage_events` / `usage_daily_rollups`** ✅ **migrado, pipe genérico (S3a)** — metering
+  agnóstico de dominio, **sin GUC** (tablas globales). `ControlPlane::Usage::Ingest` es idempotente
+  por `(institution, addon, idempotency_key)` (no-op en duplicado, nunca falla) y valida que el addon
+  exista y sea `metered: true` — **no** exige entitlement activo (el uso es un hecho, S4 reconcilia
+  qué se cobra). `ControlPlane::Usage::RollupJob` agrega por `(institution, addon, unit, usage_date)`,
+  **idempotente** (recomputa completo, nunca incrementa) — el corte de periodo de S4 sumará estos
+  rollups, nunca eventos crudos. **Sin emisión real por ningún dominio todavía (S3b)** — probado solo
+  con llamadas sintéticas a `Ingest`. `unit` es un string opaco; **M1 sigue sin cerrar**.
 - **`invoices` / `invoice_line_items`** 🔴 pendiente (S4) — cada línea con `kind` ∈ (`base_seats`, `addon_fee`, `usage_overage`) + FK a su origen.
 - **`platform_admins`** ✅ **migrado, con auth nativa + MFA por correo (S0, ya real desde antes de este documento)** — super-admins de plataforma aparte de `Core::User`, no un flag. El MFA propio (`ControlPlane::Otp::*`) se construyó independiente de `IdentityAccess::Otp::*` en vez de reutilizarlo — no hubo que adaptar la firma genérica, se duplicó el ~concern~ delgado.
 
@@ -484,11 +499,22 @@ original — ver también §12.1:
    correo para el segundo).
 6. **`IdentityAccess::PermissionCheck` real** — sigue sin existir (esto es un pendiente compartido
    con TODO el resto de la app, no exclusivo de este módulo; ver §11).
-7. **Job de Solid Queue que reestablece el GUC de tenant.** El prompt original lo exige para
-   cualquier job async que toque datos tenant-scoped. Hoy no hay ningún job async que lo necesite
-   (los mailers son `deliver_later` pero no ejecutan queries tenant-scoped dentro del job — leen
-   primitivos ya resueltos por el llamador). Si `Expirer` se vuelve un job recurrente, **ahí sí**
-   habrá que resolver esto.
+7. **Job de Solid Queue que reestablece el GUC de tenant — ✅ CERRADO, primer caso real (S3a).**
+   `ApplicationJob` ya traía el mecanismo (`attr_accessor :institution_id` + `serialize`/`deserialize`
+   que lo transportan + `around_perform` que fija el GUC en una transacción) desde el commit inicial,
+   pero **nunca se había usado ni testeado** hasta que `Core::Headcount::SnapshotJob` lo heredó en
+   S3a. Al escribir el test de "el GUC no se filtra" (con una query real bajo RLS, no una relectura
+   de `current_setting()` — esa relectura puede ser engañada por el query cache de AR dentro de una
+   transacción, ver Changelog v1.3.0) **se encontró un bug real**: dentro de un test de Minitest
+   (que envuelve todo el test en una transacción englobante), el `ActiveRecord::Base.transaction do
+   ... end` del job se vuelve un SAVEPOINT, no una transacción de nivel superior, y Postgres **no**
+   limpia un `SET LOCAL` al liberar un savepoint — solo al hacer COMMIT/ROLLBACK del nivel más
+   externo. Arreglado con un `ensure Tenant::Guc.reset!` explícito en `ApplicationJob#around_perform`
+   (un `RESET` inmediato, no dependiente de límites de transacción) — blinda a **cualquier** job
+   futuro que herede de `ApplicationJob`, no solo a `SnapshotJob`. **Patrón a copiar**: todo job
+   tenant-scoped nuevo debe heredar `ApplicationJob` (no reinventar el manejo de GUC) y su test debe
+   verificar la ausencia de fuga con una query real bajo RLS, nunca con una relectura de
+   `current_setting()`.
 
 ### 9.8 Consideraciones legales (Colombia) — sin cambios, siguen vigentes
 
@@ -516,11 +542,12 @@ buscador, tal como pide el prompt original.
 | 4 | **Organización de dominios** | `dominios_edu_platform.md`, prompt de scaffold, `notifications` → `communication` | ✅ Ejecutado (scaffold + componentes) |
 | 5 | **identity/finance/counseling** | Prompt combinado con modelos (migraciones + AR con guardrails) | ✅ Ejecutado (esquema + componentes) |
 | 6 | **Vistas + roles** | Mapa maestro, Fase 0 (shell por rol + `can?`/`authorize!` + dashboard + portales + 403), prompts por dominio | ✅ Fase 0 + dominios ejecutados (todavía sobre `StubResolver`, ver §11) |
-| 7 | **Plano de control + billing** | Estructura `app/control_plane/`, auth de `platform_admins` + MFA (S0), catálogo `addons`/`plans`/`plan_price_tiers` con CRUD real (S1), `subscriptions`/`institution_entitlements` con CRUD real (S2a), gate de entitlement wireado en el inquilino (S2b) | 🟡 **Parcialmente ejecutado.** Real: S0, S1, S2 completo (S2a+S2b). Pendiente: metering (S3), `invoices` (S4) — siguen en componentes/vistas stub. |
+| 7 | **Plano de control + billing** | Estructura `app/control_plane/`, auth de `platform_admins` + MFA (S0), catálogo `addons`/`plans`/`plan_price_tiers` con CRUD real (S1), `subscriptions`/`institution_entitlements` con CRUD real (S2a), gate de entitlement wireado en el inquilino (S2b), headcount snapshots + pipe genérico de metering (S3a) | 🟡 **Parcialmente ejecutado.** Real: S0, S1, S2 completo (S2a+S2b), S3a. Pendiente: emisión de eventos por dominio (S3b, requiere M1), `invoices` (S4). |
 | 8 | **Autenticación / onboarding** | Registro por invitación, login+MFA, roster import, vinculación, auditoría (externos e internos) | 🟡 **Parcialmente ejecutado.** Real: esquema, login+MFA, invitaciones, auditoría, gestión de personas, suspender/reactivar. Pendiente: roster import (CSV), `GuardianScope`, vistas de autoservicio de la persona, visores de auditoría/discrepancias. Ver §9.7 para el corte exacto. |
 | 9 | **Plano de control · S1 (catálogo)** | Migraciones `addons`/`plans`/`plan_price_tiers`, modelos con validaciones-espejo de los CHECK, CRUD auditado, seed idempotente, tests | ✅ Ejecutado — ver §7.2 y Changelog v1.2.0 |
 | 10 | **Plano de control · S2a (subscriptions + entitlements)** | Migraciones `subscriptions`/`institution_entitlements` (globales, sin RLS), modelos con snapshot inmutable y validaciones-espejo, CRUD auditado, predicado `ControlPlane::Entitlements::Check`, bloqueo de `retire!` con entitlements activos (F10-bis), tests | ✅ Ejecutado — ver §7.2 y Changelog v1.3.0 |
 | 11 | **Plano de control · S2b (gate en el inquilino)** | `Core::Institution#entitled?`, `Current.entitled_addon_keys`, concern único `Entitlement::Controller` (antes de `authorize!`), nav filtrada, página "módulo no habilitado", `Entitlement::Registry` + test de consistencia vs. `DOMAIN_KEYS` | ✅ Ejecutado — primer slice que toca `app/domains/*` de forma transversal (una sola pieza + nav central). Ver §7.1 y Changelog v1.3.0 |
+| 12 | **Plano de control · S3a (headcount + pipe de metering)** | Migraciones `student_headcount_snapshots`/`usage_events`/`usage_daily_rollups` (globales, sin RLS), `Core::Headcount::Snapshotter`/`SnapshotJob` (touch único en `core`, primer job real con GUC), `ControlPlane::Usage::Ingest`/`RollupJob` (pipe agnóstico de dominio, sin GUC), vistas read-only, tests | ✅ Ejecutado — cero cambios en dominios addon-gated; encontró y cerró un bug real de fuga de GUC en `ApplicationJob`. Ver §7.2, §9.7-7 y Changelog v1.4.0 |
 
 ---
 
@@ -563,26 +590,35 @@ buscador, tal como pide el prompt original.
    **verificar que el orden entitlement→`authorize!` sigue intacto** (forward-note de S2b).
 4. **Vistas de negocio por dominio** que aún estén en stub → conectarlas a modelos reales, dominio por dominio (empezando por `core` y `teacher_management` con el caso de aceptación).
 5. **Migraciones del plano de control** — ✅ auth de `platform_admins` con MFA (S0), catálogo
-   `addons`/`plans`/`plan_price_tiers` con CRUD (S1), y **S2 completo (S2a+S2b, v1.3.0)**:
+   `addons`/`plans`/`plan_price_tiers` con CRUD (S1), **S2 completo (S2a+S2b, v1.3.0)**:
    `subscriptions`/`institution_entitlements` con CRUD real + snapshot inmutable + predicado
-   `ControlPlane::Entitlements::Check`, y el gate wireado en el inquilino (`Entitlement::Controller` +
-   nav filtrada). Pendiente:
-   1. **S3 — metering**: `student_headcount_snapshots`, `usage_events`/`usage_daily_rollups`, jobs.
-      `addons.unit` sigue **provisional** hasta cerrar **M1** (unidad de metering por dominio) — S1
-      solo declaró valores de ejemplo (`check-ins`, `mensajes`) para satisfacer el CHECK, no la
-      unidad definitiva.
+   `ControlPlane::Entitlements::Check` + el gate wireado en el inquilino, y **S3a (v1.4.0)**:
+   `student_headcount_snapshots` (empujado bajo GUC por `Core::Headcount::SnapshotJob`) +
+   `usage_events`/`usage_daily_rollups` (pipe genérico idempotente, sin GUC). Pendiente:
+   1. **S3b — emisión real por dominio**: cablear cada dominio medido para llamar
+      `ControlPlane::Usage::Ingest` en su evento facturable real. **Requiere cerrar M1 primero**
+      (unidad de metering por dominio — `addons.unit` sigue **provisional**, S1 solo declaró valores
+      de ejemplo como `check-ins`/`mensajes` para satisfacer el CHECK). Slice transversal, tocará
+      `app/domains/*` — mismo patrón de "una sola pieza" que S2b, no ramificar por dominio.
    2. **S4 — `invoices`/`invoice_line_items`**: corte de periodo, aplicar los tiers de
-      `plan_price_tiers` y los overrides de `institution_entitlements` (S2a los almacena, no los
-      aplica) a un headcount real.
-   3. **Hardening documentado, no construido en S1/S2a**: exclusion constraint `int4range`/`daterange`
-      con GiST por `plan_id` (tiers) o por `(institution_id, addon_id)` (entitlements) para prohibir
-      solapamiento a nivel de BD (hoy solo se valida en la app), al estilo `WITHOUT OVERLAPS` de
-      `schedules`.
+      `plan_price_tiers`, los overrides de `institution_entitlements`, y los rollups de uso (S3a los
+      agrega, no los factura) a un headcount real (S3a lo captura, no lo aplica).
+   3. **Hardening documentado, no construido en S1/S2a/S3a**: exclusion constraint `int4range`/
+      `daterange` con GiST por `plan_id` (tiers) o por `(institution_id, addon_id)` (entitlements)
+      para prohibir solapamiento a nivel de BD (hoy solo se valida en la app), al estilo
+      `WITHOUT OVERLAPS` de `schedules`.
    4. **RBAC intra-plano** (roles/scopes de `platform_admin`) — sigue sin construirse; cualquier
-      `platform_admin` autenticado administra el catálogo/subscriptions/entitlements completos.
+      `platform_admin` autenticado administra el catálogo/subscriptions/entitlements/headcount/uso
+      completos.
    5. **Provisioning de instituciones** (crear/editar una institución desde el control plane) — S2a
       solo las lista read-only.
-6. **Metering real** por dominio medido: definir el evento facturable de cada uno, `usage_events` → `usage_daily_rollups` (job idempotente en Solid Queue), y el job de corte de periodo (factura borrador).
+   6. **Schedule recurrente** de `Core::Headcount::SnapshotJob` y `ControlPlane::Usage::RollupJob` —
+      diferido (S3a los deja invocables manual/rake); mismo tratamiento que
+      `Invitations::Expirer`.
+6. **Metering real** por dominio medido (= S3b arriba): definir el evento facturable de cada uno
+   (cierra M1), llamar `ControlPlane::Usage::Ingest` desde ahí, y agregar el job de corte de periodo
+   (factura borrador, S4) que sume `usage_daily_rollups` — el pipe genérico y el rollup idempotente ya
+   existen desde S3a, no hay que reconstruirlos.
 7. **Tiempo real** (Turbo Streams sobre Solid Cable, sin Redis): `transportation` (abordaje) y `communication` (canales). Hoy diferido.
 8. **`communication` a fondo**: migraciones de `conversations`/`messages`/`tags`, mensajería con padres, canales.
 9. **`analytics_bi`**: vistas materializadas + reporte cross-tenant auditado (rol `BYPASSRLS`, `edu_bi_reader`).
@@ -610,10 +646,68 @@ buscador, tal como pide el prompt original.
 - **Los dominios fundacionales nunca se gatean por entitlement** — su ausencia de `Entitlement::Registry` (`config/entitlements/*.rb`) ES la señal de "no gateado"; no existe (ni debe crearse) una lista aparte de "fundacionales".
 - **`Entitlement::Registry` no referencia `ControlPlane::AddonCatalog::DOMAIN_KEYS` en runtime** — solo `test/models/entitlement/registry_consistency_test.rb` cruza ambas listas. No "simplificar" el runtime del inquilino para que lea la constante del control plane directamente; ese acoplamiento es exactamente lo que este seam evita.
 - **`sign_in_as_member` (test helper) otorga entitlement de todos los dominios gateados por defecto** desde S2b — la institución efímera de test se comporta como un tenant completamente aprovisionado. Un test que necesite el escenario "no entitled" debe **revocar** el dominio específico, no asumir que parte sin ninguno.
+- **Todo job nuevo que toque datos tenant-scoped debe heredar `ApplicationJob`** (no reinventar el manejo del GUC) — desde S3a ese mecanismo incluye un `Tenant::Guc.reset!` explícito en el `ensure`, no solo confiar en que el `COMMIT` de la transacción limpie el `SET LOCAL` (ver §9.7-7: dentro de un test envuelto en una transacción englobante, la transacción del job es un SAVEPOINT, y Postgres no limpia `SET LOCAL` al liberar un savepoint).
+- **Verificar "el GUC no se filtró" con una query real bajo RLS, nunca con una relectura de `current_setting()`** — esa relectura puede devolver un valor obsoleto por el query cache de ActiveRecord dentro de una transacción, dando un falso positivo de fuga (o, peor, un falso negativo). La prueba real es: sin ningún GUC fijado, ¿una tabla RLS-protegida devuelve cero filas?
+- **El headcount cuenta `GroupManagement::Student.status == "active"` de la institución, sin filtrar por `enrollments`/`academic_terms`** — `enrollments.term` es un string libre sin FK a `academic_terms`; no existe ese join en el esquema actual. `academic_term_label` en el snapshot es solo una etiqueta descriptiva del término activo, nunca un filtro del conteo. No "arreglar" esto para que parezca más preciso sin antes decidir explícitamente cómo conectar `enrollments`/`academic_terms` (hoy no están conectados en ningún lugar del código).
 
 ---
 
 ## 14. Changelog
+
+### v1.4.0 — 2026-07-10
+- **Plano de control · Slice S3a (headcount snapshots + pipe genérico de metering): ejecutado.**
+  Tres migraciones nuevas (`student_headcount_snapshots`, `usage_events`, `usage_daily_rollups` —
+  20260710000001-003), globales, sin RLS/policy/FORCE, mismo patrón que `subscriptions`/
+  `institution_entitlements`. Modelos `ControlPlane::{StudentHeadcountSnapshot,UsageEvent,
+  UsageDailyRollup}` con validaciones-espejo; `UsageEvent#readonly? = persisted?` (permite el insert
+  inicial, bloquea cualquier update/destroy después — append-only también a nivel de AR, no solo de
+  esquema). Un snapshot por `(institution_id, as_of_date)`; un rollup por
+  `(institution_id, addon_id, unit, usage_date)`; un evento por
+  `(institution_id, addon_id, idempotency_key)` — los tres únicos parciales/compuestos.
+- **Headcount (único touch en `core`):** `Core::Headcount::Snapshotter.call(institution:, as_of:)`
+  cuenta `GroupManagement::Student` con `status: "active"` de la institución — decisión explícita de
+  S3a: `enrollments.term` es un string libre sin FK a `academic_terms`, así que "matrícula activa en
+  el término activo" no es un join real en el esquema actual; `academic_term_label` es solo una
+  etiqueta congelada del término activo, no un filtro. `Core::Headcount::SnapshotJob` (hereda
+  `ApplicationJob`) es el **primer job real** que ejercita el mecanismo de réplica de GUC que
+  `ApplicationJob` traía sin usar desde el commit inicial — ver el hallazgo de bug abajo. Disparo
+  manual vía `bin/rails control_plane:snapshot_headcount[institution_id]` (síncrono, no requiere
+  worker); schedule recurrente diferido.
+- **Pipe de uso genérico (control plane, sin GUC):** `ControlPlane::Usage::Ingest.call(institution:,
+  addon_key:, unit:, occurred_at:, idempotency_key:, quantity:, metadata:)` — idempotente (no-op en
+  duplicado, nunca falla en re-emisión), valida que el addon exista y sea `metered: true`, **no**
+  exige entitlement activo (el uso es un hecho; S4 reconcilia qué se cobra). `unit` se congela en el
+  evento — string opaco, **M1 sigue sin cerrar**. `ControlPlane::Usage::RollupJob.perform_now(fecha)`
+  agrega por bucket, **idempotente** (recomputa completo desde `usage_events`, nunca incrementa —
+  re-correr no duplica ni dobla el conteo). Probado **solo** con llamadas sintéticas; **ningún
+  dominio emite eventos reales todavía (S3b)**. Vistas read-only nuevas en el hub de institución de
+  S2a (headcount + rollups). 233 tests / 0 fallos / 1 skip preexistente (31 nuevos).
+- **Bug real encontrado y corregido al testear `SnapshotJob`, no solo happy-path:** el test de "el
+  GUC no se filtra" (escrito contra una query real bajo RLS, no una relectura de `current_setting()`
+  — esa relectura puede ser engañada por el query cache de AR dentro de una transacción, lección de
+  v1.3.0) reveló que, dentro de un test de Minitest (que envuelve todo el test en una transacción
+  englobante), el `ActiveRecord::Base.transaction do ... end` de `ApplicationJob#around_perform` se
+  vuelve un SAVEPOINT, no una transacción de nivel superior — y Postgres **no** limpia un
+  `SET LOCAL` al liberar un savepoint, solo al hacer COMMIT/ROLLBACK del nivel más externo. Un
+  headcount de una institución previa aparecía visible sin ningún GUC fijado. **Corregido con un
+  `ensure Tenant::Guc.reset!` explícito** en `ApplicationJob#around_perform` — un `RESET` inmediato
+  que no depende de límites de transacción, blindando a cualquier job futuro que herede de
+  `ApplicationJob`, no solo a `SnapshotJob`. Ver §9.7-7 (cerrado, primer caso real del patrón).
+- **Discrepancia real resuelta en recon (con tu confirmación):** el prompt asumía "matrícula activa
+  en el término activo" como si `enrollments` y `academic_terms` estuvieran conectados — no lo están
+  (`enrollments.term` es un string libre, sin FK). Se decidió contar solo `students.status == "active"`
+  en vez de asumir una convención de nombres no verificada en ningún otro lugar del código.
+- **Convenciones fijadas por S3a:** todo job tenant-scoped nuevo hereda `ApplicationJob`, nunca
+  reinventa el manejo del GUC; todo test de "no fuga de GUC" usa una query real bajo RLS, nunca una
+  relectura de `current_setting()`; eventos de uso son idempotentes por no-op, rollups son
+  idempotentes por recómputo completo (nunca incremento); el corte de periodo (S4) sumará rollups,
+  nunca eventos crudos; el headcount es un número empujado bajo GUC, nunca una lectura cross-tenant
+  del control plane.
+- **Forward notes documentadas, no construidas en S3a:** (a) S3b (emisión real por dominio) requiere
+  cerrar M1 primero y tocará `app/domains/*` transversalmente, mismo patrón "una sola pieza" que S2b;
+  (b) schedules recurrentes de `SnapshotJob`/`RollupJob` diferidos; (c) S4 consumirá snapshots +
+  rollups + overrides de entitlements + tiers de planes; (d) exclusion constraints de hardening
+  siguen pendientes.
 
 ### v1.3.0 — 2026-07-09
 - **Plano de control · Slice S2a (subscriptions + institution_entitlements): ejecutado.** Dos

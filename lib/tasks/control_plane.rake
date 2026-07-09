@@ -42,4 +42,27 @@ namespace :control_plane do
     ControlPlane::SeedCatalog.call
     puts "Catálogo sembrado: #{ControlPlane::Addon.count} addons, #{ControlPlane::Plan.count} planes."
   end
+
+  desc "Push a student headcount snapshot (S3a). Runs synchronously, under the " \
+       "tenant's own GUC — no worker process required. " \
+       "Usage: bin/rails control_plane:snapshot_headcount[institution_id] (all institutions if omitted). " \
+       "Recurring schedule deferred — invoke manually or from an external scheduler for now."
+  task :snapshot_headcount, [ :institution_id ] => :environment do |_t, args|
+    institutions = args[:institution_id].presence ? Core::Institution.where(id: args[:institution_id]) : Core::Institution.all
+
+    institutions.find_each do |institution|
+      snapshot = Core::Headcount::SnapshotJob.run_now_for(institution)
+      puts "#{institution.name}: headcount=#{snapshot.headcount} as_of=#{snapshot.as_of_date}"
+    end
+  end
+
+  desc "Roll up usage_events into usage_daily_rollups for one day (S3a). " \
+       "Usage: bin/rails control_plane:rollup_usage[2026-07-09] (yesterday if omitted). " \
+       "Idempotent — safe to re-run. Recurring schedule deferred."
+  task :rollup_usage, [ :usage_date ] => :environment do |_t, args|
+    usage_date = args[:usage_date].presence ? Date.parse(args[:usage_date]) : Date.yesterday
+    ControlPlane::Usage::RollupJob.perform_now(usage_date)
+    count = ControlPlane::UsageDailyRollup.where(usage_date: usage_date).count
+    puts "Rollup de #{usage_date}: #{count} buckets (institución × addon × unidad)."
+  end
 end

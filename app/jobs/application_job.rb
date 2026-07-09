@@ -27,6 +27,18 @@ class ApplicationJob < ActiveJob::Base
           Tenant::Guc.set_local(job.institution_id)
           block.call
         end
+      ensure
+        # Belt-and-suspenders (Tenant::Guc's own words): SET LOCAL clears at a
+        # real top-level COMMIT/ROLLBACK, but a job can run nested inside an
+        # ALREADY-open outer transaction (proven by Core::Headcount::SnapshotJob's
+        # own test suite, S3a — a plain Minitest transactional test wraps
+        # everything in one enclosing transaction, so the `transaction do end`
+        # above becomes a SAVEPOINT, and Postgres does NOT clear a SET LOCAL at
+        # savepoint release, only at the outermost commit). An explicit RESET
+        # here is unconditional and immediate regardless of transaction
+        # nesting, so the guarantee holds under test AND in any future caller
+        # that (deliberately or not) runs this job inside its own transaction.
+        Tenant::Guc.reset!
       end
     else
       # Global/maintenance job with no tenant — runs with no GUC on purpose.

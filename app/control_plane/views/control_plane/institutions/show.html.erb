@@ -67,3 +67,58 @@
     <p>Sin addons habilitados todavía.</p>
   <% end %>
 </section>
+
+<section class="cp-section" aria-labelledby="cp-headcount-h">
+  <h2 id="cp-headcount-h">Headcount</h2>
+  <%#
+    Read-only (S3a) — this number is PUSHED by the tenant
+    (Core::Headcount::SnapshotJob, running under its own GUC), never a live
+    cross-tenant read. No form here on purpose.
+  -%>
+  <% if @headcount_snapshots.any? %>
+    <%= render layout: "shared/table",
+          locals: { headers: [ "Fecha", "Alumnos", "Término", "Desglose" ] } do %>
+      <% @headcount_snapshots.each do |snap| %>
+        <tr>
+          <td><%= datetime(snap.as_of_date.to_time, format: :date) %></td>
+          <td><%= number_with_delimiter(snap.headcount, delimiter: ".") %></td>
+          <td><%= snap.academic_term_label || "—" %></td>
+          <td>
+            <% if snap.breakdown.any? %>
+              <%= snap.breakdown.map { |grade, count| "#{grade}: #{count}" }.join(", ") %>
+            <% else %>
+              —
+            <% end %>
+          </td>
+        </tr>
+      <% end %>
+    <% end %>
+  <% else %>
+    <p>Sin snapshots de headcount todavía.</p>
+  <% end %>
+</section>
+
+<section class="cp-section" aria-labelledby="cp-usage-h">
+  <h2 id="cp-usage-h">Uso (rollups diarios)</h2>
+  <%#
+    Read-only (S3a) — aggregated by ControlPlane::Usage::RollupJob from
+    usage_events. No domain emits real events yet (S3b); any rows here come
+    from synthetic/manual Ingest calls.
+  -%>
+  <% if @usage_rollups.any? %>
+    <%= render layout: "shared/table",
+          locals: { headers: [ "Addon", "Unidad", "Fecha", "Cantidad", "Eventos" ] } do %>
+      <% @usage_rollups.each do |rollup| %>
+        <tr>
+          <td><%= rollup.addon.name %></td>
+          <td><%= rollup.unit %></td>
+          <td><%= datetime(rollup.usage_date.to_time, format: :date) %></td>
+          <td><%= number_with_delimiter(rollup.total_quantity, delimiter: ".") %></td>
+          <td><%= number_with_delimiter(rollup.event_count, delimiter: ".") %></td>
+        </tr>
+      <% end %>
+    <% end %>
+  <% else %>
+    <p>Sin uso registrado todavía.</p>
+  <% end %>
+</section>
