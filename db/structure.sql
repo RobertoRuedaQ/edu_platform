@@ -510,6 +510,33 @@ ALTER TABLE ONLY public.installments FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: institution_entitlements; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.institution_entitlements (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    addon_id uuid NOT NULL,
+    subscription_id uuid,
+    status character varying DEFAULT 'active'::character varying NOT NULL,
+    valid_from date DEFAULT CURRENT_DATE NOT NULL,
+    valid_until date,
+    override_monthly_fee_cents bigint,
+    override_included_quota bigint,
+    override_unit_price_cents bigint,
+    override_currency character varying,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT institution_entitlements_override_currency_check CHECK (((override_currency IS NULL) OR (char_length((override_currency)::text) = 3))),
+    CONSTRAINT institution_entitlements_override_included_quota_check CHECK (((override_included_quota IS NULL) OR (override_included_quota >= 0))),
+    CONSTRAINT institution_entitlements_override_monthly_fee_cents_check CHECK (((override_monthly_fee_cents IS NULL) OR (override_monthly_fee_cents >= 0))),
+    CONSTRAINT institution_entitlements_override_unit_price_cents_check CHECK (((override_unit_price_cents IS NULL) OR (override_unit_price_cents >= 0))),
+    CONSTRAINT institution_entitlements_status_check CHECK (((status)::text = ANY ((ARRAY['active'::character varying, 'revoked'::character varying])::text[]))),
+    CONSTRAINT institution_entitlements_valid_until_check CHECK (((valid_until IS NULL) OR (valid_until > valid_from)))
+);
+
+
+--
 -- Name: institution_settings; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -999,6 +1026,31 @@ ALTER TABLE ONLY public.subjects FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: subscriptions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.subscriptions (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    plan_id uuid,
+    plan_key character varying NOT NULL,
+    base_price_per_student_cents bigint NOT NULL,
+    currency character varying DEFAULT 'COP'::character varying NOT NULL,
+    price_tiers_snapshot jsonb DEFAULT '[]'::jsonb NOT NULL,
+    status character varying DEFAULT 'active'::character varying NOT NULL,
+    starts_on date NOT NULL,
+    ends_on date,
+    signed_at timestamp(6) without time zone DEFAULT now() NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT subscriptions_base_price_per_student_cents_check CHECK ((base_price_per_student_cents >= 0)),
+    CONSTRAINT subscriptions_currency_check CHECK ((char_length((currency)::text) = 3)),
+    CONSTRAINT subscriptions_ends_on_check CHECK (((ends_on IS NULL) OR (ends_on > starts_on))),
+    CONSTRAINT subscriptions_status_check CHECK (((status)::text = ANY ((ARRAY['active'::character varying, 'ended'::character varying])::text[])))
+);
+
+
+--
 -- Name: teachers; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1258,6 +1310,14 @@ ALTER TABLE ONLY public.installments
 
 
 --
+-- Name: institution_entitlements institution_entitlements_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.institution_entitlements
+    ADD CONSTRAINT institution_entitlements_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: institution_settings institution_settings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1463,6 +1523,14 @@ ALTER TABLE ONLY public.students
 
 ALTER TABLE ONLY public.subjects
     ADD CONSTRAINT subjects_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: subscriptions subscriptions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.subscriptions
+    ADD CONSTRAINT subscriptions_pkey PRIMARY KEY (id);
 
 
 --
@@ -1798,6 +1866,13 @@ CREATE INDEX index_enrollments_on_subject_id ON public.enrollments USING btree (
 
 
 --
+-- Name: index_entitlements_one_active_per_institution_addon; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_entitlements_one_active_per_institution_addon ON public.institution_entitlements USING btree (institution_id, addon_id) WHERE ((status)::text = 'active'::text);
+
+
+--
 -- Name: index_faculties_on_institution_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1844,6 +1919,27 @@ CREATE INDEX index_guardians_on_institution_id ON public.guardians USING btree (
 --
 
 CREATE INDEX index_installments_on_institution_id ON public.installments USING btree (institution_id);
+
+
+--
+-- Name: index_institution_entitlements_on_addon_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_institution_entitlements_on_addon_id ON public.institution_entitlements USING btree (addon_id);
+
+
+--
+-- Name: index_institution_entitlements_on_institution_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_institution_entitlements_on_institution_id ON public.institution_entitlements USING btree (institution_id);
+
+
+--
+-- Name: index_institution_entitlements_on_subscription_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_institution_entitlements_on_subscription_id ON public.institution_entitlements USING btree (subscription_id);
 
 
 --
@@ -2225,6 +2321,27 @@ CREATE INDEX index_subjects_on_program_id ON public.subjects USING btree (progra
 
 
 --
+-- Name: index_subscriptions_on_institution_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_subscriptions_on_institution_id ON public.subscriptions USING btree (institution_id);
+
+
+--
+-- Name: index_subscriptions_on_plan_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_subscriptions_on_plan_id ON public.subscriptions USING btree (plan_id);
+
+
+--
+-- Name: index_subscriptions_one_active_per_institution; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_subscriptions_one_active_per_institution ON public.subscriptions USING btree (institution_id) WHERE ((status)::text = 'active'::text);
+
+
+--
 -- Name: index_teachers_on_faculty_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2560,6 +2677,14 @@ ALTER TABLE ONLY public.institution_users
 
 
 --
+-- Name: institution_entitlements fk_rails_54b75433ee; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.institution_entitlements
+    ADD CONSTRAINT fk_rails_54b75433ee FOREIGN KEY (subscription_id) REFERENCES public.subscriptions(id) ON DELETE SET NULL;
+
+
+--
 -- Name: email_otps fk_rails_57d2c47354; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2581,6 +2706,14 @@ ALTER TABLE ONLY public.control_plane_audit_events
 
 ALTER TABLE ONLY public.role_permissions
     ADD CONSTRAINT fk_rails_60126080bd FOREIGN KEY (role_id) REFERENCES public.roles(id) ON DELETE CASCADE;
+
+
+--
+-- Name: subscriptions fk_rails_63d3df128b; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.subscriptions
+    ADD CONSTRAINT fk_rails_63d3df128b FOREIGN KEY (plan_id) REFERENCES public.plans(id) ON DELETE SET NULL;
 
 
 --
@@ -2637,6 +2770,14 @@ ALTER TABLE ONLY public.sessions
 
 ALTER TABLE ONLY public.sessions
     ADD CONSTRAINT fk_rails_75eb72a884 FOREIGN KEY (current_institution_id) REFERENCES public.institutions(id);
+
+
+--
+-- Name: institution_entitlements fk_rails_789c0738df; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.institution_entitlements
+    ADD CONSTRAINT fk_rails_789c0738df FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
 
 
 --
@@ -2989,6 +3130,22 @@ ALTER TABLE ONLY public.role_assignments
 
 ALTER TABLE ONLY public.role_assignments
     ADD CONSTRAINT fk_rails_ebf84047d2 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: institution_entitlements fk_rails_ec2d329bc6; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.institution_entitlements
+    ADD CONSTRAINT fk_rails_ec2d329bc6 FOREIGN KEY (addon_id) REFERENCES public.addons(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: subscriptions fk_rails_ed5ff6b39a; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.subscriptions
+    ADD CONSTRAINT fk_rails_ed5ff6b39a FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE RESTRICT;
 
 
 --
@@ -3514,6 +3671,8 @@ CREATE POLICY teaching_assignments_tenant_isolation ON public.teaching_assignmen
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260709000002'),
+('20260709000001'),
 ('20260708000018'),
 ('20260708000017'),
 ('20260708000016'),

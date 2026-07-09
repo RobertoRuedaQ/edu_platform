@@ -1,36 +1,69 @@
 <% content_for :title, @institution.name %>
 <%#
-  Screen 2 (detail) — plan, enabled addons, estimated next invoice (stub).
-  @institution + @entitlements are stub. The two-gate model is UI-only here.
+  Screen 2 (detail) — hub for one institution's contract + entitlements.
+  Real data as of S2a. institution_id here is a global FK, never RLS scope.
 -%>
 
 <%= render "shared/page_header",
       title: @institution.name,
-      subtitle: "Institución ##{@institution.id} · datos stub" %>
+      subtitle: "#{@institution.code} · #{@institution.kind.humanize}" %>
 
-<section class="cp-section" aria-label="Resumen">
-  <%= render "control_plane/shared/institution_summary_card",
-        name: @institution.name, plan_name: @institution.plan_name,
-        plan_key: @institution.plan_key, subscription_status: @institution.subscription_status,
-        students_count: @institution.students_count,
-        enabled_addon_names: @institution.enabled_addon_names,
-        next_invoice_estimate: @institution.next_invoice_estimate,
-        currency: @institution.currency %>
+<section class="cp-section" aria-labelledby="cp-sub-h">
+  <h2 id="cp-sub-h">Contrato / suscripción</h2>
+
+  <% if @active_subscription %>
+    <% sub = @active_subscription %>
+    <%= render "shared/detail_list", items: {
+          "Plan"              => render("control_plane/shared/plan_badge", name: sub.plan_key.humanize, plan_key: sub.plan_key),
+          "Estado"            => render("control_plane/shared/subscription_status_badge", status: sub.status),
+          "Tarifa base"       => "#{money(sub.base_price_per_student, currency: sub.currency)} por alumno",
+          "Tiers congelados"  => "#{sub.price_tiers_snapshot.size} tiers (snapshot al firmar, no cambia con el plan vivo)",
+          "Vigente desde"     => datetime(sub.starts_on.to_time, format: :date),
+          "Firmada"           => datetime(sub.signed_at, format: :date)
+        } %>
+    <%= button_to "Terminar suscripción",
+          terminate_control_plane_institution_subscription_path(@institution, sub), method: :patch,
+          class: "btn btn--secondary",
+          data: { turbo_confirm: "¿Terminar la suscripción vigente? Podrás firmar una nueva después." } %>
+  <% else %>
+    <%= render "shared/alert", variant: :info, message: "Esta institución no tiene una suscripción activa." %>
+    <%= ui_button "Firmar suscripción", href: new_control_plane_institution_subscription_path(@institution), variant: :primary %>
+  <% end %>
+
+  <% if @subscription_history.any? %>
+    <h3>Historial</h3>
+    <%= render layout: "shared/table",
+          locals: { headers: [ "Plan", "Desde", "Hasta", "Firmada" ] } do %>
+      <% @subscription_history.each do |sub| %>
+        <tr>
+          <td><%= link_to sub.plan_key.humanize, control_plane_institution_subscription_path(@institution, sub) %></td>
+          <td><%= datetime(sub.starts_on.to_time, format: :date) %></td>
+          <td><%= sub.ends_on ? datetime(sub.ends_on.to_time, format: :date) : "—" %></td>
+          <td><%= datetime(sub.signed_at, format: :date) %></td>
+        </tr>
+      <% end %>
+    <% end %>
+  <% end %>
 </section>
 
 <section class="cp-section" aria-labelledby="cp-ent-h">
-  <h2 id="cp-ent-h">Entitlements</h2>
+  <h2 id="cp-ent-h">Addons habilitados</h2>
   <p>
-    <%= link_to "Abrir editor de entitlements",
-          control_plane_entitlements_path(institution_id: @institution.id) %>
+    <%= link_to "Abrir editor de entitlements", control_plane_entitlements_path(institution_id: @institution.id) %>
   </p>
-  <div class="cp-stack">
-    <% @entitlements.each do |ent| %>
-      <%= render "control_plane/shared/entitlement_toggle_row",
-            addon_name: ent.addon_name, enabled: ent.enabled?,
-            valid_from: ent.valid_from, valid_until: ent.valid_until,
-            override_fee: ent.override_fee, override_quota: ent.override_quota,
-            currency: ent.currency %>
-    <% end %>
-  </div>
+
+  <% if @entitlements.any? %>
+    <div class="cp-stack">
+      <% @entitlements.each do |ent| %>
+        <%= render "control_plane/shared/entitlement_toggle_row",
+              addon_name: ent.addon.name, enabled: ent.active?,
+              valid_from: ent.valid_from, valid_until: ent.valid_until,
+              override_fee: ent.override_monthly_fee_cents && ent.override_monthly_fee_cents / 100.0,
+              override_quota: ent.override_included_quota,
+              currency: ent.override_currency || ent.addon.currency %>
+      <% end %>
+    </div>
+  <% else %>
+    <p>Sin addons habilitados todavía.</p>
+  <% end %>
 </section>

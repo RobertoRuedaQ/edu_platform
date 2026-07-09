@@ -65,6 +65,33 @@ class ControlPlane::AddonsTest < ActionDispatch::IntegrationTest
     assert ControlPlane::AuditEvent.exists?(action: "addon.reactivated", target_id: addon.id)
   end
 
+  test "retiring an addon with an active entitlement is blocked (F10-bis)" do
+    addon = ControlPlane::Addon.create!(key: "counseling", name: "Consejería", currency: "COP")
+    institution = Core::Institution.create!(name: "Colegio Dependiente", slug: "colegio-dependiente",
+      code: "DEP-1", kind: "school")
+    ControlPlane::Entitlement.create!(institution: institution, addon: addon, valid_from: Date.current)
+
+    patch retire_control_plane_addon_path(addon)
+
+    assert_equal "active", addon.reload.status
+    assert_not ControlPlane::AuditEvent.exists?(action: "addon.retired", target_id: addon.id)
+    follow_redirect!
+    assert_match institution.name, response.body
+  end
+
+  test "revoking the dependent entitlement unblocks the retirement" do
+    addon = ControlPlane::Addon.create!(key: "counseling", name: "Consejería", currency: "COP")
+    institution = Core::Institution.create!(name: "Colegio Dependiente 2", slug: "colegio-dependiente-2",
+      code: "DEP-2", kind: "school")
+    entitlement = ControlPlane::Entitlement.create!(institution: institution, addon: addon, valid_from: Date.current)
+    entitlement.revoke!
+
+    patch retire_control_plane_addon_path(addon)
+
+    assert_equal "retired", addon.reload.status
+    assert ControlPlane::AuditEvent.exists?(action: "addon.retired", target_id: addon.id)
+  end
+
   test "a tenant Core::User cannot reach the addon catalog" do
     delete control_plane_session_path # sign the platform admin out first
 

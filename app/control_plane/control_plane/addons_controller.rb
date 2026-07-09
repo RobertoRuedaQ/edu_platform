@@ -44,6 +44,13 @@ module ControlPlane
     end
 
     def retire
+      dependent = @addon.entitlements.active.includes(:institution)
+      if dependent.exists?
+        names = dependent.map { |e| e.institution.name }.uniq.join(", ")
+        return redirect_to control_plane_addons_path,
+          alert: "No se puede retirar: instituciones con entitlement activo (#{names})."
+      end
+
       @addon.retire!
       ControlPlane::Audit.log(action: "addon.retired", platform_admin: current_platform_admin,
         target: @addon, ip_address: request.remote_ip)

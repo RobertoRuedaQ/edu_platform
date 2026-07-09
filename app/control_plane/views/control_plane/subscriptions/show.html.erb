@@ -1,0 +1,45 @@
+<% content_for :title, "Suscripción · #{@institution.name}" %>
+<%#
+  The snapshot below is frozen at signing time (F15) — it will NOT reflect
+  later edits to the live ControlPlane::Plan.
+-%>
+
+<%= render "shared/page_header", title: @subscription.plan_key.humanize, subtitle: @institution.name %>
+
+<section class="cp-section" aria-label="Detalle de la suscripción">
+  <%= render "shared/detail_list", items: {
+        "Estado"           => render("control_plane/shared/subscription_status_badge", status: @subscription.status),
+        "Tarifa base"      => "#{money(@subscription.base_price_per_student, currency: @subscription.currency)} por alumno",
+        "Vigente desde"    => datetime(@subscription.starts_on.to_time, format: :date),
+        "Terminada"        => @subscription.ends_on ? datetime(@subscription.ends_on.to_time, format: :date) : "—",
+        "Firmada"          => datetime(@subscription.signed_at, format: :date)
+      } %>
+
+  <% if @subscription.active? %>
+    <%= button_to "Terminar suscripción",
+          terminate_control_plane_institution_subscription_path(@institution, @subscription), method: :patch,
+          class: "btn btn--secondary",
+          data: { turbo_confirm: "¿Terminar esta suscripción?" } %>
+  <% end %>
+</section>
+
+<section class="cp-section" aria-labelledby="cp-snapshot-h">
+  <h2 id="cp-snapshot-h">Tiers congelados al firmar</h2>
+
+  <% if @subscription.price_tiers_snapshot.any? %>
+    <%= render layout: "shared/table",
+          locals: { headers: [ "Desde", "Hasta", "Por alumno" ] } do %>
+      <% @subscription.price_tiers_snapshot.each do |tier| %>
+        <tr>
+          <td><%= tier["min_students"] %></td>
+          <td><%= tier["max_students"] || "sin límite" %></td>
+          <td><%= money(tier["price_per_student_cents"] / 100.0, currency: @subscription.currency) %></td>
+        </tr>
+      <% end %>
+    <% end %>
+  <% else %>
+    <p>Sin tiers — aplica la tarifa base a cualquier headcount.</p>
+  <% end %>
+</section>
+
+<p><%= link_to "Volver a la institución", control_plane_institution_path(@institution) %></p>

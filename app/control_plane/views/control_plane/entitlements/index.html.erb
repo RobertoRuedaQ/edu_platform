@@ -1,13 +1,15 @@
 <% content_for :title, "Entitlements" %>
 <%#
   Screen 4 — entitlement editor for one institution. Gate #1 of two serial
-  gates (entitlement, then RBAC in identity_access). Toggles are VISUAL only,
-  no submit this phase. @institution + @entitlements are stub.
+  gates (entitlement, then RBAC in identity_access). Real CRUD as of S2a —
+  was toggle-visual-only stub before.
 -%>
 
 <%= render "shared/page_header",
       title: "Entitlements · #{@institution.name}",
-      subtitle: "Compuerta 1 de 2 (entitlement → RBAC) · sin submit · datos stub" %>
+      subtitle: "Compuerta 1 de 2 (entitlement → RBAC)",
+      actions: (ui_button "Conceder addon", href: new_control_plane_entitlement_path(institution_id: @institution.id),
+                  variant: :primary) %>
 
 <%= render "shared/alert", variant: :info,
       title: "Doble compuerta",
@@ -15,13 +17,33 @@
 
 <section class="cp-section" aria-labelledby="cp-ent-editor-h">
   <h2 id="cp-ent-editor-h">Addons de la institución</h2>
-  <div class="cp-stack">
-    <% @entitlements.each do |ent| %>
-      <%= render "control_plane/shared/entitlement_toggle_row",
-            addon_name: ent.addon_name, enabled: ent.enabled?,
-            valid_from: ent.valid_from, valid_until: ent.valid_until,
-            override_fee: ent.override_fee, override_quota: ent.override_quota,
-            currency: ent.currency %>
-    <% end %>
-  </div>
+
+  <% if @entitlements.any? %>
+    <div class="cp-stack">
+      <% @entitlements.each do |ent| %>
+        <div class="ent-row-wrap">
+          <%= render "control_plane/shared/entitlement_toggle_row",
+                addon_name: ent.addon.name, enabled: ent.active?,
+                valid_from: ent.valid_from, valid_until: ent.valid_until,
+                override_fee: ent.override_monthly_fee_cents && ent.override_monthly_fee_cents / 100.0,
+                override_quota: ent.override_included_quota,
+                currency: ent.override_currency || ent.addon.currency %>
+          <div class="ent-row-wrap__actions">
+            <%= link_to "Editar", edit_control_plane_entitlement_path(ent), class: "btn btn--ghost btn--sm" %>
+            <% if ent.active? %>
+              <%= button_to "Revocar", revoke_control_plane_entitlement_path(ent), method: :patch,
+                    class: "btn btn--secondary btn--sm" %>
+            <% else %>
+              <%= button_to "Reactivar", reactivate_control_plane_entitlement_path(ent), method: :patch,
+                    class: "btn btn--secondary btn--sm" %>
+            <% end %>
+          </div>
+        </div>
+      <% end %>
+    </div>
+  <% else %>
+    <p>Sin addons concedidos todavía.</p>
+  <% end %>
 </section>
+
+<p><%= link_to "Volver a la institución", control_plane_institution_path(@institution) %></p>

@@ -7,6 +7,9 @@ module ControlPlane
   class Addon < ApplicationRecord
     self.table_name = "addons"
 
+    has_many :entitlements, class_name: "ControlPlane::Entitlement",
+      foreign_key: :addon_id, inverse_of: :addon
+
     normalizes :key, with: ->(key) { key.to_s.strip.downcase }
 
     validates :key, presence: true, uniqueness: true,

@@ -194,14 +194,30 @@ Rails.application.routes.draw do
       end
     end
 
-    resources :institutions, only: %i[index show]
+    resources :institutions, only: %i[index show] do
+      # S2a: subscriptions nested under their institution, same shape as
+      # price_tiers nested under plans below. No index/edit — "history" is
+      # shown on the institution's own show page; the snapshot is immutable.
+      resources :subscriptions, only: %i[new create show] do
+        member do
+          patch :terminate
+        end
+      end
+    end
     resources :addons, except: %i[destroy] do
       member do
         patch :retire
         patch :reactivate
       end
     end
-    resources :entitlements, only: %i[index]   # editor per institution (?institution_id=)
+    # Editor per institution (?institution_id= on index/new/create). Real CRUD
+    # as of S2a — was index-only stub before.
+    resources :entitlements, only: %i[index new create edit update] do
+      member do
+        patch :revoke
+        patch :reactivate
+      end
+    end
     resources :plans, except: %i[destroy] do
       member do
         patch :retire

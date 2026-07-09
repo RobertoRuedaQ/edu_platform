@@ -382,6 +382,22 @@
 
   .ent-row__override--none { color: var(--color-text-subtle); }
 
+  /* --- entitlements/index editor rows (S2a: real CRUD around the row) ----- */
+  .ent-row-wrap {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    flex-wrap: wrap;
+  }
+
+  .ent-row-wrap .ent-row { flex: 1 1 auto; }
+
+  .ent-row-wrap__actions {
+    display: flex;
+    gap: var(--space-2);
+    flex: none;
+  }
+
   /* --- plans/show tier rows (S1: real CRUD, no _partial yet) --------------- */
   .tier-row {
     display: flex;

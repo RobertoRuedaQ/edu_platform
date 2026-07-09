@@ -1,0 +1,30 @@
+<% content_for :title, "Editar entitlement · #{@entitlement.addon.name}" %>
+
+<%= render "shared/page_header", title: "Editar entitlement",
+      subtitle: "#{@entitlement.institution.name} · #{@entitlement.addon.name}" %>
+
+<%= form_with model: @entitlement, url: control_plane_entitlement_path(@entitlement), scope: :entitlement do %>
+  <% if @entitlement.errors.any? %>
+    <%= render "shared/alert", variant: :danger, message: @entitlement.errors.full_messages.to_sentence %>
+  <% end %>
+
+  <%= render "shared/field", label: "Vigente desde", name: "entitlement[valid_from]",
+        type: "date", value: @entitlement.valid_from, required: true %>
+  <%= render "shared/field", label: "Vigente hasta", name: "entitlement[valid_until]",
+        type: "date", value: @entitlement.valid_until, hint: "Vacío = sin fecha de fin." %>
+
+  <h3>Override negociado (opcional)</h3>
+  <p class="field__hint">Se almacena para facturación (S4); no afecta si el addon está habilitado hoy.</p>
+  <%= render "shared/field", label: "Tarifa mensual (centavos)", name: "entitlement[override_monthly_fee_cents]",
+        type: "number", value: @entitlement.override_monthly_fee_cents %>
+  <%= render "shared/field", label: "Cupo incluido", name: "entitlement[override_included_quota]",
+        type: "number", value: @entitlement.override_included_quota %>
+  <%= render "shared/field", label: "Precio por unidad de overage (centavos)",
+        name: "entitlement[override_unit_price_cents]", type: "number", value: @entitlement.override_unit_price_cents %>
+  <%= render "shared/field", label: "Moneda del override", name: "entitlement[override_currency]",
+        value: @entitlement.override_currency, maxlength: 3, hint: "Código ISO de 3 letras. Vacío = usa la del addon." %>
+
+  <%= ui_button "Guardar", type: "submit", variant: :primary %>
+<% end %>
+
+<p><%= link_to "Volver al editor", control_plane_entitlements_path(institution_id: @entitlement.institution_id) %></p>

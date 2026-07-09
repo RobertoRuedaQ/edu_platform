@@ -7,10 +7,15 @@ class TenantRlsGuardTest < ActiveSupport::TestCase
   # Tables that legitimately have NO tenant policy:
   #  - institutions / users / sessions are GLOBAL (institutions/users carry no
   #    institution_id; sessions uses current_institution_id, not institution_id)
+  #  - subscriptions / institution_entitlements are CONTROL PLANE tables
+  #    (app/control_plane/*, S2a): institution_id there is a plain FK to the
+  #    global institutions table, never an RLS scope — the control plane is
+  #    cross-tenant by design and is served by edu_app_runtime with no GUC set.
   #  - Rails bookkeeping tables
   #  - Solid infra tables live in separate DBs and are never tenant-scoped
   GLOBAL_ALLOWLIST = %w[
     institutions users sessions
+    subscriptions institution_entitlements
     schema_migrations ar_internal_metadata
   ].freeze
   SOLID_PREFIXES = %w[solid_queue_ solid_cache_ solid_cable_].freeze
