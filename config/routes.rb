@@ -203,6 +203,16 @@ Rails.application.routes.draw do
           patch :terminate
         end
       end
+      # S4: per-institution invoice workflow. No index here — the flat,
+      # cross-institution overview lives at the top-level invoices#index
+      # below. No edit — a draft is regenerated (recut), never hand-edited.
+      resources :invoices, only: %i[new create show] do
+        member do
+          patch :finalize
+          patch :void
+          patch :recut
+        end
+      end
     end
     resources :addons, except: %i[destroy] do
       member do

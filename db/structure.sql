@@ -612,6 +612,52 @@ ALTER TABLE ONLY public.invitations FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: invoice_line_items; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.invoice_line_items (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    invoice_id uuid NOT NULL,
+    addon_id uuid,
+    kind text NOT NULL,
+    description text NOT NULL,
+    quantity numeric NOT NULL,
+    unit_price_cents bigint NOT NULL,
+    amount_cents bigint NOT NULL,
+    source_ref jsonb DEFAULT '{}'::jsonb NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT invoice_line_items_addon_coherence_check CHECK ((((kind = 'base_seats'::text) AND (addon_id IS NULL)) OR ((kind = ANY (ARRAY['addon_fee'::text, 'usage_overage'::text])) AND (addon_id IS NOT NULL)))),
+    CONSTRAINT invoice_line_items_kind_check CHECK ((kind = ANY (ARRAY['base_seats'::text, 'addon_fee'::text, 'usage_overage'::text]))),
+    CONSTRAINT invoice_line_items_quantity_check CHECK ((quantity >= (0)::numeric)),
+    CONSTRAINT invoice_line_items_unit_price_cents_check CHECK ((unit_price_cents >= 0))
+);
+
+
+--
+-- Name: invoices; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.invoices (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    subscription_id uuid,
+    period_start date NOT NULL,
+    period_end date NOT NULL,
+    currency text NOT NULL,
+    status text DEFAULT 'draft'::text NOT NULL,
+    subtotal_cents bigint DEFAULT 0 NOT NULL,
+    notes text,
+    finalized_at timestamp with time zone,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT invoices_currency_check CHECK ((char_length(currency) = 3)),
+    CONSTRAINT invoices_period_check CHECK ((period_end >= period_start)),
+    CONSTRAINT invoices_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'finalized'::text, 'void'::text]))),
+    CONSTRAINT invoices_subtotal_cents_check CHECK ((subtotal_cents >= 0))
+);
+
+
+--
 -- Name: payment_plans; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1406,6 +1452,22 @@ ALTER TABLE ONLY public.invitations
 
 
 --
+-- Name: invoice_line_items invoice_line_items_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.invoice_line_items
+    ADD CONSTRAINT invoice_line_items_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: invoices invoices_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.invoices
+    ADD CONSTRAINT invoices_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: payment_plans payment_plans_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2076,6 +2138,41 @@ CREATE UNIQUE INDEX index_invitations_on_token_digest ON public.invitations USIN
 --
 
 CREATE UNIQUE INDEX index_invitations_one_live_per_user ON public.invitations USING btree (institution_id, user_id) WHERE ((status)::text = 'sent'::text);
+
+
+--
+-- Name: index_invoice_line_items_on_addon_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_invoice_line_items_on_addon_id ON public.invoice_line_items USING btree (addon_id);
+
+
+--
+-- Name: index_invoice_line_items_on_invoice_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_invoice_line_items_on_invoice_id ON public.invoice_line_items USING btree (invoice_id);
+
+
+--
+-- Name: index_invoices_on_institution_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_invoices_on_institution_id ON public.invoices USING btree (institution_id);
+
+
+--
+-- Name: index_invoices_on_subscription_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_invoices_on_subscription_id ON public.invoices USING btree (subscription_id);
+
+
+--
+-- Name: index_invoices_one_per_institution_and_period; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_invoices_one_per_institution_and_period ON public.invoices USING btree (institution_id, period_start, period_end) WHERE (status <> 'void'::text);
 
 
 --
@@ -2804,6 +2901,14 @@ ALTER TABLE ONLY public.role_permissions
 
 
 --
+-- Name: invoices fk_rails_457c900f6e; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.invoices
+    ADD CONSTRAINT fk_rails_457c900f6e FOREIGN KEY (subscription_id) REFERENCES public.subscriptions(id) ON DELETE SET NULL;
+
+
+--
 -- Name: institution_users fk_rails_4d086ab524; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2841,6 +2946,14 @@ ALTER TABLE ONLY public.institution_entitlements
 
 ALTER TABLE ONLY public.email_otps
     ADD CONSTRAINT fk_rails_57d2c47354 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: invoice_line_items fk_rails_5c7d14200a; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.invoice_line_items
+    ADD CONSTRAINT fk_rails_5c7d14200a FOREIGN KEY (addon_id) REFERENCES public.addons(id) ON DELETE RESTRICT;
 
 
 --
@@ -2969,6 +3082,14 @@ ALTER TABLE ONLY public.invitations
 
 ALTER TABLE ONLY public.counseling_cases
     ADD CONSTRAINT fk_rails_801b5a774d FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: invoice_line_items fk_rails_80427eb9d3; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.invoice_line_items
+    ADD CONSTRAINT fk_rails_80427eb9d3 FOREIGN KEY (invoice_id) REFERENCES public.invoices(id) ON DELETE CASCADE;
 
 
 --
@@ -3377,6 +3498,14 @@ ALTER TABLE ONLY public.role_assignments
 
 ALTER TABLE ONLY public.subjects
     ADD CONSTRAINT fk_rails_fba2424889 FOREIGN KEY (institution_id) REFERENCES public.institutions(id);
+
+
+--
+-- Name: invoices fk_rails_fd45bf1f0d; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.invoices
+    ADD CONSTRAINT fk_rails_fd45bf1f0d FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE RESTRICT;
 
 
 --
@@ -3854,6 +3983,8 @@ CREATE POLICY teaching_assignments_tenant_isolation ON public.teaching_assignmen
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260710120002'),
+('20260710120001'),
 ('20260710000003'),
 ('20260710000002'),
 ('20260710000001'),

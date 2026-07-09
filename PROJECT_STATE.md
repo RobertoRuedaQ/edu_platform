@@ -16,10 +16,10 @@
 
 | Campo | Valor |
 |---|---|
-| **Versión del documento** | `v1.4.0` |
+| **Versión del documento** | `v1.5.0` |
 | **Fecha** | 2026-07-10 |
-| **Estado del proyecto** | Identidad real ya funciona: login nativo + MFA por correo, registro por invitación, y gestión de personas (crear/invitar/suspender) corriendo contra datos reales. El plano de control tiene auth real de `platform_admins`, catálogo `addons`/`plans`/`plan_price_tiers` con CRUD (S1), `subscriptions`/`institution_entitlements` con CRUD real y snapshot de tarifa inmutable (S2a), y la primera compuerta de acceso (`entitled?`) real de punta a punta en el lado del inquilino (S2b) — la segunda compuerta (RBAC) **sigue** sobre `Authorization::StubResolver` (P1 sin tocar). **Nuevo en esta versión (S3a):** el headcount de alumnos se **empuja** desde el inquilino (bajo su propio GUC) hacia el plano de control, y existe un **pipe genérico de metering** (ingestión idempotente + rollup diario idempotente) probado con eventos sintéticos — **ningún dominio emite eventos reales todavía** (S3b) y la unidad de metering por dominio (**M1**) sigue sin cerrar. Tests verdes (233 runs, 0 fallos, 1 skip preexistente). Roster import y las vistas propias de estudiante/acudiente/docente siguen pendientes; `invoices`/corte de periodo del plano de control siguen en stub (S4). |
-| **Alcance de esta versión** | Cierra **S3a** del plano de control (§12.5.2): `student_headcount_snapshots` + `Core::Headcount::Snapshotter`/`SnapshotJob` (el primer job real que fija y libera el GUC del tenant fuera de un request — ver §9.7-7), y `usage_events`/`usage_daily_rollups` + `ControlPlane::Usage::Ingest`/`RollupJob` (pipe agnóstico de dominio, sin GUC). Corrige además un bug real de fuga de GUC encontrado al testear `SnapshotJob` — ver Changelog. **S3b** (emisión real por dominio, requiere cerrar M1) y **S4** (invoices) quedan pendientes. |
+| **Estado del proyecto** | Identidad real ya funciona: login nativo + MFA por correo, registro por invitación, y gestión de personas (crear/invitar/suspender) corriendo contra datos reales. El plano de control tiene auth real de `platform_admins`, catálogo `addons`/`plans`/`plan_price_tiers` con CRUD (S1), `subscriptions`/`institution_entitlements` con CRUD real y snapshot de tarifa inmutable (S2a), la primera compuerta de acceso (`entitled?`) real de punta a punta en el lado del inquilino (S2b) — la segunda compuerta (RBAC) **sigue** sobre `Authorization::StubResolver` (P1 sin tocar) — y el headcount de alumnos + un pipe genérico de metering, probado con eventos sintéticos (S3a). **Nuevo en esta versión (S4):** el track de billing del plano de control queda **completo**: `invoices`/`invoice_line_items` + el corte de periodo (`ControlPlane::Billing::PeriodCut`) ensamblan una **factura borrador** real (base por alumno + fee por addon + overage por uso), aplicando por fin los overrides negociados (S2a) y el snapshot de tarifa congelado (S2a) — nunca el catálogo vivo. **Ningún dominio emite eventos de uso reales todavía** (S3b, requiere cerrar **M1** primero) y **no hay riel de pago** (finalizar ≠ cobrar). Tests verdes (272 runs, 0 fallos, 1 skip preexistente). Roster import y las vistas propias de estudiante/acudiente/docente siguen pendientes. |
+| **Alcance de esta versión** | Cierra **S4** del plano de control (§12.5.2): dos tablas globales (`invoices`, `invoice_line_items`), `ControlPlane::Billing::PriceResolver` (resolución plana de tiers), `ControlPlane::Billing::PeriodCut`/`PeriodCutJob` (corte idempotente, sin GUC), ciclo de vida draft/finalized/void auditado, vistas de facturación (overview cross-institución + hub por institución), y seed sintético de demostración. Cierra el track completo de billing del plano de control iniciado en S1 (S1→S2a→S2b→S3a→S4); quedan pendientes S3b (emisión real por dominio, requiere M1) y el schedule recurrente del corte. |
 
 ### Convención de versionado de ESTE documento
 
@@ -287,12 +287,12 @@ permiso, (5) auto-registro de navegación en archivo propio del dominio (no edit
 > **No es un dominio.** Vive en `app/control_plane/` (fuera de `app/domains/*`), cross-tenant, por
 > encima de RLS. **Billing de plataforma ≠ dominio `finance`**: aquí la plataforma cobra al colegio;
 > en `finance` el colegio cobra a los acudientes. **Corrección de esta versión:** el auth de
-> `platform_admins` (S0), el catálogo `addons`/`plans` (S1) y ahora `subscriptions`/
-> `institution_entitlements` con CRUD real (S2a, esta versión) — la nota anterior ("sigue en fase de
-> componentes/vistas stub") quedó desactualizada frente al repo para todo el track S0–S2. Metering e
-> `invoices` (S3–S4) siguen en fase stub (ver §12.5). Servido por el rol runtime normal
-> (`edu_app_runtime`), **sin `BYPASSRLS`** — estas tablas son globales y no necesitan cruzar tenants
-> para leerse.
+> `platform_admins` (S0), el catálogo `addons`/`plans` (S1), `subscriptions`/`institution_entitlements`
+> (S2a), el pipe de metering (S3a), y ahora `invoices`/`invoice_line_items` con corte real (S4, esta
+> versión) — **el track de billing del plano de control queda completo** salvo emisión real de uso
+> por dominio (S3b, requiere M1) y el riel de pago (fuera de alcance de v1: finalizar ≠ cobrar).
+> Servido por el rol runtime normal (`edu_app_runtime`), **sin `BYPASSRLS`** — estas tablas son
+> globales y no necesitan cruzar tenants para leerse.
 
 ### 7.1 El gate de entitlements (dos compuertas en serie)
 
@@ -360,14 +360,38 @@ archivo de `cafeteria`/`transportation`/`schedules`/`student_support`/`counselin
   **idempotente** (recomputa completo, nunca incrementa) — el corte de periodo de S4 sumará estos
   rollups, nunca eventos crudos. **Sin emisión real por ningún dominio todavía (S3b)** — probado solo
   con llamadas sintéticas a `Ingest`. `unit` es un string opaco; **M1 sigue sin cerrar**.
-- **`invoices` / `invoice_line_items`** 🔴 pendiente (S4) — cada línea con `kind` ∈ (`base_seats`, `addon_fee`, `usage_overage`) + FK a su origen.
+- **`invoices` / `invoice_line_items`** ✅ **migrado, con corte real (S4)** — cada línea con `kind` ∈
+  (`base_seats`, `addon_fee`, `usage_overage`) + FK a su origen (`addon_id`, nulo solo para
+  `base_seats`). `ControlPlane::Billing::PeriodCut` ensambla la factura **borrador** (`draft`) para
+  un `(institution, period_start, period_end)`: `base_seats` = headcount del snapshot más reciente
+  ≤ `period_end` (**limitación conocida heredada de S3a, no arreglada en S4**: ese headcount cuenta
+  `students` activos, no matrícula en el término activo — ver §13) × precio resuelto por
+  `ControlPlane::Billing::PriceResolver` (tier **plano** —
+  `price_tiers_snapshot` de la subscription, **nunca** el catálogo vivo); `addon_fee` = una línea por
+  cada entitlement activo que solape el periodo; `usage_overage` = `usage_daily_rollups` sumados del
+  periodo menos cupo, si > 0. **Aquí los overrides negociados de S2a (`override_monthly_fee_cents`,
+  `override_included_quota`, `override_unit_price_cents`) se aplican por primera vez** (`coalesce`
+  sobre el catálogo) — hasta S4 solo se almacenaban. Idempotente: re-cortar un `draft` reemplaza sus
+  líneas (`delete_all`, que **bypasea** el `readonly?` de `InvoiceLineItem` — un borrado masivo
+  deliberado no es lo mismo que editar una línea); re-cortar una `finalized` se rechaza. Sin
+  subscription activa que solape el periodo → rechazo total (no se factura sin contrato); sin
+  snapshot de headcount → borrador sin línea `base_seats` + flag en `notes`. Ciclo de vida
+  `draft`/`finalized`/`void`: `finalize!` congela `subtotal_cents` y `finalized_at`, auditado con el
+  `platform_admin` actuante; **finalizar ≠ cobrar**, no hay riel de pago en v1. **Sin GUC** (tablas
+  globales) — el corte nunca fija `app.current_institution_id`.
 - **`platform_admins`** ✅ **migrado, con auth nativa + MFA por correo (S0, ya real desde antes de este documento)** — super-admins de plataforma aparte de `Core::User`, no un flag. El MFA propio (`ControlPlane::Otp::*`) se construyó independiente de `IdentityAccess::Otp::*` en vez de reutilizarlo — no hubo que adaptar la firma genérica, se duplicó el ~concern~ delgado.
 
 ### 7.3 Modelo de cobro: híbrido
 
-Tres piezas ortogonales: **base por alumnos** + **fee por addon** + **overage por uso**. El **corte
-de periodo** es un job periódico en Solid Queue que produce una **factura borrador** para revisión
-(nunca auto-emitir).
+**Implementado desde S4 (esta versión).** Tres piezas ortogonales: **base por alumnos**
+(`base_seats`) + **fee por addon** (`addon_fee`) + **overage por uso** (`usage_overage`). El **corte
+de periodo** (`ControlPlane::Billing::PeriodCut`, invocable manual/rake vía
+`ControlPlane::Billing::PeriodCutJob` — schedule recurrente diferido) produce una **factura
+borrador** (`draft`) para revisión humana — **nunca auto-emitida**. Finalizar (`Invoice#finalize!`)
+es una acción manual y auditada de `platform_admin`; **finalizar ≠ cobrar** — no existe riel de pago
+en v1. Las líneas de `usage_overage` dan cero/ausentes hoy porque `usage_daily_rollups` está vacío
+hasta que S3b cablee emisión real por dominio — la maquinaria del corte ya está completa y probada
+con rollups sintéticos, no hizo falta esperar a S3b.
 
 ---
 
@@ -542,12 +566,13 @@ buscador, tal como pide el prompt original.
 | 4 | **Organización de dominios** | `dominios_edu_platform.md`, prompt de scaffold, `notifications` → `communication` | ✅ Ejecutado (scaffold + componentes) |
 | 5 | **identity/finance/counseling** | Prompt combinado con modelos (migraciones + AR con guardrails) | ✅ Ejecutado (esquema + componentes) |
 | 6 | **Vistas + roles** | Mapa maestro, Fase 0 (shell por rol + `can?`/`authorize!` + dashboard + portales + 403), prompts por dominio | ✅ Fase 0 + dominios ejecutados (todavía sobre `StubResolver`, ver §11) |
-| 7 | **Plano de control + billing** | Estructura `app/control_plane/`, auth de `platform_admins` + MFA (S0), catálogo `addons`/`plans`/`plan_price_tiers` con CRUD real (S1), `subscriptions`/`institution_entitlements` con CRUD real (S2a), gate de entitlement wireado en el inquilino (S2b), headcount snapshots + pipe genérico de metering (S3a) | 🟡 **Parcialmente ejecutado.** Real: S0, S1, S2 completo (S2a+S2b), S3a. Pendiente: emisión de eventos por dominio (S3b, requiere M1), `invoices` (S4). |
+| 7 | **Plano de control + billing** | Estructura `app/control_plane/`, auth de `platform_admins` + MFA (S0), catálogo `addons`/`plans`/`plan_price_tiers` con CRUD real (S1), `subscriptions`/`institution_entitlements` con CRUD real (S2a), gate de entitlement wireado en el inquilino (S2b), headcount snapshots + pipe genérico de metering (S3a), `invoices`/`invoice_line_items` con corte de periodo real (S4) | 🟡 **Track de billing completo (S0→S4).** Pendiente: emisión de eventos por dominio (S3b, requiere M1) y riel de pago (fuera de alcance de v1). |
 | 8 | **Autenticación / onboarding** | Registro por invitación, login+MFA, roster import, vinculación, auditoría (externos e internos) | 🟡 **Parcialmente ejecutado.** Real: esquema, login+MFA, invitaciones, auditoría, gestión de personas, suspender/reactivar. Pendiente: roster import (CSV), `GuardianScope`, vistas de autoservicio de la persona, visores de auditoría/discrepancias. Ver §9.7 para el corte exacto. |
 | 9 | **Plano de control · S1 (catálogo)** | Migraciones `addons`/`plans`/`plan_price_tiers`, modelos con validaciones-espejo de los CHECK, CRUD auditado, seed idempotente, tests | ✅ Ejecutado — ver §7.2 y Changelog v1.2.0 |
 | 10 | **Plano de control · S2a (subscriptions + entitlements)** | Migraciones `subscriptions`/`institution_entitlements` (globales, sin RLS), modelos con snapshot inmutable y validaciones-espejo, CRUD auditado, predicado `ControlPlane::Entitlements::Check`, bloqueo de `retire!` con entitlements activos (F10-bis), tests | ✅ Ejecutado — ver §7.2 y Changelog v1.3.0 |
 | 11 | **Plano de control · S2b (gate en el inquilino)** | `Core::Institution#entitled?`, `Current.entitled_addon_keys`, concern único `Entitlement::Controller` (antes de `authorize!`), nav filtrada, página "módulo no habilitado", `Entitlement::Registry` + test de consistencia vs. `DOMAIN_KEYS` | ✅ Ejecutado — primer slice que toca `app/domains/*` de forma transversal (una sola pieza + nav central). Ver §7.1 y Changelog v1.3.0 |
 | 12 | **Plano de control · S3a (headcount + pipe de metering)** | Migraciones `student_headcount_snapshots`/`usage_events`/`usage_daily_rollups` (globales, sin RLS), `Core::Headcount::Snapshotter`/`SnapshotJob` (touch único en `core`, primer job real con GUC), `ControlPlane::Usage::Ingest`/`RollupJob` (pipe agnóstico de dominio, sin GUC), vistas read-only, tests | ✅ Ejecutado — cero cambios en dominios addon-gated; encontró y cerró un bug real de fuga de GUC en `ApplicationJob`. Ver §7.2, §9.7-7 y Changelog v1.4.0 |
+| 13 | **Plano de control · S4 (invoices + corte de periodo)** | Migraciones `invoices`/`invoice_line_items` (globales, sin RLS), `ControlPlane::Billing::PriceResolver` (tiers, puro), `ControlPlane::Billing::PeriodCut`/`PeriodCutJob` (corte idempotente, sin GUC, aplica overrides de S2a), ciclo de vida draft/finalized/void auditado, vistas (overview + hub), seed sintético, tests | ✅ Ejecutado — 100% control-plane, cero cambios en `app/domains/*`. Cierra el track de billing S0→S4. Ver §7.2/§7.3 y Changelog v1.5.0 |
 
 ---
 
@@ -589,36 +614,41 @@ buscador, tal como pide el prompt original.
    `RoleAssignment` sembrado recibe la persona stub genérica, no cero permisos. Al cerrar esto,
    **verificar que el orden entitlement→`authorize!` sigue intacto** (forward-note de S2b).
 4. **Vistas de negocio por dominio** que aún estén en stub → conectarlas a modelos reales, dominio por dominio (empezando por `core` y `teacher_management` con el caso de aceptación).
-5. **Migraciones del plano de control** — ✅ auth de `platform_admins` con MFA (S0), catálogo
-   `addons`/`plans`/`plan_price_tiers` con CRUD (S1), **S2 completo (S2a+S2b, v1.3.0)**:
-   `subscriptions`/`institution_entitlements` con CRUD real + snapshot inmutable + predicado
-   `ControlPlane::Entitlements::Check` + el gate wireado en el inquilino, y **S3a (v1.4.0)**:
-   `student_headcount_snapshots` (empujado bajo GUC por `Core::Headcount::SnapshotJob`) +
-   `usage_events`/`usage_daily_rollups` (pipe genérico idempotente, sin GUC). Pendiente:
+5. **Migraciones del plano de control** — ✅ **track de billing completo, S0→S4** (v1.5.0): auth de
+   `platform_admins` con MFA (S0), catálogo `addons`/`plans`/`plan_price_tiers` (S1),
+   `subscriptions`/`institution_entitlements` con snapshot inmutable + predicado
+   `ControlPlane::Entitlements::Check` + el gate wireado en el inquilino (S2a+S2b), headcount +
+   pipe genérico de metering (S3a), e `invoices`/`invoice_line_items` con corte de periodo real
+   (S4) — `ControlPlane::Billing::PeriodCut` aplica por fin los tiers congelados y los overrides
+   negociados, produce factura **borrador** auditada (draft/finalized/void), y suma
+   `usage_daily_rollups` (hoy vacíos hasta S3b, pero la maquinaria ya está completa y probada con
+   rollups sintéticos). Pendiente:
    1. **S3b — emisión real por dominio**: cablear cada dominio medido para llamar
       `ControlPlane::Usage::Ingest` en su evento facturable real. **Requiere cerrar M1 primero**
       (unidad de metering por dominio — `addons.unit` sigue **provisional**, S1 solo declaró valores
       de ejemplo como `check-ins`/`mensajes` para satisfacer el CHECK). Slice transversal, tocará
-      `app/domains/*` — mismo patrón de "una sola pieza" que S2b, no ramificar por dominio.
-   2. **S4 — `invoices`/`invoice_line_items`**: corte de periodo, aplicar los tiers de
-      `plan_price_tiers`, los overrides de `institution_entitlements`, y los rollups de uso (S3a los
-      agrega, no los factura) a un headcount real (S3a lo captura, no lo aplica).
-   3. **Hardening documentado, no construido en S1/S2a/S3a**: exclusion constraint `int4range`/
+      `app/domains/*` — mismo patrón de "una sola pieza" que S2b, no ramificar por dominio. Una vez
+      cerrado, las líneas `usage_overage` del corte dejarán de dar cero — no hace falta tocar
+      `PeriodCut` para eso, ya las suma correctamente.
+   2. **Riel de pago** — fuera de alcance de v1. Finalizar una factura la congela; no la cobra ni la
+      envía. Sin integración de pasarela de pago.
+   3. **Hardening documentado, no construido en S1/S2a/S3a/S4**: exclusion constraint `int4range`/
       `daterange` con GiST por `plan_id` (tiers) o por `(institution_id, addon_id)` (entitlements)
       para prohibir solapamiento a nivel de BD (hoy solo se valida en la app), al estilo
-      `WITHOUT OVERLAPS` de `schedules`.
+      `WITHOUT OVERLAPS` de `schedules`; prorrateo de `addon_fee`; edición manual de líneas de un
+      borrador; tabla `billing_periods` explícita (S4 pasó `period_start`/`period_end` como
+      argumentos sueltos, sin tabla propia).
    4. **RBAC intra-plano** (roles/scopes de `platform_admin`) — sigue sin construirse; cualquier
-      `platform_admin` autenticado administra el catálogo/subscriptions/entitlements/headcount/uso
-      completos.
+      `platform_admin` autenticado administra el catálogo/subscriptions/entitlements/headcount/uso/
+      facturas completos.
    5. **Provisioning de instituciones** (crear/editar una institución desde el control plane) — S2a
       solo las lista read-only.
-   6. **Schedule recurrente** de `Core::Headcount::SnapshotJob` y `ControlPlane::Usage::RollupJob` —
-      diferido (S3a los deja invocables manual/rake); mismo tratamiento que
-      `Invitations::Expirer`.
+   6. **Schedule recurrente** de `Core::Headcount::SnapshotJob`, `ControlPlane::Usage::RollupJob` y
+      `ControlPlane::Billing::PeriodCutJob` — diferido (todos quedan invocables manual/rake); mismo
+      tratamiento que `Invitations::Expirer`.
 6. **Metering real** por dominio medido (= S3b arriba): definir el evento facturable de cada uno
-   (cierra M1), llamar `ControlPlane::Usage::Ingest` desde ahí, y agregar el job de corte de periodo
-   (factura borrador, S4) que sume `usage_daily_rollups` — el pipe genérico y el rollup idempotente ya
-   existen desde S3a, no hay que reconstruirlos.
+   (cierra M1) y llamar `ControlPlane::Usage::Ingest` desde ahí — el pipe genérico, el rollup
+   idempotente, y el corte de periodo que los suma (S4) ya existen, no hay que reconstruirlos.
 7. **Tiempo real** (Turbo Streams sobre Solid Cable, sin Redis): `transportation` (abordaje) y `communication` (canales). Hoy diferido.
 8. **`communication` a fondo**: migraciones de `conversations`/`messages`/`tags`, mensajería con padres, canales.
 9. **`analytics_bi`**: vistas materializadas + reporte cross-tenant auditado (rol `BYPASSRLS`, `edu_bi_reader`).
@@ -648,11 +678,72 @@ buscador, tal como pide el prompt original.
 - **`sign_in_as_member` (test helper) otorga entitlement de todos los dominios gateados por defecto** desde S2b — la institución efímera de test se comporta como un tenant completamente aprovisionado. Un test que necesite el escenario "no entitled" debe **revocar** el dominio específico, no asumir que parte sin ninguno.
 - **Todo job nuevo que toque datos tenant-scoped debe heredar `ApplicationJob`** (no reinventar el manejo del GUC) — desde S3a ese mecanismo incluye un `Tenant::Guc.reset!` explícito en el `ensure`, no solo confiar en que el `COMMIT` de la transacción limpie el `SET LOCAL` (ver §9.7-7: dentro de un test envuelto en una transacción englobante, la transacción del job es un SAVEPOINT, y Postgres no limpia `SET LOCAL` al liberar un savepoint).
 - **Verificar "el GUC no se filtró" con una query real bajo RLS, nunca con una relectura de `current_setting()`** — esa relectura puede devolver un valor obsoleto por el query cache de ActiveRecord dentro de una transacción, dando un falso positivo de fuga (o, peor, un falso negativo). La prueba real es: sin ningún GUC fijado, ¿una tabla RLS-protegida devuelve cero filas?
-- **El headcount cuenta `GroupManagement::Student.status == "active"` de la institución, sin filtrar por `enrollments`/`academic_terms`** — `enrollments.term` es un string libre sin FK a `academic_terms`; no existe ese join en el esquema actual. `academic_term_label` en el snapshot es solo una etiqueta descriptiva del término activo, nunca un filtro del conteo. No "arreglar" esto para que parezca más preciso sin antes decidir explícitamente cómo conectar `enrollments`/`academic_terms` (hoy no están conectados en ningún lugar del código).
+- **El headcount cuenta `GroupManagement::Student.status == "active"` de la institución, sin filtrar por `enrollments`/`academic_terms`** — `enrollments.term` es un string libre sin FK a `academic_terms`; no existe ese join en el esquema actual. `academic_term_label` en el snapshot es solo una etiqueta descriptiva del término activo, nunca un filtro del conteo. No "arreglar" esto para que parezca más preciso sin antes decidir explícitamente cómo conectar `enrollments`/`academic_terms` (hoy no están conectados en ningún lugar del código). **S4 factura sobre ese mismo número tal cual** — la limitación es heredada, no nueva, y tampoco se arregló en S4.
+- **El corte de periodo (`ControlPlane::Billing::PeriodCut`) nunca re-lee el catálogo vivo** — solo el `price_tiers_snapshot`/`base_price_per_student_cents` congelados en `subscriptions` al firmar (S2a). Si un futuro cambio "optimiza" esto para leer `plans`/`plan_price_tiers` directamente, rompe la garantía de snapshot inmutable que todo el track de billing (S2a→S4) depende de sostener.
+- **Los overrides se aplican con `coalesce(override, catálogo)` campo por campo, nunca de-todo-o-nada** — un entitlement puede tener override de fee pero no de cupo, por ejemplo. `source_ref` de cada línea registra si se aplicó un override, para que la factura sea defendible sin tener que abrir la base de datos.
+- **`InvoiceLineItem#readonly?` bloquea `update`/`destroy` de una fila individual, pero `PeriodCut` regenera un `draft` con `invoice.line_items.delete_all`** (bulk SQL, bypasea `readonly?` a propósito) — no confundir "una línea no se edita nunca" con "un borrador no se regenera nunca". Solo `delete_all`/`create!` desde el servicio, nunca `destroy`/`update` de una línea suelta.
 
 ---
 
 ## 14. Changelog
+
+### v1.5.0 — 2026-07-10
+- **Plano de control · Slice S4 (invoices + corte de periodo → factura borrador): ejecutado.** Cierra
+  el track de billing del plano de control iniciado en S1 (S1→S2a→S2b→S3a→S4). Dos migraciones
+  nuevas (`invoices`, `invoice_line_items` — `20260710120001-2`; nota de numeración abajo), globales,
+  sin RLS/policy/FORCE, mismo patrón que `subscriptions`/`usage_*`. Modelos `ControlPlane::{Invoice,
+  InvoiceLineItem}`: `Invoice` con ciclo de vida `draft`/`finalized`/`void` (`finalize!` congela
+  `subtotal_cents` + `finalized_at`, solo desde `draft`; `void!` rechazado desde `finalized`; único
+  no-void por `(institution, period_start, period_end)`, con validación de app espejo del índice
+  parcial — se me olvidó al principio, la propia suite de tests lo atrapó, ver más abajo).
+  `InvoiceLineItem` con `readonly? = persisted?` (permite el insert inicial, bloquea
+  update/destroy individual) y CHECK de coherencia `kind`↔`addon_id`.
+- **`ControlPlane::Billing::PriceResolver`** — resolución **plana** de tiers (H4): todo el headcount
+  al `price_per_student_cents` del tier de `price_tiers_snapshot` cuyo rango `[min_students,
+  max_students)` lo contiene (semántica de rango exacta a la que `ControlPlane::PlanPriceTier` ya usa
+  en su propio chequeo de solapamiento — floor inclusivo, techo exclusivo); si ninguno cubre, usa
+  `subscription.base_price_per_student_cents`. Puro, sin BD, unit-testeado con casos de borde.
+- **`ControlPlane::Billing::PeriodCut`** — el orquestador. Guarda de contrato (H9: sin `subscriptions`
+  activa que solape el periodo, rechaza — chequeado también en cada re-corte, no solo al crear);
+  línea `base_seats` del snapshot de headcount más reciente ≤ `period_end` (si falta, omite la línea
+  y deja flag en `notes`, H2); una línea `addon_fee` por cada entitlement activo que solape el
+  periodo, con `coalesce(override_monthly_fee_cents, addon.monthly_fee_cents)` (**aquí los overrides
+  de S2a se aplican por primera vez**, H3); una línea `usage_overage` por addon medido cuando
+  `sum(usage_daily_rollups.total_quantity) − cupo (override o catálogo) > 0` (H7 — hoy da cero/ausente
+  porque no hay emisión real hasta S3b, probado con rollups sintéticos). Idempotente (H1):
+  re-cortar un `draft` reemplaza sus líneas en sitio vía `delete_all` (bulk SQL que bypasea
+  deliberadamente el `readonly?` de `InvoiceLineItem` — una regeneración completa del borrador no es
+  lo mismo que editar una línea suelta); re-cortar una `finalized` se rechaza
+  (`PeriodCut::AlreadyFinalized`). Un mismatch de moneda en un override se **marca en `notes`**, no
+  se aplica silenciosamente (H5). `ControlPlane::Billing::PeriodCutJob` envuelve el corte para Solid
+  Queue **sin fijar `institution_id`** — el wrapper de GUC de `ApplicationJob` queda inerte a
+  propósito, porque `invoices`/`invoice_line_items` son tablas globales. Rake
+  `control_plane:cut_invoices[period_start,period_end,institution_id?]`, síncrono. 272 tests / 0
+  fallos / 1 skip preexistente (39 nuevos).
+- **Vistas**: `invoices#index` (real ahora, cross-institución, alimenta el nav existente) +
+  `new`/`show` anidados bajo `institutions` (mismo patrón que `subscriptions` de S2a) con acciones
+  finalizar/anular/re-cortar; sección "Facturas" nueva en el hub de institución.
+- **Gotcha de entorno nuevo (S4): timestamps de migración no pueden ser >24h futuros respecto al
+  reloj real de la máquina.** El prompt sugería `20260711...` (mañana en la narrativa ficticia del
+  proyecto), pero Rails 8 valida `version.to_i < (Time.now.utc + 1.day).strftime(...)` — un
+  `InvalidMigrationTimestampError` real, no cosmético. Se usó `20260710120001-2` (mismo día que S3a,
+  antes de la ventana de 24h) en su lugar. Para el próximo slice: generar el timestamp de migración
+  con el reloj real de la máquina en el momento de escribir el archivo, no proyectando la fecha
+  narrativa del documento.
+- **Convenciones fijadas por S4** (cierran el track de billing): factura **borrador, nunca
+  auto-emitida** — finalizar es acción humana auditada, finalizar ≠ cobrar; resolución de tiers
+  **plana** (no graduada); overrides aplicados con `coalesce` campo por campo, nunca todo-o-nada;
+  el corte lee el **snapshot inmutable** de la subscription, nunca el catálogo vivo; el corte **suma
+  `usage_daily_rollups`**, nunca eventos crudos; sin prorrateo, sin edición manual de líneas, sin
+  tabla de periodos explícita en v1; `readonly?` en modelos append-only bloquea mutación individual
+  pero un servicio puede regenerar en bloque vía `delete_all` a propósito.
+- **Reafirma la limitación conocida heredada de S3a** (no arreglada en S4): `base_seats` factura
+  sobre `students` activos de la institución, no sobre matrícula en el término activo — ver §13.
+- **Forward notes documentadas, no construidas en S4:** (a) S3b (emisión real, requiere M1)
+  alimentará `usage_overage` sin tocar `PeriodCut`; (b) riel de pago fuera de alcance de v1; (c)
+  hardening: exclusion constraints, prorrateo, edición manual, tabla `billing_periods`; (d) RBAC
+  intra-plano y provisioning de instituciones siguen sin construirse; (e) schedule recurrente de
+  los tres jobs de billing (`SnapshotJob`, `RollupJob`, `PeriodCutJob`) diferido.
 
 ### v1.4.0 — 2026-07-10
 - **Plano de control · Slice S3a (headcount snapshots + pipe genérico de metering): ejecutado.**

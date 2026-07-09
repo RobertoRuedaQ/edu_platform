@@ -1,0 +1,73 @@
+<% content_for :title, "Factura · #{@institution.name}" %>
+<%#
+  Desglose de líneas por kind (base_seats / addon_fee / usage_overage), con
+  el mismo _invoice_line que la galería de componentes ya usaba con datos
+  stub — aquí con datos reales de ControlPlane::InvoiceLineItem. source_ref
+  se muestra aparte, en texto llano, para que la factura sea defendible sin
+  tener que abrir la base de datos.
+-%>
+
+<%= render "shared/page_header",
+      title: "#{datetime(@invoice.period_start.to_time, format: :date)} – #{datetime(@invoice.period_end.to_time, format: :date)}",
+      subtitle: @institution.name %>
+
+<section class="cp-section" aria-label="Resumen de la factura">
+  <%= render "shared/detail_list", items: {
+        "Estado"    => render("control_plane/shared/invoice_status_badge", status: @invoice.status),
+        "Subtotal"  => money(@invoice.subtotal_cents / 100.0, currency: @invoice.currency),
+        "Finalizada" => @invoice.finalized_at ? datetime(@invoice.finalized_at, format: :date) : "—",
+        "Notas"     => @invoice.notes.presence || "—"
+      } %>
+
+  <% if @invoice.draft? %>
+    <%= button_to "Re-cortar (regenerar borrador)", recut_control_plane_institution_invoice_path(@institution, @invoice),
+          method: :patch, class: "btn btn--secondary" %>
+    <%= button_to "Finalizar", finalize_control_plane_institution_invoice_path(@institution, @invoice),
+          method: :patch, class: "btn btn--primary",
+          data: { turbo_confirm: "¿Finalizar esta factura? Sus montos quedarán congelados." } %>
+    <%= button_to "Anular", void_control_plane_institution_invoice_path(@institution, @invoice),
+          method: :patch, class: "btn btn--danger",
+          data: { turbo_confirm: "¿Anular este borrador?" } %>
+  <% elsif @invoice.finalized? %>
+    <%= button_to "Anular", void_control_plane_institution_invoice_path(@institution, @invoice),
+          method: :patch, class: "btn btn--danger",
+          data: { turbo_confirm: "¿Anular esta factura finalizada?" } %>
+  <% end %>
+</section>
+
+<% sections = [ [ "base_seats", "Base por alumno" ], [ "addon_fee", "Fee por addon" ], [ "usage_overage", "Overage por uso" ] ] -%>
+<% sections.each do |kind, heading| %>
+  <% lines = @invoice.line_items.select { |li| li.kind == kind } %>
+  <% next if lines.empty? %>
+  <section class="cp-section" aria-labelledby="cp-lines-<%= kind %>">
+    <h2 id="cp-lines-<%= kind %>"><%= heading %></h2>
+    <%= render layout: "shared/table",
+          locals: { headers: [ "Concepto", "Cantidad", "Precio unit.", "Importe" ] } do %>
+      <% lines.each do |line| %>
+        <% unit = case line.kind
+             when "base_seats" then "alumnos"
+             when "addon_fee" then "mes"
+             else line.addon&.unit || "unidades"
+             end -%>
+        <%= render "control_plane/shared/invoice_line",
+              kind: line.kind, description: line.description, quantity: line.quantity.to_i,
+              unit: unit, unit_price: line.unit_price, amount: line.amount, currency: @invoice.currency %>
+      <% end %>
+    <% end %>
+  </section>
+<% end %>
+
+<% if @invoice.line_items.any? %>
+  <section class="cp-section" aria-labelledby="cp-source-refs-h">
+    <h2 id="cp-source-refs-h">Detalle técnico (provenance)</h2>
+    <ul class="cp-stack">
+      <% @invoice.line_items.each do |line| %>
+        <li><strong><%= line.description %>:</strong>
+          <%= line.source_ref.map { |k, v| "#{k}=#{v}" }.join(", ") %>
+        </li>
+      <% end %>
+    </ul>
+  </section>
+<% end %>
+
+<p><%= link_to "Volver a la institución", control_plane_institution_path(@institution) %></p>

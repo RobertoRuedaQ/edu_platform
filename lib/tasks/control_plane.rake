@@ -43,6 +43,13 @@ namespace :control_plane do
     puts "Catálogo sembrado: #{ControlPlane::Addon.count} addons, #{ControlPlane::Plan.count} planes."
   end
 
+  desc "Seed S4 demo billing data (subscription + entitlements with overrides + " \
+       "headcount snapshot + synthetic usage rollups) for Colegio San José. Idempotent. " \
+       "Requires bin/rails db:seed and control_plane:seed_catalog to have run first."
+  task seed_billing_demo: :environment do
+    ControlPlane::SeedBillingDemo.call
+  end
+
   desc "Push a student headcount snapshot (S3a). Runs synchronously, under the " \
        "tenant's own GUC — no worker process required. " \
        "Usage: bin/rails control_plane:snapshot_headcount[institution_id] (all institutions if omitted). " \
@@ -64,5 +71,31 @@ namespace :control_plane do
     ControlPlane::Usage::RollupJob.perform_now(usage_date)
     count = ControlPlane::UsageDailyRollup.where(usage_date: usage_date).count
     puts "Rollup de #{usage_date}: #{count} buckets (institución × addon × unidad)."
+  end
+
+  desc "Cut/re-cut a draft invoice for one period (S4). Runs synchronously, no " \
+       "GUC (invoices/invoice_line_items are global) — no worker process required. " \
+       "Usage: bin/rails control_plane:cut_invoices[2026-06-01,2026-06-30,institution_id] " \
+       "(institution_id omitted = every institution with an active subscription). " \
+       "Recurring schedule deferred — invoke manually or from an external scheduler for now."
+  task :cut_invoices, [ :period_start, :period_end, :institution_id ] => :environment do |_t, args|
+    abort "Usage: cut_invoices[period_start,period_end,institution_id?]" unless args[:period_start] && args[:period_end]
+
+    period_start = Date.parse(args[:period_start])
+    period_end = Date.parse(args[:period_end])
+    institutions = if args[:institution_id].presence
+      Core::Institution.where(id: args[:institution_id])
+    else
+      Core::Institution.where(id: ControlPlane::Subscription.active.select(:institution_id))
+    end
+
+    institutions.find_each do |institution|
+      invoice = ControlPlane::Billing::PeriodCut.call(institution: institution,
+        period_start: period_start, period_end: period_end)
+      puts "#{institution.name}: #{invoice.status} subtotal=#{invoice.subtotal_cents} " \
+           "(#{invoice.line_items.count} líneas)#{" — #{invoice.notes}" if invoice.notes.present?}"
+    rescue ControlPlane::Billing::PeriodCut::NoActiveSubscription, ControlPlane::Billing::PeriodCut::AlreadyFinalized => e
+      puts "#{institution.name}: omitida — #{e.message}"
+    end
   end
 end

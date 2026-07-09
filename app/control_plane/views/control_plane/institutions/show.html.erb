@@ -122,3 +122,30 @@
     <p>Sin uso registrado todavía.</p>
   <% end %>
 </section>
+
+<section class="cp-section" aria-labelledby="cp-invoices-h">
+  <h2 id="cp-invoices-h">Facturas</h2>
+  <%#
+    S4 — the one section here with real actions (generate/finalize/void/
+    re-cut all live on the invoice's own show page). A draft is regenerable;
+    finalized/void are not. Never auto-emitted — finalizing is a manual,
+    audited platform_admin action, and finalizing is NOT charging.
+  -%>
+  <p><%= ui_button "Generar borrador", href: new_control_plane_institution_invoice_path(@institution), variant: :primary %></p>
+
+  <% if @invoices.any? %>
+    <%= render layout: "shared/table",
+          locals: { headers: [ "Periodo", "Estado", "Subtotal", "" ] } do %>
+      <% @invoices.each do |invoice| %>
+        <tr>
+          <td><%= datetime(invoice.period_start.to_time, format: :date) %> – <%= datetime(invoice.period_end.to_time, format: :date) %></td>
+          <td><%= render "control_plane/shared/invoice_status_badge", status: invoice.status %></td>
+          <td><%= money(invoice.subtotal_cents / 100.0, currency: invoice.currency) %></td>
+          <td><%= link_to "Ver", control_plane_institution_invoice_path(@institution, invoice) %></td>
+        </tr>
+      <% end %>
+    <% end %>
+  <% else %>
+    <p>Sin facturas todavía.</p>
+  <% end %>
+</section>

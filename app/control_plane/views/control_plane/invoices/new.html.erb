@@ -1,0 +1,23 @@
+<% content_for :title, "Generar borrador de factura · #{@institution.name}" %>
+<%#
+  Triggers ControlPlane::Billing::PeriodCut for this institution/period.
+  Rejects if there's no active subscription overlapping the period, or if a
+  finalized invoice already exists for it — see the alert on failure.
+-%>
+
+<%= render "shared/page_header", title: "Generar borrador de factura", subtitle: @institution.name %>
+
+<%= form_with model: @invoice, url: control_plane_institution_invoices_path(@institution), scope: :invoice do %>
+  <% if @invoice.errors.any? %>
+    <%= render "shared/alert", variant: :danger, message: @invoice.errors.full_messages.to_sentence %>
+  <% end %>
+
+  <%= render "shared/field", label: "Inicio del periodo", name: "invoice[period_start]",
+        type: "date", value: @invoice.period_start, required: true %>
+  <%= render "shared/field", label: "Fin del periodo", name: "invoice[period_end]",
+        type: "date", value: @invoice.period_end, required: true %>
+
+  <%= ui_button "Generar borrador", type: "submit", variant: :primary %>
+<% end %>
+
+<p><%= link_to "Volver a la institución", control_plane_institution_path(@institution) %></p>
