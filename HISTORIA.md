@@ -11,11 +11,128 @@
 
 ---
 
-## Changelog completo (v1.0.0 → v1.6.0)
+## Changelog completo (v1.0.0 → v1.7.0)
 
 > Copiado verbatim de §14 de `PROJECT_STATE.md` v1.5.0, antes de que el split editorial (v1.5.1)
-> moviera el changelog fuera del doc magro. La entrada v1.6.0 (P1) se escribió directamente aquí,
+> moviera el changelog fuera del doc magro. Las entradas v1.6.0+ se escribieron directamente aquí,
 > ya con el split vigente.
+
+### v1.7.0 — 2026-07-10 — Onboarding: RosterImport de estudiantes (alta batch por CSV)
+
+**Cierra el primer ítem del backlog de onboarding (§9.1.1 de v1.6.0):**
+`Core::RosterImport::{Parser,Validator,Committer}` — las tablas y modelos ya existían
+(`Core::RosterImportBatch`/`Core::RosterImportRow`) pero ningún servicio leía un CSV. Corte
+deliberado: **solo estudiantes** en este slice — acudientes (`Core::User` + `guardian_students`) es
+el slice siguiente, reusando esta misma maquinaria (Parser/Validator/Committer/vistas).
+
+**Recon: discrepancias reales contra el prompt, resueltas por disco:**
+- `roster_import_batches.academic_term_id` es **`NOT NULL`** con FK a `academic_terms` — no
+  mencionado en el prompt. Resuelto tomando el término activo con el mismo patrón de
+  `Core::Headcount::Snapshotter` (`Core::AcademicTerm.active.find_by(institution_id:)`); sin
+  término activo, la creación del batch falla con un error amable.
+- Los enums reales difieren de los asumidos: `roster_import_batches.status` es
+  `uploaded/validated/previewed/committed/failed` (no `pending/...`); `roster_import_rows.status`
+  es `valid/error/duplicate/collision` (no `create/update/skip/error`). Mapeo adoptado: `valid`=
+  fila nueva (crea), `duplicate`=coincide con un `Student` existente por `national_id` (actualiza),
+  `collision`=dos filas del MISMO CSV comparten `national_id` (problema del archivo, no de una fila
+  sola), `error`=campo requerido faltante o referencia (`grade_level`/`section`) inexistente. El
+  batch usa `uploaded` (tras parse) → `validated` (tras validar — este ES el estado que el preview
+  muestra) → `committed`/`failed`; `previewed` no se usa (no hacía falta un estado extra solo para
+  "el usuario ya vio la página").
+- **El hallazgo más importante: `Core::People::Resolver` NO aplica a estudiantes.** Resuelve
+  `Core::User`+`Core::InstitutionUser` (identidad global con login) — un estudiante K-12
+  típicamente no tiene `user_id` (nullable por diseño: la persona-estudiante accede por relación,
+  no por cuenta). Usarlo aquí habría creado `Core::User`, violando el guardrail explícito del mismo
+  prompt ("no tocar `Core::User`"). El `Committer` hace **upsert directo** de
+  `GroupManagement::Student` por `national_id` — mismo espíritu aditivo/no-destructivo de J2, sin
+  pasar por `Resolver`. `Resolver` queda correctamente reservado para el slice de acudientes.
+- `Core::RosterImportBatch` ya declaraba `has_one_attached :file` (comentario: "rides on
+  ActiveStorage") — contradice J6 (no persistir el CSV crudo) directamente. Además, `active_storage_
+  blobs`/`attachments` son tablas **globales sin RLS** — adjuntar ahí el CSV de un tenant habría
+  sido una fuga real de aislamiento entre instituciones, no solo una cuestión de estilo. Se
+  **eliminó** `has_one_attached :file` del modelo; el archivo se lee en memoria en el controller y
+  nunca se persiste.
+- `roster_import_rows.raw` es un único `jsonb NOT NULL` (no columnas separadas por campo). El
+  cifrado determinístico de `national_id` (mismo patrón que `GroupManagement::Student#national_id`)
+  se implementó con la API de bajo nivel de Rails (`ActiveRecord::Encryption.encryptor.encrypt/
+  decrypt`, ver `Core::RosterImport::Cipher`) para cifrar SOLO ese valor antes de insertarlo dentro
+  del hash jsonb — sin migración, sin depender de la macro declarativa `encrypts` (que opera sobre
+  un atributo entero, no sobre una clave dentro de un jsonb).
+- Faltaba una columna real: `roster_import_rows` no tenía cómo enlazar una fila commiteada con el
+  `Student` resultante. Única migración del slice: `resolved_record_id` (uuid, nullable, sin FK —
+  el slice de acudientes apuntará la misma columna a otra tabla).
+- `students.student_code` es `NOT NULL` + único por institución, sin autogeneración hoy — se
+  decidió **exigirlo en el CSV** en vez de autogenerar (más simple, no inventa una convención de
+  negocio no pedida). `entry_year` es `NOT NULL` en BD sin validación en el modelo — si falta en el
+  CSV, se **defaultea al año actual** en el Committer (evita un `NotNullViolation` crudo).
+
+**Bug real encontrado durante la verificación (no solo de test):** el controller inicialmente
+encolaba `CommitJob` y LUEGO escribía un `Audit.log` en la misma acción. Bajo el adaptador de test
+de ActiveJob (`perform_enqueued_jobs`), `.enqueue_for` corre el job **sincrónicamente**, y el
+`ensure` de `ApplicationJob#around_perform` **resetea incondicionalmente el GUC del tenant** al
+terminar — así que el `Audit.log` posterior corría sin ningún GUC fijado y fallaba RLS sobre
+`audit_events`, incluso dentro de la MISMA request. No es un artefacto de test: cualquier adaptador
+de cola que ejecute inline (o un futuro modo síncrono) expondría el mismo problema. Arreglado
+reordenando: auditar **antes** de encolar, nunca después — un job cuyo timing de ejecución depende
+del adaptador no debe ser una dependencia implícita de código que corre después en el mismo action.
+
+**Segundo bug real: máscara de `national_id` en el preview.** La primera versión de
+`mask_national_id` mostraba los últimos 4 caracteres sin condición — para un id de 4 caracteres o
+menos (como los usados en tests), esto revelaba el documento COMPLETO en claro. Corregido para
+revelar como máximo la mitad de los caracteres (`[length/2, 4].min`), nunca el valor completo.
+
+**Servicios (`Core::RosterImport::*`):** `Cipher` (cifra/descifra un valor suelto para el jsonb),
+`Parser` (CSV stdlib → filas crudas, sin escribir en `students`, BOM-safe), `Validator` (por-fila:
+`valid`/`duplicate`/`collision`/`error`, cero escrituras reales, contadores en `batch.summary`),
+`Committer` (upsert idempotente — resuelve contra `students` reales AL MOMENTO DEL COMMIT, no
+contra el status ya guardado de la fila, así que un segundo commit del mismo batch se comporta como
+update aunque la fila diga "valid"; aditivo — un campo vacío en el CSV nunca borra un valor
+existente). `Core::RosterImport::CommitJob` — el **segundo job real** que ejercita el mecanismo de
+GUC de `ApplicationJob` (el primero fue `Core::Headcount::SnapshotJob`, S3a); verificado sin fuga
+con una query real bajo RLS (no una relectura de `current_setting()`), mismo protocolo que S3a.
+
+**Controller + vistas:** `IdentityAccess::RosterImportsController` (`index`/`new`/`create`/`show`/
+`commit`), gateado por `people.manage` real (P1). Cap de filas síncrono (`MAX_ROWS = 2_000`,
+documentado, full-async es hardening). El preview nunca muestra un documento completo (enmascarado)
+ni funciona como directorio navegable de estudiantes — solo las filas de ESTE batch recién subido.
+Enlazada desde `identity_access/people#index` ("Cargar roster (CSV)") — ni `people` ni
+`roster_imports` tienen entrada en `Navigation::Registry` (el mismo patrón que ya regía para
+`people` antes de este slice).
+
+**Resultado:** 312 runs / 1068 assertions / 0 failures / 0 errors / 1 skip preexistente (baseline
+era 284; 28 tests nuevos: 24 de motor + 4 de integración). `bin/rails zeitwerk:check` verde.
+
+**Verificación de seguridad/privacidad explícita:**
+(a) el CSV crudo nunca se persiste — se lee en memoria (`file.read`) y se descarta; sin
+`has_one_attached`, sin Active Storage.
+(b) `national_id` cifrado determinísticamente dentro de `roster_import_rows.raw` — confirmado con
+test que el ciphertext no contiene el valor plano.
+(c) el preview enmascara el documento (nunca el valor completo).
+(d) el `CommitJob` no filtra el GUC — confirmado con una query real bajo RLS tras el job, no con
+`current_setting()`.
+(e) upsert aditivo/no-destructivo confirmado: un campo vacío en un re-import no borra un valor
+existente; re-commitear el mismo batch no duplica estudiantes.
+(f) gate real: un actor sin `people.manage` recibe 403 en `index`/`create`.
+
+**Archivos creados/editados por rol:**
+- Migración: `db/migrate/20260710152925_add_resolved_record_id_to_roster_import_rows.rb`.
+- Gemfile: `gem "csv"` (stdlib bundled desde Ruby 3.4, ya no default — declaración mecánica, no una
+  dependencia nueva en espíritu).
+- Modelo: `app/domains/core/models/roster_import_batch.rb` (se quitó `has_one_attached :file`).
+- Servicios: `app/domains/core/services/roster_import/{cipher,parser,validator,committer}.rb`.
+- Job: `app/domains/core/jobs/roster_import/commit_job.rb`.
+- Controller: `app/controllers/identity_access/roster_imports_controller.rb`.
+- Helper: `app/helpers/identity_access_helper.rb` (badges de estado + `mask_national_id`).
+- Vistas: `app/views/identity_access/roster_imports/{index,new,show}.html.erb`;
+  `app/views/identity_access/people/index.html.erb` (enlace nuevo).
+- Rutas: `config/routes.rb` (`identity_access/roster_imports`).
+- Tests: `test/models/core/roster_import/{parser,validator,committer,commit_job}_test.rb`,
+  `test/integration/roster_imports_test.rb`.
+
+**Forward notes (backlog):** (a) slice de **acudientes** (`Core::User` + `guardian_students`,
+upsert-que-no-rompe-vínculos) es el siguiente, reusa Parser/Validator/Committer/vistas; (b)
+batch-invite, full-async de parse+validar, y purga de `roster_import_rows` post-commit quedan como
+hardening documentado, no construido.
 
 ### v1.6.0 — 2026-07-10 — P1: RBAC real (`IdentityAccess::PermissionCheck` reemplaza el stub)
 

@@ -1,0 +1,22 @@
+<% content_for :title, "Nueva carga de roster" %>
+
+<%= render "shared/page_header", title: "Nueva carga de roster",
+      subtitle: "Sube un CSV de estudiantes. Se valida antes de aplicar nada — no se guarda el archivo." %>
+
+<% if @error -%>
+  <%= render "shared/alert", variant: :danger, message: @error %>
+<% end -%>
+
+<%= render "shared/detail_list", items: {
+      "Columnas esperadas" => "national_id, first_name, last_name, gender, birthdate, student_code, entry_year, grade_level, section, email",
+      "Requeridas" => "national_id, first_name, last_name, gender, birthdate, student_code",
+      "gender" => "\"male\" o \"female\"",
+      "grade_level / section" => "opcionales — deben existir ya en la institución (se referencian por nombre exacto)"
+    } %>
+
+<%= form_with url: identity_access_roster_imports_path, method: :post, multipart: true do %>
+  <%= render "shared/field", label: "Archivo CSV", name: "roster_import[file]", type: "file",
+        required: true, accept: "text/csv,.csv" %>
+
+  <%= ui_button "Subir y validar", type: "submit", variant: :primary %>
+<% end %>

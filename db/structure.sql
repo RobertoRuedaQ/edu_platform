@@ -899,6 +899,7 @@ CREATE TABLE public.roster_import_rows (
     message character varying,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
+    resolved_record_id uuid,
     CONSTRAINT roster_import_rows_status_check CHECK (((status)::text = ANY ((ARRAY['valid'::character varying, 'error'::character varying, 'duplicate'::character varying, 'collision'::character varying])::text[])))
 );
 
@@ -3986,6 +3987,7 @@ CREATE POLICY teaching_assignments_tenant_isolation ON public.teaching_assignmen
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260710152925'),
 ('20260710144823'),
 ('20260710120002'),
 ('20260710120001'),

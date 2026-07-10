@@ -1,7 +1,10 @@
 <% content_for :title, "Personas" %>
 
 <%= render "shared/page_header", title: "Personas", subtitle: "Cuentas de tu institución.",
-      actions: ui_button("Nueva persona", href: new_identity_access_person_path, variant: :primary) %>
+      actions: safe_join([
+        ui_button("Cargar roster (CSV)", href: identity_access_roster_imports_path, variant: :secondary),
+        ui_button("Nueva persona", href: new_identity_access_person_path, variant: :primary)
+      ]) %>
 
 <% if @memberships.empty? -%>
   <%= render "shared/empty_state", title: "Todavía no hay personas registradas", icon: "users" %>

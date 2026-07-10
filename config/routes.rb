@@ -167,6 +167,13 @@ Rails.application.routes.draw do
         post :reactivate
       end
     end
+
+    # Batch alta (RosterImport slice, students only) — same people.manage
+    # gate as :people above. index/new/create/show only; no update/destroy,
+    # a batch is append-only (parse -> validate -> commit).
+    resources :roster_imports, only: %i[index new create show] do
+      member { post :commit }
+    end
   end
 
   # --- staff_management (closes an orphaned Fase 0 nav entry) ---------------

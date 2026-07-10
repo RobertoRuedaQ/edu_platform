@@ -18,10 +18,10 @@
 
 | Campo | Valor |
 |---|---|
-| **Versión del documento** | `v1.6.0` |
+| **Versión del documento** | `v1.7.0` |
 | **Fecha** | 2026-07-10 |
-| **Tests** | 284 runs / 0 fallos / 1 skip preexistente (suite completa, en serie — ver Guardrails) |
-| **Estado en una línea** | Identidad real (login+MFA, invitaciones, gestión de personas) + plano de control con track de billing completo S0→S4 (catálogo, subscriptions/entitlements, gate de entitlement en el inquilino, headcount+metering, invoices/corte de periodo) + **RBAC del inquilino real** (`IdentityAccess::PermissionCheck`, P1 cerrado — ver `HISTORIA.md`). |
+| **Tests** | 312 runs / 0 fallos / 1 skip preexistente (suite completa, en serie — ver Guardrails) |
+| **Estado en una línea** | Identidad real (login+MFA, invitaciones, gestión de personas, **alta batch de estudiantes por CSV**) + plano de control con track de billing completo S0→S4 + **RBAC del inquilino real** (`IdentityAccess::PermissionCheck`, P1 cerrado) + **`Core::RosterImport` real para estudiantes** (acudientes = siguiente — ver `HISTORIA.md`). |
 
 ### Convención de versionado de ESTE documento
 
@@ -354,9 +354,13 @@ tabla pieza-por-pieza) en `HISTORIA.md`.
 
 ### 9.1 Pendiente real (no implementado, no solo "vista futura")
 
-1. **`Core::RosterImport::Parser` / `Validator` / `Committer`.** Las tablas existen; **no existe
-   ningún servicio** que lea un CSV. "Crear individual" vía `PeopleController` es hoy el único
-   camino de alta.
+1. ~~`Core::RosterImport::Parser` / `Validator` / `Committer`~~ — ✅ **real para ESTUDIANTES**
+   (v1.7.0, ver `HISTORIA.md`). Corte deliberado: solo `GroupManagement::Student`; **acudientes**
+   (`Core::User` + `guardian_students`, upsert-que-no-rompe-vínculos) siguen pendientes — slice
+   siguiente, reusa la misma maquinaria (Parser/Validator/Committer/vistas). El Committer upserta
+   `GroupManagement::Student` DIRECTO por `national_id` — NO vía `Core::People::Resolver` (ese
+   resolver crea `Core::User`+`InstitutionUser`, la identidad global con login; un estudiante K-12
+   normalmente no tiene una. `Resolver` sí aplicará en el slice de acudientes).
 2. **`Core::Access::GuardianScope`.** No existe. Los portales de estudiante/acudiente siguen sobre
    datos stub para "mis acudidos del término activo".
 3. **Vistas de "mis datos" con datos reales** para estudiante/acudiente/docente-coordinador-director
@@ -414,10 +418,13 @@ directorios de estudiantes ni autocompletar por documento/nombre — `Core::Acce
 > Orden sugerido por dependencia y riesgo. Cada iteración cierra con actualización de este documento (bump de versión) y una entrada en `HISTORIA.md`.
 
 1. **Módulo de autenticación/onboarding — lo que queda** (ver §9.1), en orden recomendado:
-   1. **`Core::RosterImport::Parser/Validator/Committer`** (depende de `Core::People::Resolver`, ya existe) — desbloquea altas batch, no solo individuales.
+   1. ~~`Core::RosterImport::Parser/Validator/Committer`~~ — ✅ **estudiantes cerrado (v1.7.0)**.
+      **Acudientes** (mismo Parser/Validator/Committer, `Core::User` + `guardian_students` con
+      upsert-que-no-rompe-vínculos, vía `Core::People::Resolver` — ahí sí aplica) es lo siguiente.
    2. **`Core::Access::GuardianScope`** + verificar/conectar los portales de estudiante/acudiente ya existentes.
    3. Vistas de autoservicio reales (estudiante/acudiente/docente-coordinador-director) sobre el término activo.
    4. Visor de `audit_events` + bandeja de discrepancias (barato — los datos ya existen).
+   5. Batch-invite tras el alta de acudientes, full-async de parse+validar, y purga de `roster_import_rows` post-commit — hardening documentado, no construido (ver `HISTORIA.md` v1.7.0).
    5. Job recurrente para `Invitations::Expirer` y webhook real para `Invitations::BounceHandler` (opcional / según necesidad real de producción, no bloqueante).
 2. **Cerrar CHECKPOINT E** (`staff_management` vs `human_resources`) y, si aplica, scaffold del dominio de personal no docente.
 3. ~~Cablear la puerta de auth real (gate #2, RBAC)~~ — ✅ **P1 cerrado (v1.6.0)**, ver `HISTORIA.md`.
@@ -467,13 +474,26 @@ directorios de estudiantes ni autocompletar por documento/nombre — `Core::Acce
 - **El corte de periodo (`ControlPlane::Billing::PeriodCut`) nunca re-lee el catálogo vivo** — solo el `price_tiers_snapshot`/`base_price_per_student_cents` congelados en `subscriptions` al firmar (S2a). Si un futuro cambio "optimiza" esto para leer `plans`/`plan_price_tiers` directamente, rompe la garantía de snapshot inmutable que todo el track de billing (S2a→S4) depende de sostener.
 - **Los overrides se aplican con `coalesce(override, catálogo)` campo por campo, nunca de-todo-o-nada** — un entitlement puede tener override de fee pero no de cupo, por ejemplo. `source_ref` de cada línea registra si se aplicó un override, para que la factura sea defendible sin tener que abrir la base de datos.
 - **`InvoiceLineItem#readonly?` bloquea `update`/`destroy` de una fila individual, pero `PeriodCut` regenera un `draft` con `invoice.line_items.delete_all`** (bulk SQL, bypasea `readonly?` a propósito) — no confundir "una línea no se edita nunca" con "un borrador no se regenera nunca". Solo `delete_all`/`create!` desde el servicio, nunca `destroy`/`update` de una línea suelta.
+- **Nunca escribir código después de un `.enqueue`/`.enqueue_for` que dependa del GUC del tenant seguir fijado** (RosterImport, v1.7.0) — bajo el adaptador de test de ActiveJob (`perform_enqueued_jobs`) un job se ejecuta SINCRÓNICAMENTE, y `ApplicationJob#around_perform` resetea incondicionalmente el GUC en su `ensure` al terminar; cualquier query tenant-scoped (p. ej. un `Audit.log`) que corra DESPUÉS de encolar en la misma acción puede fallar RLS aunque siga siendo, técnicamente, la misma request. Esto no es solo un artefacto de test — cualquier adaptador de cola que corra inline expone lo mismo. Ordenar siempre: auditar/hacer trabajo tenant-scoped **antes** de encolar, nunca después.
+- **Cifrar un valor suelto dentro de una columna `jsonb` (no un atributo `encrypts` completo)** — usar la API de bajo nivel `ActiveRecord::Encryption.encryptor.encrypt/decrypt(valor, key_provider: ActiveRecord::Encryption.key_provider, cipher_options: { deterministic: true })` (ver `Core::RosterImport::Cipher`), NO la macro declarativa `encrypts` (que opera sobre un atributo AR entero, no sobre una clave dentro de un hash jsonb). Mismo cifrado determinístico que cualquier `encrypts ..., deterministic: true` existente, así que sigue siendo comparable contra esos atributos vía query normal (Rails encripta el lado de la query de forma transparente).
+- **Al enmascarar un dato sensible para mostrarlo en una vista, nunca reveles más de la mitad de los caracteres** — una regla de "muestra los últimos 4" revela el valor COMPLETO si el dato tiene 4 caracteres o menos (encontrado real en RosterImport's preview, v1.7.0, no solo hipotético). Calcular el tramo visible como `[largo/2, N].min`, nunca un valor fijo sin tope relativo al tamaño real.
 
 ---
 
 ## 13. Changelog
 
-El changelog completo (`v1.0.0` → `v1.6.0`) vive en **`HISTORIA.md`**. Entrada de esta versión:
+El changelog completo (`v1.0.0` → `v1.7.0`) vive en **`HISTORIA.md`**. Entrada de esta versión:
 
+- **`v1.7.0` — Onboarding: RosterImport de estudiantes.** `Core::RosterImport::{Parser,Validator,
+  Committer}` real para `GroupManagement::Student` (acudientes = slice siguiente). Upsert directo
+  por `national_id`, NO vía `Core::People::Resolver` (ese resolver crea `Core::User`, fuera de
+  alcance aquí). `national_id` cifrado dentro del jsonb de `roster_import_rows` (API de bajo nivel,
+  sin migración de columna); el CSV crudo nunca se persiste (`has_one_attached :file` retirado del
+  modelo). `Core::RosterImport::CommitJob` — segundo job real con el mecanismo de GUC de S3a. Una
+  migración (`resolved_record_id`). Dos bugs reales encontrados y corregidos en la verificación
+  (orden auditoría/encolado bajo GUC; máscara de `national_id` que revelaba el valor completo para
+  ids cortos). Narrativa completa, discrepancias de esquema y detalle de verificación en
+  `HISTORIA.md`.
 - **`v1.6.0` — P1: RBAC real.** `IdentityAccess::PermissionCheck` reemplaza `Authorization::
   StubResolver`/`StubAssignments` en runtime — real-only, fail-closed. Ambas compuertas (entitlement
   + RBAC) son reales. Caso de aceptación de María (`teacher_management`) pasa contra
