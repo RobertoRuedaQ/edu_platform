@@ -6,9 +6,14 @@ module Authorization
   #   can?(key, resource) is COSMETIC ONLY — for show/hide in views. NEVER guard
   #     data access or actions with it; the controller is the boundary.
   #
-  # Grants are resolved ONCE per request. Wired to the real seam when it exists
-  # (IdentityAccess::PermissionCheck); otherwise to the in-memory StubResolver
-  # (which still prefers real RoleAssignment rows when present).
+  # Grants are resolved ONCE per request. P1: IdentityAccess::PermissionCheck
+  # now always exists, so build_authorization_context always takes the real
+  # branch below — the StubResolver/AssignmentSource/StubAssignments fallback
+  # is dead code at runtime (kept only as test-seeding history; StubResolver
+  # itself is still directly useful as a fixed in-memory context for tests
+  # that can't seed a real RoleAssignment — see test_helper.rb's
+  # with_raw_grants). Real-only, fail-closed: no RoleAssignment that applies
+  # means zero permissions, never the old stub persona.
   #
   # NOTE: named ::Controller (not plain Authorization) so the controller concern
   # and the Authorization model namespace never collide under Zeitwerk.
@@ -41,9 +46,11 @@ module Authorization
 
     def build_authorization_context
       if defined?(IdentityAccess::PermissionCheck)
-        # TODO: cablear a la interfaz real de IdentityAccess::PermissionCheck.
         IdentityAccess::PermissionCheck.for(institution_user_id: Current.institution_user_id)
       else
+        # Unreachable once identity_access/services/permission_check.rb exists
+        # (Zeitwerk always resolves the constant) — kept only so this concern
+        # doesn't hard-depend on that file's presence at parse time.
         Authorization::StubResolver.new(
           Authorization::AssignmentSource.for(institution_user_id: Current.institution_user_id)
         )

@@ -1,21 +1,14 @@
 require "test_helper"
 
 class SchedulesTest < ActionDispatch::IntegrationTest
-  setup { sign_in_as_member } # auth is now required app-wide; persona still from StubAssignments
-  def with_grants(*assignments)
-    original = Authorization::StubAssignments.method(:all)
-    Authorization::StubAssignments.define_singleton_method(:all) { assignments }
-    yield
-  ensure
-    Authorization::StubAssignments.define_singleton_method(:all, original)
-  end
+  setup { @user, @institution = sign_in_as_member }
 
   # Teaches/leads only 9°A: can read+write grades and view schedule for that group.
   def as_teacher_9a(&block)
     with_grants(
       Authorization::Assignment.new(role_key: "teacher",
                                      permission_keys: %w[grades.read grades.write schedule.view],
-                                     scope_type: :group, scope_id: "stub-section-9a"),
+                                     scope_type: :group, scope_id: GroupManagement::GroupRoster::SECTION_9A_ID),
       &block
     )
   end

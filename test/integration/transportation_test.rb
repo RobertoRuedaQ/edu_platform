@@ -1,13 +1,13 @@
 require "test_helper"
 
 class TransportationTest < ActionDispatch::IntegrationTest
-  setup { sign_in_as_member } # auth is now required app-wide; persona still from StubAssignments
-  def with_grants(*assignments)
-    original = Authorization::StubAssignments.method(:all)
-    Authorization::StubAssignments.define_singleton_method(:all) { assignments }
-    yield
-  ensure
-    Authorization::StubAssignments.define_singleton_method(:all, original)
+  setup { sign_in_as_member }
+  # :route has no real scope_route_id column in role_assignments (P1 only
+  # made department/grade_level/group real — see test_helper.rb's
+  # with_raw_grants), so this whole file uses the raw-context override
+  # instead of grant_role!'s real seeding.
+  def with_grants(*assignments, &block)
+    with_raw_grants(*assignments, &block)
   end
 
   def as_transport_coordinator(&block)

@@ -1,13 +1,11 @@
 module Authorization
-  # Where the current actor's grants come from.
-  #
-  # In-memory stub for this views-only phase, BUT if real
-  # IdentityAccess::RoleAssignment rows exist for the actor, those WIN — so the
-  # day seeds + auth land, the gate uses real data without any edit here.
-  # Reading real rows is guarded (missing table / RLS / no actor) and degrades
-  # quietly to the stub instead of raising.
-  #
-  # TODO: reemplazar por IdentityAccess::PermissionCheck real.
+  # RETIRED from the runtime path as of P1: Authorization::Controller now
+  # always builds IdentityAccess::PermissionCheck directly (never this class)
+  # once that constant exists, which it always does. Kept only as a reference
+  # for the record->Assignment mapping (from_records), which
+  # IdentityAccess::PermissionCheck reimplements for itself rather than
+  # depend on a class named "Stub" for real, security-critical resolution —
+  # see that class for the real, fallback-free (R2) equivalent.
   module AssignmentSource
     module_function
 

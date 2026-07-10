@@ -1,9 +1,10 @@
 require "test_helper"
 
 class DashboardTest < ActionDispatch::IntegrationTest
-  setup { sign_in_as_member } # auth is now required app-wide; persona still from StubAssignments
-  # Default Authorization::StubAssignments persona grants students/grades/staff/
-  # counseling reads, but NOT finance.read nor roles.manage.
+  setup { @user, @institution = sign_in_as_member }
+  # Default persona (sign_in_as_member's real, institution-wide RoleAssignment)
+  # grants students/grades/staff/counseling reads, but NOT finance.read nor
+  # roles.manage.
 
   test "root renders role-aware shortcut tiles for permitted domains only" do
     get "/"
@@ -31,14 +32,11 @@ class DashboardTest < ActionDispatch::IntegrationTest
   end
 
   test "shows a clear empty state when the actor has no accesses" do
-    original = Authorization::StubAssignments.method(:all)
-    Authorization::StubAssignments.define_singleton_method(:all) { [] }
+    revoke_all_role_assignments!(@user, institution: @institution)
 
     get "/"
     assert_response :success
     assert_select ".empty-state__title", text: "Aún no tienes accesos asignados"
     assert_select ".tile-grid", count: 0
-  ensure
-    Authorization::StubAssignments.define_singleton_method(:all, original)
   end
 end

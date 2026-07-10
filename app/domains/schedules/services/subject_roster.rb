@@ -14,13 +14,13 @@ module Schedules
     def self.all
       [
         Row.new(id: "sub-1", name: "Álgebra", code: "MAT-901", term: "2026-1",
-                group_id: "stub-section-9a", group_name: "9°A"),
+                group_id: GroupManagement::GroupRoster::SECTION_9A_ID, group_name: "9°A"),
         Row.new(id: "sub-2", name: "Historia", code: "SOC-901", term: "2026-1",
-                group_id: "stub-section-9a", group_name: "9°A"),
+                group_id: GroupManagement::GroupRoster::SECTION_9A_ID, group_name: "9°A"),
         Row.new(id: "sub-3", name: "Cálculo", code: "MAT-1001", term: "2026-1",
-                group_id: "stub-section-10a", group_name: "10°A"),
+                group_id: GroupManagement::GroupRoster::SECTION_10A_ID, group_name: "10°A"),
         Row.new(id: "sub-4", name: "Sociología", code: "SOC-1101", term: "2026-1",
-                group_id: "stub-section-11b", group_name: "11°B")
+                group_id: GroupManagement::GroupRoster::SECTION_11B_ID, group_name: "11°B")
       ]
     end
 

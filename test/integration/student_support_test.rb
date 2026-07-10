@@ -1,14 +1,7 @@
 require "test_helper"
 
 class StudentSupportTest < ActionDispatch::IntegrationTest
-  setup { sign_in_as_member } # auth is now required app-wide; persona still from StubAssignments
-  def with_grants(*assignments)
-    original = Authorization::StubAssignments.method(:all)
-    Authorization::StubAssignments.define_singleton_method(:all) { assignments }
-    yield
-  ensure
-    Authorization::StubAssignments.define_singleton_method(:all, original)
-  end
+  setup { @user, @institution = sign_in_as_member }
 
   # Counselor scoped to 9°A only: full wellbeing toolkit, but the NARROW
   # medical tier (summary, not the owner's full record).
@@ -18,7 +11,7 @@ class StudentSupportTest < ActionDispatch::IntegrationTest
         role_key: "counselor",
         permission_keys: %w[students.read counseling.read medical_history.view_summary
                              accommodations.view disciplinary_logs.manage support_dashboard.view],
-        scope_type: :group, scope_id: "stub-section-9a"
+        scope_type: :group, scope_id: GroupManagement::GroupRoster::SECTION_9A_ID
       ), &block
     )
   end
@@ -49,7 +42,7 @@ class StudentSupportTest < ActionDispatch::IntegrationTest
   def as_homeroom_readonly(&block)
     with_grants(
       Authorization::Assignment.new(role_key: "homeroom", permission_keys: %w[accommodations.view],
-                                     scope_type: :group, scope_id: "stub-section-9a"),
+                                     scope_type: :group, scope_id: GroupManagement::GroupRoster::SECTION_9A_ID),
       &block
     )
   end

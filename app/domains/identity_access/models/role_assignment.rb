@@ -12,6 +12,13 @@ module IdentityAccess
     belongs_to :scope_grade_level, class_name: "GroupManagement::GradeLevel",   optional: true
     belongs_to :scope_group,       class_name: "GroupManagement::Section",      optional: true
 
+    # R5 (dating): a grant only applies within [valid_from, valid_until].
+    # valid_until nil == open-ended.
+    scope :effective_now, -> {
+      today = Date.current
+      where("valid_from <= ?", today).where("valid_until IS NULL OR valid_until >= ?", today)
+    }
+
     # Human-readable label of the scope, for badges/rows.
     def scope_label
       return "Toda la institución" if institution_wide?

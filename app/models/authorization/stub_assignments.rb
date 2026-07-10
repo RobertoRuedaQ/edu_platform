@@ -1,10 +1,11 @@
 module Authorization
-  # The signed-in actor's grants for this views-only phase, used ONLY when no
-  # real IdentityAccess::RoleAssignment rows exist yet (no auth/seeds wired).
-  # Permission keys are the REAL ones from IdentityAccess::SeedPermissions::CATALOG
-  # so the gate and nav exercise real capabilities, not invented strings.
-  #
-  # TODO: reemplazar por las asignaciones reales del usuario autenticado.
+  # RETIRED from the runtime path as of P1: Authorization::AssignmentSource's
+  # fallback to .all below is unreachable now that IdentityAccess::
+  # PermissionCheck exists (see Authorization::Controller#build_authorization_
+  # context) — no actor, real or not, is ever granted this persona anymore.
+  # Kept only as a historical reference for the permission-key shape; nothing
+  # in test/ seeds from it either (see test_helper.rb's grant_role!/with_grants,
+  # which create real RoleAssignment rows instead).
   module StubAssignments
     module_function
 

@@ -821,7 +821,10 @@ CREATE TABLE public.role_assignments (
     scope_group_id uuid,
     idempotency_key character varying,
     created_at timestamp(6) without time zone NOT NULL,
-    updated_at timestamp(6) without time zone NOT NULL
+    updated_at timestamp(6) without time zone NOT NULL,
+    valid_from date DEFAULT CURRENT_DATE NOT NULL,
+    valid_until date,
+    CONSTRAINT role_assignments_valid_until_after_valid_from CHECK (((valid_until IS NULL) OR (valid_until >= valid_from)))
 );
 
 ALTER TABLE ONLY public.role_assignments FORCE ROW LEVEL SECURITY;
@@ -3983,6 +3986,7 @@ CREATE POLICY teaching_assignments_tenant_isolation ON public.teaching_assignmen
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260710144823'),
 ('20260710120002'),
 ('20260710120001'),
 ('20260710000003'),

@@ -1,7 +1,7 @@
 require "test_helper"
 
 class ShellNavigationTest < ActionDispatch::IntegrationTest
-  setup { sign_in_as_member } # auth is now required app-wide; persona still from StubAssignments
+  setup { @user, @institution = sign_in_as_member }
 
   # Uses the default Authorization::StubAssignments persona (group director +
   # area head): grants students/grades/staff/counseling reads, but NOT

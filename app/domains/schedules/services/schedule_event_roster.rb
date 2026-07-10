@@ -15,23 +15,23 @@ module Schedules
     def self.all
       [
         Row.new(id: "ev-1", day: "Lun", starts_at: "07:00", ends_at: "08:00",
-                subject_name: "Álgebra", group_id: "stub-section-9a", group_name: "9°A",
+                subject_name: "Álgebra", group_id: GroupManagement::GroupRoster::SECTION_9A_ID, group_name: "9°A",
                 room_name: "Aula 101", conflict: false),
         Row.new(id: "ev-2", day: "Lun", starts_at: "08:00", ends_at: "09:00",
-                subject_name: "Historia", group_id: "stub-section-9a", group_name: "9°A",
+                subject_name: "Historia", group_id: GroupManagement::GroupRoster::SECTION_9A_ID, group_name: "9°A",
                 room_name: "Aula 101", conflict: false),
         Row.new(id: "ev-3", day: "Mar", starts_at: "07:00", ends_at: "08:00",
-                subject_name: "Cálculo", group_id: "stub-section-10a", group_name: "10°A",
+                subject_name: "Cálculo", group_id: GroupManagement::GroupRoster::SECTION_10A_ID, group_name: "10°A",
                 room_name: "Aula 102", conflict: false),
         # Same room + day + hour as ev-3 — a baked-in stub conflict, not detected.
         Row.new(id: "ev-4", day: "Mar", starts_at: "07:00", ends_at: "08:00",
-                subject_name: "Sociología", group_id: "stub-section-11b", group_name: "11°B",
+                subject_name: "Sociología", group_id: GroupManagement::GroupRoster::SECTION_11B_ID, group_name: "11°B",
                 room_name: "Aula 102", conflict: true),
         Row.new(id: "ev-5", day: "Mié", starts_at: "09:00", ends_at: "10:00",
-                subject_name: "Álgebra", group_id: "stub-section-9a", group_name: "9°A",
+                subject_name: "Álgebra", group_id: GroupManagement::GroupRoster::SECTION_9A_ID, group_name: "9°A",
                 room_name: "Aula 101", conflict: false),
         Row.new(id: "ev-6", day: "Jue", starts_at: "07:00", ends_at: "08:00",
-                subject_name: "Sociología", group_id: "stub-section-11b", group_name: "11°B",
+                subject_name: "Sociología", group_id: GroupManagement::GroupRoster::SECTION_11B_ID, group_name: "11°B",
                 room_name: "Aula 103", conflict: false)
       ]
     end

@@ -6,14 +6,14 @@ module StudentSupport
 
     def self.all
       [
-        Row.new(id: "acc-1", student_id: "s-1", group_id: "stub-section-9a",
+        Row.new(id: "acc-1", student_id: "s-1", group_id: GroupManagement::GroupRoster::SECTION_9A_ID,
                 kind: "tiempo_extra",
                 description: "Tiempo adicional (30%) en evaluaciones por diagnóstico de TDAH.",
                 status: "active"),
-        Row.new(id: "acc-2", student_id: "s-7", group_id: "stub-section-11b",
+        Row.new(id: "acc-2", student_id: "s-7", group_id: GroupManagement::GroupRoster::SECTION_11B_ID,
                 kind: "material_adaptado",
                 description: "Material en fuente ampliada por baja visión.", status: "active"),
-        Row.new(id: "acc-3", student_id: "s-3", group_id: "stub-section-9a",
+        Row.new(id: "acc-3", student_id: "s-3", group_id: GroupManagement::GroupRoster::SECTION_9A_ID,
                 kind: "ubicacion_preferencial",
                 description: "Ubicación cerca al tablero por dificultad auditiva.", status: "expired")
       ]

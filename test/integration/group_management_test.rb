@@ -1,24 +1,17 @@
 require "test_helper"
 
 class GroupManagementTest < ActionDispatch::IntegrationTest
-  setup { sign_in_as_member } # auth is now required app-wide; persona still from StubAssignments
+  setup { @user, @institution = sign_in_as_member }
   # Same technique as TeacherManagementTest: install a custom
   # Authorization::StubAssignments persona for the block, independent of the
   # shared default demo persona.
-  def with_grants(*assignments)
-    original = Authorization::StubAssignments.method(:all)
-    Authorization::StubAssignments.define_singleton_method(:all) { assignments }
-    yield
-  ensure
-    Authorization::StubAssignments.define_singleton_method(:all, original)
-  end
 
   # homeroom teacher of 9°A only.
   def as_homeroom(&block)
     with_grants(
       Authorization::Assignment.new(role_key: "homeroom",
                                      permission_keys: %w[students.read groups.view groups.manage],
-                                     scope_type: :group, scope_id: "stub-section-9a"),
+                                     scope_type: :group, scope_id: GroupManagement::GroupRoster::SECTION_9A_ID),
       &block
     )
   end
@@ -77,22 +70,22 @@ class GroupManagementTest < ActionDispatch::IntegrationTest
       assert_select "a", text: "9°A"
       assert_select "a", text: "10°A", count: 0
 
-      get "/group_management/groups/stub-section-9a"
+      get "/group_management/groups/#{GroupManagement::GroupRoster::SECTION_9A_ID}"
       assert_response :success
 
-      get "/group_management/groups/stub-section-10a"
+      get "/group_management/groups/#{GroupManagement::GroupRoster::SECTION_10A_ID}"
       assert_response :forbidden
     end
   end
 
   test "can? shows 'Editar matrícula' only for a role holding groups.manage" do
     as_homeroom do
-      get "/group_management/groups/stub-section-9a"
+      get "/group_management/groups/#{GroupManagement::GroupRoster::SECTION_9A_ID}"
       assert_select "a.btn", text: "Editar matrícula"
     end
 
     as_secretary do
-      get "/group_management/groups/stub-section-9a"
+      get "/group_management/groups/#{GroupManagement::GroupRoster::SECTION_9A_ID}"
       assert_response :success
       assert_select "a.btn", text: "Editar matrícula", count: 0
     end
@@ -100,14 +93,14 @@ class GroupManagementTest < ActionDispatch::IntegrationTest
 
   test "authorize! denies the membership edit form for a role without groups.manage, matching can?" do
     as_secretary do
-      get "/group_management/groups/stub-section-9a/membership/edit"
+      get "/group_management/groups/#{GroupManagement::GroupRoster::SECTION_9A_ID}/membership/edit"
       assert_response :forbidden
     end
   end
 
   test "homeroom can open the membership edit form for their own group" do
     as_homeroom do
-      get "/group_management/groups/stub-section-9a/membership/edit"
+      get "/group_management/groups/#{GroupManagement::GroupRoster::SECTION_9A_ID}/membership/edit"
       assert_response :success
       assert_select "input[type=checkbox][name='student_ids[]']", minimum: 1
     end

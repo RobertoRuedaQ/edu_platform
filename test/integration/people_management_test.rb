@@ -8,14 +8,6 @@ class PeopleManagementTest < ActionDispatch::IntegrationTest
     ActionMailer::Base.deliveries.clear # drop the OTP mail sign_in_as_member itself sent
   end
 
-  def with_grants(*assignments)
-    original = Authorization::StubAssignments.method(:all)
-    Authorization::StubAssignments.define_singleton_method(:all) { assignments }
-    yield
-  ensure
-    Authorization::StubAssignments.define_singleton_method(:all, original)
-  end
-
   def as_people_manager(&block)
     with_grants(
       Authorization::Assignment.new(role_key: "institution_admin", permission_keys: %w[people.manage],

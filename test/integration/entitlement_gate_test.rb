@@ -5,14 +5,6 @@ require "test_helper"
 # entitled and transportation NOT entitled; teacher_management is
 # foundational and never gated at all.
 class EntitlementGateTest < ActionDispatch::IntegrationTest
-  def with_grants(*assignments)
-    original = Authorization::StubAssignments.method(:all)
-    Authorization::StubAssignments.define_singleton_method(:all) { assignments }
-    yield
-  ensure
-    Authorization::StubAssignments.define_singleton_method(:all, original)
-  end
-
   # Covers both gated domains AND the foundational one, so every test below
   # isolates the entitlement gate — RBAC would say yes to all of these.
   def as_full_access(&block)

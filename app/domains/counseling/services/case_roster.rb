@@ -14,14 +14,14 @@ module Counseling
     def self.all
       [
         Row.new(id: "case-1", student_id: "s-3", student_name: "Isabella Mendoza",
-                group_id: "stub-section-9a", category: "conducta", status: "open",
+                group_id: GroupManagement::GroupRoster::SECTION_9A_ID, category: "conducta", status: "open",
                 opened_at: Date.new(2026, 3, 10),
                 notes: [
                   Note.new(author: "Laura Gómez Duarte", occurred_at: Date.new(2026, 3, 10),
                            body: "Seguimiento inicial por ausentismo reiterado.")
                 ]),
         Row.new(id: "case-2", student_id: "s-9", student_name: "Luciana Restrepo",
-                group_id: "stub-section-11b", category: "emocional", status: "in_progress",
+                group_id: GroupManagement::GroupRoster::SECTION_11B_ID, category: "emocional", status: "in_progress",
                 opened_at: Date.new(2026, 2, 20),
                 notes: [
                   Note.new(author: "Ana Sofía Beltrán", occurred_at: Date.new(2026, 2, 20),
@@ -30,7 +30,7 @@ module Counseling
                            body: "Mejoría reportada por la acudiente.")
                 ]),
         Row.new(id: "case-3", student_id: "s-6", student_name: "Nicolás Herrera",
-                group_id: "stub-section-10a", category: "familiar", status: "closed",
+                group_id: GroupManagement::GroupRoster::SECTION_10A_ID, category: "familiar", status: "closed",
                 opened_at: Date.new(2026, 1, 15), notes: [])
       ]
     end

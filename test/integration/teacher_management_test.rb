@@ -1,29 +1,23 @@
 require "test_helper"
 
 class TeacherManagementTest < ActionDispatch::IntegrationTest
-  setup { sign_in_as_member } # auth is now required app-wide; persona still from StubAssignments
-  # Installs a custom Authorization::StubAssignments persona for the duration
-  # of the block, same technique as DashboardTest's empty-state test — so each
-  # scenario is independent of the shared default demo persona.
-  def with_grants(*assignments)
-    original = Authorization::StubAssignments.method(:all)
-    Authorization::StubAssignments.define_singleton_method(:all) { assignments }
-    yield
-  ensure
-    Authorization::StubAssignments.define_singleton_method(:all, original)
-  end
+  setup { @user, @institution = sign_in_as_member }
+  # with_grants (test_helper.rb) seeds each Assignment as a REAL
+  # IdentityAccess::RoleAssignment for @user/@institution — the P1 acceptance
+  # case (§6.5): María's grants are real role_assignments, not a stub persona.
 
   # María: teacher over her own two groups, AND area_lead over Matemáticas.
   # This is the Apéndice A acceptance persona.
   def as_maria(&block)
     with_grants(
       Authorization::Assignment.new(role_key: "teacher", permission_keys: %w[schedule.view],
-                                     scope_type: :group, scope_id: "stub-section-10a"),
+                                     scope_type: :group, scope_id: GroupManagement::GroupRoster::SECTION_10A_ID),
       Authorization::Assignment.new(role_key: "teacher", permission_keys: %w[schedule.view],
-                                     scope_type: :group, scope_id: "stub-section-11b"),
+                                     scope_type: :group, scope_id: GroupManagement::GroupRoster::SECTION_11B_ID),
       Authorization::Assignment.new(role_key: "area_lead",
                                      permission_keys: %w[teachers.view teacher.evaluate departments.view],
-                                     scope_type: :department, scope_id: "dept-matematicas"),
+                                     scope_type: :department,
+                                     scope_id: TeacherManagement::DepartmentRoster::MATEMATICAS_ID),
       &block
     )
   end
@@ -121,10 +115,10 @@ class TeacherManagementTest < ActionDispatch::IntegrationTest
       assert_select "a", text: "Matemáticas"
       assert_select "a", text: "Ciencias Sociales", count: 0
 
-      get "/teacher_management/departments/dept-matematicas"
+      get "/teacher_management/departments/#{TeacherManagement::DepartmentRoster::MATEMATICAS_ID}"
       assert_response :success
 
-      get "/teacher_management/departments/dept-sociales"
+      get "/teacher_management/departments/#{TeacherManagement::DepartmentRoster::SOCIALES_ID}"
       assert_response :forbidden
     end
   end

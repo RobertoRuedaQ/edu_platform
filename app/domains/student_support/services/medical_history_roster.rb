@@ -15,13 +15,13 @@ module StudentSupport
 
     def self.all
       [
-        Row.new(student_id: "s-1", student_name: "Valentina Suárez", group_id: "stub-section-9a",
+        Row.new(student_id: "s-1", student_name: "Valentina Suárez", group_id: GroupManagement::GroupRoster::SECTION_9A_ID,
                 blood_type: "O+", conditions: [ "Asma leve" ], medications: [ "Salbutamol (inhalador, según necesidad)" ],
                 allergies: [ Allergy.new(name: "Maní", severity: :severe, reaction: "Urticaria y dificultad respiratoria") ]),
-        Row.new(student_id: "s-4", student_name: "Mateo Cárdenas", group_id: "stub-section-10a",
+        Row.new(student_id: "s-4", student_name: "Mateo Cárdenas", group_id: GroupManagement::GroupRoster::SECTION_10A_ID,
                 blood_type: "A-", conditions: [], medications: [],
                 allergies: [ Allergy.new(name: "Penicilina", severity: :moderate, reaction: "Erupción cutánea") ]),
-        Row.new(student_id: "s-7", student_name: "Daniela Ortiz", group_id: "stub-section-11b",
+        Row.new(student_id: "s-7", student_name: "Daniela Ortiz", group_id: GroupManagement::GroupRoster::SECTION_11B_ID,
                 blood_type: "B+", conditions: [ "Diabetes tipo 1" ], medications: [ "Insulina (según esquema)" ],
                 allergies: [])
       ]
