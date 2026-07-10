@@ -1,17 +1,17 @@
 module Portals
-  # The guardian's own dashboard — child selector + per-child shortcuts.
-  # Resolved by relation (guardian_students), NOT by role_assignments: see
-  # Portals::GuardianDashboard for the open decision on why this is relational
-  # rather than an RBAC role. No authorize! here for the same reason.
-  #
-  # TODO: reemplazar por StudentSupport::Guardian -> guardian_students reales.
+  # The guardian's own dashboard — lists their real, active acudidos via
+  # Core::Access::GuardianScope. Resolved by RELATION, NOT by role_assignments
+  # (GS6): a guardian holds zero IdentityAccess::RoleAssignment by design (P1/
+  # RosterImport-guardians, v1.8.0), so there is no authorize! here — anyone
+  # signed in simply sees their own scope, empty or not (GS9). Read-only
+  # (GS8): no forms, no mutations.
   class GuardianPortalController < ApplicationController
     layout "portal"
 
     def show
-      @dashboard = Portals::GuardianDashboard.stub
       @portal_label = "Portal del acudiente"
-      @portal_person_name = @dashboard.guardian_name
+      @portal_person_name = Current.user.name
+      @children = Core::Access::GuardianScope.for(Current.user)
     end
   end
 end

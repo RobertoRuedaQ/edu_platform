@@ -11,11 +11,110 @@
 
 ---
 
-## Changelog completo (v1.0.0 → v1.8.0)
+## Changelog completo (v1.0.0 → v1.9.0)
 
 > Copiado verbatim de §14 de `PROJECT_STATE.md` v1.5.0, antes de que el split editorial (v1.5.1)
 > moviera el changelog fuera del doc magro. Las entradas v1.6.0+ se escribieron directamente aquí,
 > ya con el split vigente.
+
+### v1.9.0 — 2026-07-10 — Onboarding: `Core::Access::GuardianScope` + portales sobre datos reales
+
+**Tercer slice del track de onboarding.** Construye `Core::Access::GuardianScope` (resuelve "mis
+acudidos" contra `guardian_students` real) y cablea los portales de acudiente y estudiante,
+existentes desde antes pero 100% stub, a datos reales de relación. Slice de solo lectura: sin
+migraciones, sin formularios, sin tocar RBAC/entitlement/control plane.
+
+**Recon: hallazgos reales, resueltos por disco:**
+- **Corrección de ubicación (GS1):** el prompt asumía `app/domains/core/queries/access/
+  guardian_scope.rb`, pero `Core::Access::EntitledAddonKeys` (el query object de referencia a
+  espejar) en realidad vive en `app/domains/core/services/access/`, no en `queries/access/` — ese
+  directorio ni existe. Zeitwerk colapsa ambos exactamente igual (`services`/`queries` son
+  intercambiables en la colapsación), así que el nombre de constante no cambia, pero se puso
+  `guardian_scope.rb` junto a su hermano real por consistencia, no en un directorio nuevo.
+- **`guardian_students.status`**: confirmado `active`/`revoked` (CHECK), default `active`,
+  `scope :active` ya existe en el modelo — coincide exactamente con GS2/GS7, sin sorpresas.
+- **El GUC ya estaba fijado en las rutas de portal** — `TenantScoped#within_tenant` es un
+  `around_action` en `ApplicationController`, heredado por `Portals::*` sin nada especial que hacer.
+  `GuardianScope` confía en RLS como backstop, con scoping explícito (`institution_id` +
+  `guardian_user_id` + `status`) como primario — nunca `default_scope`.
+- **Hallazgo que exigió una adición de superficie real:** `resource :guardian, only: :show` era un
+  recurso **singular** — no existía ninguna URL direccionable por-hijo. El caso de aceptación exige
+  poder "intentar la URL de S3 → no encontrado", lo cual requiere una ruta real. Se agregó
+  `resources :students, only: :show, controller: "guardian_students"` anidada bajo `/portal/guardian`,
+  resuelta siempre a través de `GuardianScope.for(...).find(id)` — un estudiante fuera del scope
+  activo del llamante (link revocado, otro acudiente, otro tenant) da `ActiveRecord::RecordNotFound`
+  automático → 404 (confirmado `config.action_dispatch.show_exceptions = :rescuable` en test, sin
+  necesitar un `rescue_from` custom).
+- El portal de estudiante (`resource :student, only: :show`, singular, sin `:id`) ya tenía la
+  garantía "no alcanzable la URL de otro estudiante" **estructuralmente** — no hay parámetro que
+  aceptar. Se verificó (no se construyó) con un test que confirma que una URL con un id cualquiera
+  simplemente no matchea ninguna ruta (404, vía el mismo `:rescuable`).
+- Los 4 controllers de sub-portal (`{guardian,student}_{cafeteria,transport}`, explícitamente FUERA
+  de este slice — backlog #4) solo usaban `Portals::{Guardian,Student}Dashboard.stub.{guardian,
+  student}_name` para UNA línea (el nombre en el header) — se cambió esa línea a `Current.user.name`
+  en los 4 (mecánico, no toca su dato por-dominio, que sigue stub a propósito) para poder retirar
+  limpiamente las clases stub `Portals::GuardianDashboard`/`Portals::StudentDashboard` (eliminadas).
+
+**`Core::Access::GuardianScope`** (`app/domains/core/services/access/guardian_scope.rb`) — módulo
+plano, `module_function`, mismo estilo que `EntitledAddonKeys`. `.for(user, institution:
+Current.institution)` devuelve una relation de `GroupManagement::Student`, componible, NUNCA un
+Array. Filtro explícito `institution_id` + `guardian_user_id` + `status: "active"` en el join — sin
+parámetro de búsqueda en la firma (GS4, verificado con un test que inspecciona
+`method(:for).parameters` directamente, no solo probado a mano). GS3 (sin filtro de término
+lectivo) documentado como reversible cuando cierre B2, mismo criterio que
+`Core::Headcount::Snapshotter`.
+
+**`Core::Access::StudentSelfScope`** (GS5) — hermano simétrico, mismo módulo/patrón, devuelve UN
+registro (`find_by`) o `nil`, no una relation (self es uno-o-ninguno por definición).
+
+**Portales cableados:**
+- `Portals::GuardianPortalController#show` — `@children = GuardianScope.for(Current.user)`; sin
+  `authorize!` (GS6 — cero permisos RBAC, el scope ES la puerta); vista con tabla real (nombre,
+  código, grado, grupo) enlazando a `/portal/guardian/students/:id`; empty state amable si no hay
+  acudidos activos (GS9).
+- `Portals::GuardianStudentsController#show` (nuevo) — resumen de solo lectura de un hijo, resuelto
+  SIEMPRE a través de `GuardianScope.for(...).find(id)` — nunca `GroupManagement::Student.find`
+  directo. `national_id` nunca se muestra.
+- `Portals::StudentPortalController#show` — `@student = StudentSelfScope.for(Current.user)`; resumen
+  propio o empty state si la cuenta no tiene un registro de estudiante vinculado.
+
+**Caso de aceptación de seguridad (§5), verificado end-to-end:** instituciones I y J, acudiente G
+(mismo `Core::User` global) con membresías activas en ambas, links activos a S1/S2 en I, link
+revocado a S3 en I, link activo a S4 en J. Actuando como G bajo el GUC de I: el portal muestra
+exactamente S1/S2; S3 (revocado) y S4 (otro tenant) no aparecen en la lista NI son alcanzables por
+URL directa (`/portal/guardian/students/:id` → 404 para ambos). Cero campos de búsqueda en la
+página (`input[type=search]`, `input[name=q]`, `form[action*=search]` — los tres verificados
+ausentes). Empty states verificados para acudiente sin links y estudiante sin registro propio.
+
+**Resultado:** 342 runs / 1187 assertions / 0 failures / 0 errors / 1 skip preexistente (baseline
+329; 13 tests nuevos: 9 de unidad de `GuardianScope`/`StudentSelfScope`, 4 de integración —incluido
+el caso de aceptación completo—). `test/integration/portals_test.rb` (heredado de fases anteriores,
+aserciones sobre el stub) se reescribió para el nuevo comportamiento real (empty state para el actor
+genérico de `sign_in_as_member`, que no tiene relación de acudiente/estudiante) — el resto de tests
+de portales por-dominio (`cafeteria_test.rb`/`transportation_test.rb`, fuera de este slice) siguieron
+verdes sin tocar su aserción de datos, solo se confirmó que no dependían de las clases retiradas.
+`bin/rails zeitwerk:check` verde. Sin migraciones — todo el esquema necesario ya existía.
+
+**Archivos creados/editados por rol:**
+- Query objects (nuevos): `app/domains/core/services/access/{guardian_scope,student_self_scope}.rb`.
+- Rutas: `config/routes.rb` (+`resources :students` anidado bajo `/portal/guardian`).
+- Controllers: `app/controllers/portals/{guardian_portal,student_portal}_controller.rb` (real),
+  `app/controllers/portals/guardian_students_controller.rb` (nuevo), los 4 controllers de
+  sub-portal por-dominio (ajuste mecánico de una línea cada uno).
+- Vistas: `app/views/portals/guardian_portal/show.html.erb` (real),
+  `app/views/portals/guardian_students/show.html.erb` (nueva),
+  `app/views/portals/student_portal/show.html.erb` (real).
+- Eliminados: `app/models/portals/{guardian,student}_dashboard.rb` (stub retirado).
+- Tests: `test/models/core/access/{guardian_scope,student_self_scope}_test.rb`,
+  `test/integration/guardian_scope_test.rb` (caso de aceptación + empty states),
+  `test/integration/portals_test.rb` (reescrito para el comportamiento real).
+
+**Forward notes (backlog):** (a) vistas de autoservicio de docente/coordinador/director es lo
+siguiente (#1.3); (b) visor de `audit_events` sigue pendiente (#1.4); (c) datos por-dominio dentro
+del portal (saldo de cafetería, rutas de transporte reales, horario) siguen fuera — el portal ya
+queda listo para colgarlos, cada uno detrás de su propio entitlement + lectura scoped (backlog #4);
+(d) filtro por término lectivo sigue diferido a B2, sin inventar el join `enrollments`↔
+`academic_terms`.
 
 ### v1.8.0 — 2026-07-10 — Onboarding: RosterImport de acudientes (alta batch + `guardian_students`)
 

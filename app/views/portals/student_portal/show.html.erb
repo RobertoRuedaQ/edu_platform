@@ -1,12 +1,22 @@
 <% content_for :title, "Mi portal" %>
 
 <%= render "shared/page_header",
-      title: "Hola, #{@dashboard.student_name}",
-      subtitle: "#{@dashboard.section_name} · estos son tus accesos." %>
+      title: "Hola, #{@portal_person_name}",
+      subtitle: "Tu resumen." %>
 
-<div class="tile-grid">
-  <% @dashboard.shortcuts.each do |shortcut| -%>
-    <%= render "shared/dashboard_tile",
-          label: shortcut.label, path: shortcut.path, stat: shortcut.stat %>
-  <% end -%>
-</div>
+<% if @student -%>
+  <%# Read-only (GS8): no forms here. national_id is never shown (privacy). %>
+  <%= render "shared/detail_list", items: {
+        "Código" => @student.student_code,
+        "Grado" => @student.grade_level&.name,
+        "Grupo" => @student.section&.name,
+        # Descriptive label ONLY (GS3) — see Portals::GuardianStudentsController's
+        # equivalent for the same non-filtering rationale.
+        "Término activo" => Core::AcademicTerm.active.find_by(institution_id: Current.institution_id)&.name
+      } %>
+<% else -%>
+  <%= render "shared/empty_state",
+        icon: "user",
+        title: "Tu cuenta aún no está vinculada a un registro de estudiante",
+        description: "Si esto no es lo esperado, contacta a tu institución." %>
+<% end -%>

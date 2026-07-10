@@ -6,7 +6,7 @@ module Portals
     def show
       @infos = Portals::GuardianTransportInfo.for_children
       @portal_label = "Portal del acudiente"
-      @portal_person_name = Portals::GuardianDashboard.stub.guardian_name
+      @portal_person_name = Current.user.name
     end
   end
 end

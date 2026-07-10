@@ -6,7 +6,7 @@ module Portals
     def show
       @info = Portals::StudentTransportInfo.stub
       @portal_label = "Portal del estudiante"
-      @portal_person_name = Portals::StudentDashboard.stub.student_name
+      @portal_person_name = Current.user.name
     end
   end
 end

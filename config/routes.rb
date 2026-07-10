@@ -41,6 +41,13 @@ Rails.application.routes.draw do
       resource :transport, only: :show, controller: "student_transport"
     end
     resource :guardian, only: :show, controller: "guardian_portal" do
+      # Per-child read-only summary (v1.9.0) — resolved through
+      # Core::Access::GuardianScope, so a child not in the caller's own
+      # active-links scope 404s (find on an already-scoped relation), never
+      # renders. Plural on purpose: a guardian has many children; the
+      # student/cafeteria/transport sub-resources above stay singular
+      # (a student only ever has ONE of each, resolved via self-scope).
+      resources :students, only: :show, controller: "guardian_students"
       resource :cafeteria, only: :show, controller: "guardian_cafeteria"
       resource :transport, only: :show, controller: "guardian_transport"
     end

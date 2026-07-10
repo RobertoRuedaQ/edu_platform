@@ -18,10 +18,10 @@
 
 | Campo | Valor |
 |---|---|
-| **Versión del documento** | `v1.8.0` |
+| **Versión del documento** | `v1.9.0` |
 | **Fecha** | 2026-07-10 |
-| **Tests** | 329 runs / 0 fallos / 1 skip preexistente (suite completa, en serie — ver Guardrails) |
-| **Estado en una línea** | Identidad real (login+MFA, invitaciones, gestión de personas, **alta batch de estudiantes Y acudientes por CSV**) + plano de control con track de billing completo S0→S4 + **RBAC del inquilino real** (`IdentityAccess::PermissionCheck`, P1 cerrado) + **`Core::RosterImport` real para ambos kinds** (`GuardianScope`+portales reales = siguiente — ver `HISTORIA.md`). |
+| **Tests** | 342 runs / 0 fallos / 1 skip preexistente (suite completa, en serie — ver Guardrails) |
+| **Estado en una línea** | Identidad real (login+MFA, invitaciones, gestión de personas, alta batch de estudiantes Y acudientes por CSV) + plano de control con track de billing completo S0→S4 + RBAC del inquilino real (`IdentityAccess::PermissionCheck`, P1 cerrado) + `Core::RosterImport` real para ambos kinds + **`Core::Access::GuardianScope` real + portales de acudiente/estudiante sobre datos reales de relación** (siguiente: vistas de autoservicio docente/coordinador/director + visor de auditoría — ver `HISTORIA.md`). |
 
 ### Convención de versionado de ESTE documento
 
@@ -215,8 +215,9 @@ CLIC 3  Detalle / acción              → pestaña del show o formulario
 Piezas transversales (ya construidas): barra de navegación por rol + entitlement (si no hay
 permiso del dominio o el addon no está habilitado, el tile **desaparece** — no "deshabilitado"),
 selector de institución, selector de "actuando como" (opcional), dashboard por rol (2–5 atajos),
-buscador global acotado por scope, portales de persona (student/guardian, sobre datos reales de
-relación pero sin `Core::Access::GuardianScope` — ver §11), vista **403 amable** (RBAC) y página
+buscador global acotado por scope, portales de persona (student/guardian, **ahora sobre datos
+reales de relación** vía `Core::Access::GuardianScope`/`StudentSelfScope`, v1.9.0 — sin
+`authorize!`, gateados por relación, no por RBAC), vista **403 amable** (RBAC) y página
 **"módulo no habilitado"** (entitlement, distinta del 403).
 
 **Capa PRE-login:** layout separado (`layouts/auth`, sin nav de dominio ni selector de institución)
@@ -363,13 +364,14 @@ tabla pieza-por-pieza) en `HISTORIA.md`.
    vía `Resolver` (crea `Core::User` + membresía `institution_users`, **cero `role_assignments`** —
    un acudiente no es staff) + `find_or_create` aditivo del link `guardian_students` (nunca borra un
    link ausente del CSV). Ninguna migración fue necesaria en ninguno de los dos slices.
-2. **`Core::Access::GuardianScope`.** No existe. Los portales de estudiante/acudiente siguen sobre
-   datos stub para "mis acudidos del término activo" — **confirmado en el recon de v1.8.0**: el
-   portal de acudiente (`Portals::GuardianDashboard.stub`) no resuelve nada real todavía, ni por
-   `institution_users` ni por `guardian_students`. Es el próximo slice.
-3. **Vistas de "mis datos" con datos reales** para estudiante/acudiente/docente-coordinador-director
-   sobre el término activo. Lo construido es superficie de administración y auth compartida, no
-   autoservicio de la persona ya autenticada.
+2. ~~`Core::Access::GuardianScope`~~ — ✅ **cerrado (v1.9.0)**. Portales de estudiante/acudiente
+   cableados a datos reales de relación (`GuardianScope`/`StudentSelfScope`); los stubs
+   `Portals::{Guardian,Student}Dashboard` se eliminaron. Caso de aceptación de seguridad (cross-
+   tenant + revocados + sin buscador) verificado end-to-end — ver `HISTORIA.md`.
+3. **Vistas de "mis datos" con datos reales** para docente/coordinador/director sobre el término
+   activo (estudiante/acudiente ya quedaron resueltos en el ítem 2). Lo construido es superficie de
+   administración y auth compartida, no autoservicio de esas otras personas ya autenticadas. **Ahora
+   el pendiente inmediato del track de onboarding.**
 4. **Visor de `audit_events`** + **bandeja de discrepancias reportadas**. Los datos ya se escriben;
    no existe ninguna vista que los liste. Pieza más barata de construir de las que faltan —
    `shared/_audit_entry_row` ya existe.
@@ -394,7 +396,9 @@ determinístico); registrar el tratamiento. El eslabón crítico es la **captura
 matrícula** → su validación es deber institucional explícito (todavía no hay UI de matrícula que lo
 capture). Rate limiting/bloqueo en login, OTP y completado — **implementado**. Nunca exponer
 directorios de estudiantes ni autocompletar por documento/nombre — `Core::Access::GuardianScope`
-(pendiente) debe nacer sin buscador.
+(✅ real, v1.9.0) **nació y se mantiene sin buscador** — verificado con test que inspecciona la
+firma del método (no acepta término de búsqueda) y con aserciones sobre la vista (sin
+`input[type=search]`/`input[name=q]`/`form[action*=search]`).
 
 ---
 
@@ -408,7 +412,7 @@ directorios de estudiantes ni autocompletar por documento/nombre — `Core::Acce
 | ⚠-1 | Identidad global vs. un-correo-un-tenant | — | ✅ Cerrado — ver `HISTORIA.md`. No re-abrir sin razón de negocio explícita. |
 | ⚠-2 | Dónde vive el campo de documento | — | ✅ Cerrado — ver `HISTORIA.md`. |
 | **E** | **CHECKPOINT E: `teacher_management` → `staff_management`** | Personal no docente (cocina, transporte, etc.) sin dominio claro. D1 (generalizar) vs D2 (dominio HR nuevo). Ya existe un `staff_management` mínimo (solo cierra un nav huérfano) que **no** resuelve este checkpoint. | 🔴 Abierto. Recomendado D1. Cerrar antes de crear Tier C de personal. |
-| B1 | Estudiantes sin login | `students.user_id` nullable. | ✅ Confirmado como diseño (ver `HISTORIA.md`). Falta documentar consistencia en portales cuando exista `GuardianScope`. |
+| B1 | Estudiantes sin login | `students.user_id` nullable. | ✅ Confirmado como diseño (ver `HISTORIA.md`). Consistencia en portales ya documentada (v1.9.0): un estudiante sin `user_id` propio simplemente no tiene cuenta con la que entrar al portal en primer lugar (no hay sesión que iniciar); uno CON `user_id` pero cuyo registro aún no se resolvió ve el empty state de `Core::Access::StudentSelfScope`, nunca un error. |
 | **B2** | **Fechado efectivo de asignaciones vs. `academic_terms`** | ¿`role_assignments.valid_from/until` se acopla a ciclos lectivos o es independiente? | 🔴 Abierto. Las columnas `valid_from`/`valid_until` **ya existen** (agregadas en P1, calendario simple, sin FK a `academic_terms`) — la pregunta de si acoplarlas a ciclos lectivos sigue sin decidirse; hoy son fechas de calendario independientes. |
 | **M1** | **Unidad de metering por dominio medido** | El control plane solo consume rollups; `addons.unit` sigue provisional. | 🔴 Abierto. Se fija cuando cada dominio medido defina su evento facturable — bloquea S3b. |
 | P1 | `IdentityAccess::PermissionCheck` real | — | ✅ Cerrado (v1.6.0) — ver `HISTORIA.md`. |
@@ -425,8 +429,8 @@ directorios de estudiantes ni autocompletar por documento/nombre — `Core::Acce
    1. ~~`Core::RosterImport::Parser/Validator/Committer`~~ — ✅ **cerrado para ambos kinds**
       (estudiantes v1.7.0, acudientes v1.8.0). Estructura por-kind ya lista para un tercer kind si
       alguna vez hiciera falta (`Strategy.for` + una nueva `Strategies::*`, sin tocar orquestación).
-   2. **`Core::Access::GuardianScope`** + verificar/conectar los portales de estudiante/acudiente ya existentes — **el portal de acudiente sigue 100% stub** (`Portals::GuardianDashboard.stub`), confirmado en v1.8.0.
-   3. Vistas de autoservicio reales (estudiante/acudiente/docente-coordinador-director) sobre el término activo.
+   2. ~~`Core::Access::GuardianScope` + portales de estudiante/acudiente~~ — ✅ **cerrado (v1.9.0)**, ver `HISTORIA.md`.
+   3. **Vistas de autoservicio reales para docente/coordinador/director** sobre el término activo (estudiante/acudiente ya resueltos en el punto anterior). **Cabeza de fila ahora.**
    4. Visor de `audit_events` + bandeja de discrepancias (barato — los datos ya existen).
    5. Batch-invite tras el alta de acudientes, full-async de parse+validar, y purga de `roster_import_rows` post-commit — hardening documentado, no construido (ver `HISTORIA.md` v1.7.0).
    5. Job recurrente para `Invitations::Expirer` y webhook real para `Invitations::BounceHandler` (opcional / según necesidad real de producción, no bloqueante).
@@ -484,13 +488,24 @@ directorios de estudiantes ni autocompletar por documento/nombre — `Core::Acce
 - **Un acudiente (`Core::RosterImport` kind `guardians`) obtiene SIEMPRE cero `IdentityAccess::RoleAssignment`** — no es staff, su acceso es por relación (`guardian_students`), nunca por RBAC. `Core::People::Resolver` ya garantiza esto por construcción (nunca toca `role_assignments`); no "arreglar" esto agregando un rol "para que el portal funcione" cuando `GuardianScope` se construya — el portal se gatea por relación, no por permiso.
 - **El upsert de un link `guardian_students` (o cualquier vínculo similar) es SIEMPRE aditivo: un CSV/import nunca borra un vínculo ausente del archivo** — solo crea vínculos nuevos o re-afirma (actualiza `relationship`, reactiva si estaba `revoked`) los que el archivo menciona. Desvincular es una acción explícita y separada, nunca un efecto secundario de un re-import. Verificado con un test dedicado ("el link ausente del CSV sobrevive"), no solo inferido.
 - **Estrategia por-kind para pipelines multi-tipo (`Core::RosterImport::Strategy.for`)** — cuando un mismo pipeline (parse→validar→commit) debe soportar variantes con reglas distintas, extraer un objeto-estrategia por variante (columnas, validación, upsert, preview) y mantener la orquestación compartida sin ningún `if kind == ...`. Añadir un tipo nuevo es agregar una clase, no editar las existentes ni sus tests.
+- **El portal de una persona (estudiante/acudiente) se gatea SIEMPRE por relación (`Core::Access::GuardianScope`/`StudentSelfScope`), nunca por RBAC** — ninguno de los dos tiene ni necesita `authorize!`; el query object explícito+scoped ES la puerta. No agregar un rol/permiso "para que el portal funcione" cuando se cablee un dominio nuevo dentro de él (backlog #4) — el gate sigue siendo la relación, el entitlement (si aplica al dominio colgado) se resuelve aparte. Y **`GuardianScope` nace y se mantiene sin buscador** — ninguna versión futura le agrega un parámetro de término/búsqueda; es el invariante de Habeas Data no negociable de este proyecto.
+- **El filtro por término lectivo sigue diferido a B2 — `GuardianScope` (como el headcount de S3a) no filtra por `academic_term`** — `enrollments.term` sigue siendo un string libre sin FK a `academic_terms`; no inventar ese join para "que se vea más preciso". El término activo puede mostrarse como etiqueta descriptiva (mismo patrón que `Core::Headcount::Snapshotter`), nunca como condición de un scope de seguridad.
 
 ---
 
 ## 13. Changelog
 
-El changelog completo (`v1.0.0` → `v1.8.0`) vive en **`HISTORIA.md`**. Entrada de esta versión:
+El changelog completo (`v1.0.0` → `v1.9.0`) vive en **`HISTORIA.md`**. Entrada de esta versión:
 
+- **`v1.9.0` — Onboarding: `Core::Access::GuardianScope` + portales reales.** Query object real
+  (`GuardianScope`/`StudentSelfScope`, junto a `EntitledAddonKeys` en `services/access/` — no en
+  `queries/access/` como se asumía) que resuelve "mis acudidos"/"mi propio registro" contra
+  `guardian_students`/`students.user_id`. Portales de acudiente y estudiante retiran su stub y
+  quedan sobre datos reales, gateados por relación (cero RBAC). Se agregó una ruta nueva
+  (`/portal/guardian/students/:id`) para el resumen de solo lectura por hijo, siempre resuelta a
+  través del scope. Caso de aceptación de seguridad verificado end-to-end: aislamiento cross-tenant,
+  exclusión de links revocados, cero superficie de búsqueda. Sin migraciones. Narrativa completa en
+  `HISTORIA.md`.
 - **`v1.8.0` — Onboarding: RosterImport de acudientes.** Extiende `Core::RosterImport` al kind
   `guardians`: `Core::People::Resolver` crea `Core::User`+membresía (cero `role_assignments`), y
   `guardian_students` se upserta aditivo/no-destructivo (nunca borra un link ausente del CSV).

@@ -1,0 +1,18 @@
+<% content_for :title, "#{@student.first_name} #{@student.last_name}" %>
+
+<%= render "shared/page_header",
+      title: "#{@student.first_name} #{@student.last_name}",
+      subtitle: "Resumen de solo lectura.",
+      actions: ui_button("← Volver a mis acudidos", href: portal_guardian_path, variant: :secondary) %>
+
+<%# Read-only (GS8): no forms here. national_id is never shown (privacy). %>
+<%= render "shared/detail_list", items: {
+      "Código" => @student.student_code,
+      "Grado" => @student.grade_level&.name,
+      "Grupo" => @student.section&.name,
+      # Descriptive label ONLY (GS3) — never a filter on the scope/listing;
+      # mirrors the same documented limitation as Core::Headcount::Snapshotter
+      # (enrollments.term has no FK to academic_terms in the current schema).
+      "Término activo" => Core::AcademicTerm.active.find_by(institution_id: Current.institution_id)&.name,
+      "Tu relación" => @link&.relationship
+    } %>
