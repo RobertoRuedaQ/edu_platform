@@ -1,97 +1,65 @@
 module Core
   module RosterImport
-    # Phase 2 (J4): per-row validation + preview. ZERO writes to `students` —
+    # Phase 2 (J4): per-row validation + preview. ZERO writes to real tables —
     # only annotates RosterImportRow#status/#message and the batch's summary
-    # counters. Real row statuses (confirmed against the schema, not the ones
-    # originally assumed): "valid" (new — will create), "duplicate" (matches
-    # an existing Student by national_id — will update), "collision" (two
-    # rows in THIS batch share the same national_id — a problem with the
-    # file itself, not with either row alone), "error" (missing required
-    # field or an unresolvable grade_level/section reference).
+    # counters. Kind-AGNOSTIC orchestration (G7): every kind-specific rule
+    # (required fields, business errors, what counts as "already exists",
+    # what counts as an in-batch collision) comes from Strategy.for(batch.kind,
+    # ...) — this file never branches on kind itself.
+    #
+    # Row statuses (fixed by the real schema's CHECK constraint): "valid"
+    # (new — will create), "duplicate" (the strategy's #existing_record?
+    # says this row's real counterpart already exists — will update/
+    # re-affirm), "collision" (two rows in THIS batch share the same
+    # strategy#collision_key — a problem with the file itself), "error"
+    # (missing required field or a strategy business_errors failure).
     #
     # A batch can commit with error/collision rows present — those are
-    # skipped, not blocking (§4.2 of the prompt's recommended policy): the
-    # valid/duplicate rows still commit, and the report shows both.
+    # skipped, not blocking: the valid/duplicate rows still commit, and the
+    # report shows both.
     class Validator
-      REQUIRED_FIELDS = %w[national_id first_name last_name gender birthdate student_code].freeze
-      VALID_GENDERS = %w[male female].freeze
-
       def self.call(batch:)
         new(batch).call
       end
 
       def initialize(batch)
         @batch = batch
-        @institution = batch.institution
+        @strategy = Strategy.for(batch.kind, institution: batch.institution)
       end
 
       def call
         rows = @batch.roster_import_rows.order(:line_number).to_a
-        national_ids = rows.index_with { |row| Cipher.decrypt(row.raw["national_id"]) }
-        collided_ids = duplicated_values(national_ids.values.compact)
+        plains = rows.index_with { |row| Cipher.decrypt_row(row.raw, @strategy.sensitive_fields) }
+        collided_keys = duplicated_values(plains.values.map { |plain| @strategy.collision_key(plain) }.compact)
 
-        rows.each { |row| validate_row(row, national_ids[row], collided_ids) }
+        rows.each { |row| validate_row(row, plains[row], collided_keys) }
 
         update_summary!(rows)
       end
 
       private
 
-      def validate_row(row, national_id, collided_ids)
-        errors = missing_field_errors(row.raw)
-        errors << "gender debe ser \"male\" o \"female\"" if row.raw["gender"].present? && VALID_GENDERS.exclude?(row.raw["gender"])
-        errors << "birthdate inválida" if row.raw["birthdate"].present? && parse_date(row.raw["birthdate"]).nil?
-
-        grade_level, grade_level_error = resolve_grade_level(row.raw["grade_level"])
-        errors << grade_level_error if grade_level_error
-        _section, section_error = resolve_section(row.raw["section"], grade_level)
-        errors << section_error if section_error
+      def validate_row(row, plain, collided_keys)
+        errors = missing_field_errors(plain) + @strategy.business_errors(plain)
+        key = @strategy.collision_key(plain)
 
         if errors.any?
           row.update!(status: "error", message: errors.join("; "))
-        elsif national_id && collided_ids.include?(national_id)
-          row.update!(status: "collision", message: "national_id duplicado dentro del archivo")
-        elsif existing_student(national_id)
+        elsif key && collided_keys.include?(key)
+          row.update!(status: "collision", message: "duplicado dentro del archivo")
+        elsif @strategy.existing_record?(plain)
           row.update!(status: "duplicate", message: nil)
         else
           row.update!(status: "valid", message: nil)
         end
       end
 
-      def missing_field_errors(raw)
-        REQUIRED_FIELDS.select { |field| raw[field].blank? }.map { |field| "falta #{field}" }
-      end
-
-      def resolve_grade_level(name)
-        return [ nil, nil ] if name.blank?
-
-        grade_level = GroupManagement::GradeLevel.find_by(institution_id: @institution.id, name: name)
-        grade_level ? [ grade_level, nil ] : [ nil, "grade_level \"#{name}\" no existe" ]
-      end
-
-      def resolve_section(name, grade_level)
-        return [ nil, nil ] if name.blank?
-
-        scope = GroupManagement::Section.where(institution_id: @institution.id)
-        scope = scope.where(grade_level_id: grade_level.id) if grade_level
-        section = scope.find_by(name: name)
-        section ? [ section, nil ] : [ nil, "section \"#{name}\" no existe" ]
-      end
-
-      def existing_student(national_id)
-        return nil if national_id.blank?
-
-        GroupManagement::Student.find_by(institution_id: @institution.id, national_id: national_id)
+      def missing_field_errors(plain)
+        @strategy.required_fields.select { |field| plain[field].blank? }.map { |field| "falta #{field}" }
       end
 
       def duplicated_values(values)
-        values.tally.select { |_id, count| count > 1 }.keys
-      end
-
-      def parse_date(value)
-        Date.parse(value.to_s)
-      rescue ArgumentError, TypeError
-        nil
+        values.tally.select { |_key, count| count > 1 }.keys
       end
 
       # rows are the SAME in-memory objects validate_row already called

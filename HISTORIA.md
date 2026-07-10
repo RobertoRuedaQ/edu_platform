@@ -11,11 +11,96 @@
 
 ---
 
-## Changelog completo (v1.0.0 → v1.7.0)
+## Changelog completo (v1.0.0 → v1.8.0)
 
 > Copiado verbatim de §14 de `PROJECT_STATE.md` v1.5.0, antes de que el split editorial (v1.5.1)
 > moviera el changelog fuera del doc magro. Las entradas v1.6.0+ se escribieron directamente aquí,
 > ya con el split vigente.
+
+### v1.8.0 — 2026-07-10 — Onboarding: RosterImport de acudientes (alta batch + `guardian_students`)
+
+**Segundo slice del track de onboarding.** Extiende `Core::RosterImport` (real para estudiantes desde
+v1.7.0) al kind `guardians`: crea `Core::User` (login) vía `Core::People::Resolver` + membresía +
+vínculo `guardian_students` con upsert aditivo/no-destructivo. Reusa toda la maquinaria de v1.7.0
+(tres fases, `CommitJob` bajo GUC, `Cipher`, no-persistencia del CSV).
+
+**G7 — estrategia por-kind, extraída sin romper comportamiento.** `Parser`/`Validator`/`Committer`
+(v1.7.0) estaban 100% hardcodeados a estudiantes — cero seam por-kind. Se extrajo
+`Core::RosterImport::Strategy.for(kind, institution:)` → `Strategies::{Students,Guardians}`, cada
+una encapsulando: `expected_headers`, `required_fields`, `sensitive_fields`, `collision_key(plain)`,
+`business_errors(plain)`, `existing_record?(plain)`, `commit_row!(plain)`, `preview_columns(plain)`/
+`preview_headers`. Los tres orquestadores y el controller/vista quedaron **kind-agnósticos** — nunca
+ramifican por kind, solo delegan al strategy. **Los 28 tests de estudiantes de v1.7.0 siguen verdes
+sin ninguna edición de comportamiento** tras la extracción (confirmado corriendo la suite completa).
+
+**Recon: hallazgos reales, resueltos por disco:**
+- **El más crítico, confirma G3 sin ambigüedad:** `SessionsController#authenticate_credentials`
+  exige literalmente `user.memberships.active.exists?(institution_id:)` para autenticar. Sin la
+  membresía `institution_users` que crea `Resolver`, un acudiente **nunca podría loguear**, ni
+  siquiera después de completar su invitación. La membresía no es solo "consistente" — es lo que
+  hace posible el login futuro.
+- **El portal de acudiente sigue 100% stub** (`Portals::GuardianDashboard.stub`) — no resuelve nada
+  real todavía (ni por `institution_users` ni por `guardian_students`). No había nada real con qué
+  ser consistente; eso es exactamente el slice siguiente (`GuardianScope`).
+- `roster_import_batches.kind` ya admitía `'guardians'` en su CHECK desde que se creó la tabla — sin
+  migración para eso. `guardian_students` ya tenía el índice único exacto necesario para el link:
+  `(institution_id, guardian_user_id, student_id)` — sin migración tampoco.
+- **Reinterpretación necesaria del enum fijo de `roster_import_rows.status`** (`valid/duplicate/
+  collision/error`, igual para ambos kinds): para acudientes, que el mismo `guardian_national_id` se
+  repita en el CSV es **normal** (un acudiente con N hijos = N filas) — nunca colisión. La colisión
+  real es el **par** `(guardian_national_id, student_national_id)` repetido. "duplicate" pasó a
+  significar "el LINK ya existe" (no simplemente "el acudiente ya existe") — un acudiente existente
+  ganando un hijo nuevo sigue siendo "valid" (link nuevo), solo re-afirmar un link YA existente es
+  "duplicate". `resolved_record_id` de una fila de acudiente apunta al **link**, no al `Core::User`
+  (1 fila = 1 relación, coherente con G1).
+- `guardian_students.relationship` **no tiene CHECK en BD** — se definió el vocabulario a nivel
+  Validator (`padre/madre/acudiente/tutor`), coincidiendo con la convención ya usada en
+  `db/seeds.rb` ("padre"/"madre").
+
+**Commit de un acudiente:** `Core::People::Resolver.call(email:, name:, national_id:, institution:,
+role: "guardian")` — el mismo `Resolver` de siempre, que **nunca** crea ningún
+`IdentityAccess::RoleAssignment` (confirmado en el recon de P1 y re-confirmado aquí con un test
+directo) — cero permisos RBAC por construcción, sin código extra para "evitar" otorgarlos.
+`role: "guardian"` se pasa al campo libre `institution_users.role` (P2, sin lectores reales, solo
+valor cosmético/greppable). El link se resuelve con `find_or_create_by!` sobre la llave única real;
+si existe con `relationship`/`status` distintos, se actualizan esos campos — **nunca se borra** un
+link ausente del CSV (test corona: un acudiente con un link a un estudiante NO mencionado en el CSV
+conserva ese link intacto tras el commit, verificado a nivel de estrategia y de punta a punta por
+HTTP). Un link `revoked` se reactiva si una fila lo vuelve a mencionar (una fila del roster solo
+afirma, nunca revoca).
+
+**Cifrado y máscara centralizados en `Cipher`** (antes vivían parcialmente en el helper de vista):
+`Cipher.decrypt_row(raw, sensitive_fields)` (descifra todas las claves sensibles de una fila de una
+vez, usado por `Validator`/`Committer`/el controller) y `Cipher.mask(plain)` (la regla "revela como
+máximo la mitad", movida desde `IdentityAccessHelper#mask_national_id`, que se eliminó — cada
+strategy decide qué se enmascara en su propio `preview_columns`, así que la vista nunca decide qué
+es sensible). El controller computa el preview (fila descifrada + columnas) **en el controller**, no
+en la vista, para que el valor descifrado/enmascarado nunca pase por un helper reusable sin querer.
+
+**Resultado:** 329 runs / 1149 assertions / 0 failures / 0 errors / 1 skip preexistente (baseline
+312; 17 tests nuevos: 14 de la estrategia de acudientes, 2 de aceptación end-to-end vía HTTP, 1 de
+`CommitJob` bajo GUC para el kind `guardians`). Sin migración — ambas piezas de esquema que este
+slice necesitaba ya existían. `bin/rails zeitwerk:check` verde.
+
+**Archivos creados/editados por rol:**
+- Estrategia (nuevo): `app/domains/core/services/roster_import/strategy.rb`,
+  `app/domains/core/services/roster_import/strategies/{students,guardians}.rb`.
+- Orquestación (refactor kind-agnóstico, sin nueva migración):
+  `app/domains/core/services/roster_import/{parser,validator,committer,cipher}.rb`.
+- Controller/vistas: `app/controllers/identity_access/roster_imports_controller.rb` (+parámetro
+  `kind`, preview computado ahí), `app/views/identity_access/roster_imports/{new,show}.html.erb`
+  (kind-agnósticas vía `preview_columns`/`preview_headers`), `app/helpers/identity_access_helper.rb`
+  (`mask_national_id` eliminado, movido a `Cipher.mask`).
+- Tests: `test/models/core/roster_import/strategies/guardians_test.rb` (14),
+  `test/integration/roster_imports_guardians_test.rb` (2), `test/models/core/roster_import/
+  commit_job_test.rb` (+1, GUC para `guardians`), `test/integration/roster_imports_test.rb` (ajuste
+  mecánico: los POSTs existentes ahora pasan `kind: "students"` explícito, sin cambio de aserciones).
+
+**Forward notes (backlog):** (a) `Core::Access::GuardianScope` + portales reales sobre
+`institution_users`/`guardian_students` es el slice siguiente — el portal de acudiente sigue 100%
+stub; (b) batch-invite de los acudientes recién creados es ahora relevante (no pueden loguear hasta
+ser invitados) — sigue sin construirse; (c) desvincular una relación vía import sigue sin
+construirse (el import es aditivo por diseño, desvincular es una acción explícita aparte).
 
 ### v1.7.0 — 2026-07-10 — Onboarding: RosterImport de estudiantes (alta batch por CSV)
 

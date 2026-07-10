@@ -18,10 +18,10 @@
 
 | Campo | Valor |
 |---|---|
-| **Versión del documento** | `v1.7.0` |
+| **Versión del documento** | `v1.8.0` |
 | **Fecha** | 2026-07-10 |
-| **Tests** | 312 runs / 0 fallos / 1 skip preexistente (suite completa, en serie — ver Guardrails) |
-| **Estado en una línea** | Identidad real (login+MFA, invitaciones, gestión de personas, **alta batch de estudiantes por CSV**) + plano de control con track de billing completo S0→S4 + **RBAC del inquilino real** (`IdentityAccess::PermissionCheck`, P1 cerrado) + **`Core::RosterImport` real para estudiantes** (acudientes = siguiente — ver `HISTORIA.md`). |
+| **Tests** | 329 runs / 0 fallos / 1 skip preexistente (suite completa, en serie — ver Guardrails) |
+| **Estado en una línea** | Identidad real (login+MFA, invitaciones, gestión de personas, **alta batch de estudiantes Y acudientes por CSV**) + plano de control con track de billing completo S0→S4 + **RBAC del inquilino real** (`IdentityAccess::PermissionCheck`, P1 cerrado) + **`Core::RosterImport` real para ambos kinds** (`GuardianScope`+portales reales = siguiente — ver `HISTORIA.md`). |
 
 ### Convención de versionado de ESTE documento
 
@@ -89,7 +89,7 @@ real desde P1, `IdentityAccess::PermissionCheck`). **Ambas compuertas son reales
 - `institutions` y `users` son **GLOBALES** (sin RLS). Todo lo demás tenant-owned es **tenant-scoped**.
 - **Una persona = un `users`** (login único por `email`, `citext`, único global); puede pertenecer a varias instituciones vía `institution_users`. Confirmado y en producción de código (⚠-1, cerrado — ver `HISTORIA.md`).
 - Resolución de tenant **por subdominio** (`institutions.slug`), vía `Tenant::Resolver`.
-- `student` y `guardian` son **entidades-persona, NO roles RBAC**. Su acceso se resuelve por **relación** (`students.user_id`, `guardian_students`), no por `role_assignments`. Un menor de K-12 puede existir sin `user_id`; un acudiente siempre tiene login (⚠-2, cerrado — ver `HISTORIA.md`). La tabla `guardian_students` real ya existe (dominio `core`), en paralelo a la legacy `student_support.student_guardians` (ambas coexisten a propósito; no se migró la legacy).
+- `student` y `guardian` son **entidades-persona, NO roles RBAC**. Su acceso se resuelve por **relación** (`students.user_id`, `guardian_students`), no por `role_assignments`. Un menor de K-12 puede existir sin `user_id`; un acudiente siempre tiene login (⚠-2, cerrado — ver `HISTORIA.md`). La tabla `guardian_students` real ya existe (dominio `core`), en paralelo a la legacy `student_support.student_guardians` (ambas coexisten a propósito; no se migró la legacy). **Confirmado en v1.8.0:** la membresía `institution_users` de un acudiente no es opcional/cosmética — `SessionsController#authenticate_credentials` exige `user.memberships.active.exists?(institution_id:)` para autenticar, así que sin ella un acudiente no podría loguear ni después de completar su invitación. `Core::People::Resolver` la crea; **cero `role_assignments`** siempre (un acudiente no es staff).
 
 ### 3.3 Roles de Postgres y realidad operativa de BD
 
@@ -354,15 +354,19 @@ tabla pieza-por-pieza) en `HISTORIA.md`.
 
 ### 9.1 Pendiente real (no implementado, no solo "vista futura")
 
-1. ~~`Core::RosterImport::Parser` / `Validator` / `Committer`~~ — ✅ **real para ESTUDIANTES**
-   (v1.7.0, ver `HISTORIA.md`). Corte deliberado: solo `GroupManagement::Student`; **acudientes**
-   (`Core::User` + `guardian_students`, upsert-que-no-rompe-vínculos) siguen pendientes — slice
-   siguiente, reusa la misma maquinaria (Parser/Validator/Committer/vistas). El Committer upserta
-   `GroupManagement::Student` DIRECTO por `national_id` — NO vía `Core::People::Resolver` (ese
-   resolver crea `Core::User`+`InstitutionUser`, la identidad global con login; un estudiante K-12
-   normalmente no tiene una. `Resolver` sí aplicará en el slice de acudientes).
+1. ~~`Core::RosterImport::Parser` / `Validator` / `Committer`~~ — ✅ **real para AMBOS kinds**
+   (estudiantes v1.7.0, acudientes v1.8.0 — ver `HISTORIA.md`). Estructura por-kind (G7):
+   `Core::RosterImport::Strategy.for(kind, institution:)` → `Strategies::{Students,Guardians}`;
+   `Parser`/`Validator`/`Committer` son kind-agnósticos, nunca ramifican. Estudiantes: upsert
+   DIRECTO de `GroupManagement::Student` por `national_id`, sin `Core::People::Resolver` (ese
+   resolver crea `Core::User`, un estudiante K-12 normalmente no tiene login). Acudientes: **sí**
+   vía `Resolver` (crea `Core::User` + membresía `institution_users`, **cero `role_assignments`** —
+   un acudiente no es staff) + `find_or_create` aditivo del link `guardian_students` (nunca borra un
+   link ausente del CSV). Ninguna migración fue necesaria en ninguno de los dos slices.
 2. **`Core::Access::GuardianScope`.** No existe. Los portales de estudiante/acudiente siguen sobre
-   datos stub para "mis acudidos del término activo".
+   datos stub para "mis acudidos del término activo" — **confirmado en el recon de v1.8.0**: el
+   portal de acudiente (`Portals::GuardianDashboard.stub`) no resuelve nada real todavía, ni por
+   `institution_users` ni por `guardian_students`. Es el próximo slice.
 3. **Vistas de "mis datos" con datos reales** para estudiante/acudiente/docente-coordinador-director
    sobre el término activo. Lo construido es superficie de administración y auth compartida, no
    autoservicio de la persona ya autenticada.
@@ -418,10 +422,10 @@ directorios de estudiantes ni autocompletar por documento/nombre — `Core::Acce
 > Orden sugerido por dependencia y riesgo. Cada iteración cierra con actualización de este documento (bump de versión) y una entrada en `HISTORIA.md`.
 
 1. **Módulo de autenticación/onboarding — lo que queda** (ver §9.1), en orden recomendado:
-   1. ~~`Core::RosterImport::Parser/Validator/Committer`~~ — ✅ **estudiantes cerrado (v1.7.0)**.
-      **Acudientes** (mismo Parser/Validator/Committer, `Core::User` + `guardian_students` con
-      upsert-que-no-rompe-vínculos, vía `Core::People::Resolver` — ahí sí aplica) es lo siguiente.
-   2. **`Core::Access::GuardianScope`** + verificar/conectar los portales de estudiante/acudiente ya existentes.
+   1. ~~`Core::RosterImport::Parser/Validator/Committer`~~ — ✅ **cerrado para ambos kinds**
+      (estudiantes v1.7.0, acudientes v1.8.0). Estructura por-kind ya lista para un tercer kind si
+      alguna vez hiciera falta (`Strategy.for` + una nueva `Strategies::*`, sin tocar orquestación).
+   2. **`Core::Access::GuardianScope`** + verificar/conectar los portales de estudiante/acudiente ya existentes — **el portal de acudiente sigue 100% stub** (`Portals::GuardianDashboard.stub`), confirmado en v1.8.0.
    3. Vistas de autoservicio reales (estudiante/acudiente/docente-coordinador-director) sobre el término activo.
    4. Visor de `audit_events` + bandeja de discrepancias (barato — los datos ya existen).
    5. Batch-invite tras el alta de acudientes, full-async de parse+validar, y purga de `roster_import_rows` post-commit — hardening documentado, no construido (ver `HISTORIA.md` v1.7.0).
@@ -476,14 +480,25 @@ directorios de estudiantes ni autocompletar por documento/nombre — `Core::Acce
 - **`InvoiceLineItem#readonly?` bloquea `update`/`destroy` de una fila individual, pero `PeriodCut` regenera un `draft` con `invoice.line_items.delete_all`** (bulk SQL, bypasea `readonly?` a propósito) — no confundir "una línea no se edita nunca" con "un borrador no se regenera nunca". Solo `delete_all`/`create!` desde el servicio, nunca `destroy`/`update` de una línea suelta.
 - **Nunca escribir código después de un `.enqueue`/`.enqueue_for` que dependa del GUC del tenant seguir fijado** (RosterImport, v1.7.0) — bajo el adaptador de test de ActiveJob (`perform_enqueued_jobs`) un job se ejecuta SINCRÓNICAMENTE, y `ApplicationJob#around_perform` resetea incondicionalmente el GUC en su `ensure` al terminar; cualquier query tenant-scoped (p. ej. un `Audit.log`) que corra DESPUÉS de encolar en la misma acción puede fallar RLS aunque siga siendo, técnicamente, la misma request. Esto no es solo un artefacto de test — cualquier adaptador de cola que corra inline expone lo mismo. Ordenar siempre: auditar/hacer trabajo tenant-scoped **antes** de encolar, nunca después.
 - **Cifrar un valor suelto dentro de una columna `jsonb` (no un atributo `encrypts` completo)** — usar la API de bajo nivel `ActiveRecord::Encryption.encryptor.encrypt/decrypt(valor, key_provider: ActiveRecord::Encryption.key_provider, cipher_options: { deterministic: true })` (ver `Core::RosterImport::Cipher`), NO la macro declarativa `encrypts` (que opera sobre un atributo AR entero, no sobre una clave dentro de un hash jsonb). Mismo cifrado determinístico que cualquier `encrypts ..., deterministic: true` existente, así que sigue siendo comparable contra esos atributos vía query normal (Rails encripta el lado de la query de forma transparente).
-- **Al enmascarar un dato sensible para mostrarlo en una vista, nunca reveles más de la mitad de los caracteres** — una regla de "muestra los últimos 4" revela el valor COMPLETO si el dato tiene 4 caracteres o menos (encontrado real en RosterImport's preview, v1.7.0, no solo hipotético). Calcular el tramo visible como `[largo/2, N].min`, nunca un valor fijo sin tope relativo al tamaño real.
+- **Al enmascarar un dato sensible para mostrarlo en una vista, nunca reveles más de la mitad de los caracteres** — una regla de "muestra los últimos 4" revela el valor COMPLETO si el dato tiene 4 caracteres o menos (encontrado real en RosterImport's preview, v1.7.0, no solo hipotético). Calcular el tramo visible como `[largo/2, N].min`, nunca un valor fijo sin tope relativo al tamaño real. (v1.8.0: esta regla se movió de un helper de vista a `Core::RosterImport::Cipher.mask` — cada strategy decide qué se enmascara en su propio `preview_columns`; la vista nunca decide qué es sensible.)
+- **Un acudiente (`Core::RosterImport` kind `guardians`) obtiene SIEMPRE cero `IdentityAccess::RoleAssignment`** — no es staff, su acceso es por relación (`guardian_students`), nunca por RBAC. `Core::People::Resolver` ya garantiza esto por construcción (nunca toca `role_assignments`); no "arreglar" esto agregando un rol "para que el portal funcione" cuando `GuardianScope` se construya — el portal se gatea por relación, no por permiso.
+- **El upsert de un link `guardian_students` (o cualquier vínculo similar) es SIEMPRE aditivo: un CSV/import nunca borra un vínculo ausente del archivo** — solo crea vínculos nuevos o re-afirma (actualiza `relationship`, reactiva si estaba `revoked`) los que el archivo menciona. Desvincular es una acción explícita y separada, nunca un efecto secundario de un re-import. Verificado con un test dedicado ("el link ausente del CSV sobrevive"), no solo inferido.
+- **Estrategia por-kind para pipelines multi-tipo (`Core::RosterImport::Strategy.for`)** — cuando un mismo pipeline (parse→validar→commit) debe soportar variantes con reglas distintas, extraer un objeto-estrategia por variante (columnas, validación, upsert, preview) y mantener la orquestación compartida sin ningún `if kind == ...`. Añadir un tipo nuevo es agregar una clase, no editar las existentes ni sus tests.
 
 ---
 
 ## 13. Changelog
 
-El changelog completo (`v1.0.0` → `v1.7.0`) vive en **`HISTORIA.md`**. Entrada de esta versión:
+El changelog completo (`v1.0.0` → `v1.8.0`) vive en **`HISTORIA.md`**. Entrada de esta versión:
 
+- **`v1.8.0` — Onboarding: RosterImport de acudientes.** Extiende `Core::RosterImport` al kind
+  `guardians`: `Core::People::Resolver` crea `Core::User`+membresía (cero `role_assignments`), y
+  `guardian_students` se upserta aditivo/no-destructivo (nunca borra un link ausente del CSV).
+  Se extrajo una estrategia por-kind (`Strategy.for` → `Strategies::{Students,Guardians}`) de
+  `Parser`/`Validator`/`Committer` (antes hardcodeados a estudiantes) sin romper ningún test
+  existente. Sin migración. Hallazgo clave del recon: la membresía del acudiente no es cosmética —
+  `SessionsController` la exige para autenticar; el portal de acudiente sigue 100% stub. Narrativa
+  completa en `HISTORIA.md`.
 - **`v1.7.0` — Onboarding: RosterImport de estudiantes.** `Core::RosterImport::{Parser,Validator,
   Committer}` real para `GroupManagement::Student` (acudientes = slice siguiente). Upsert directo
   por `national_id`, NO vía `Core::People::Resolver` (ese resolver crea `Core::User`, fuera de

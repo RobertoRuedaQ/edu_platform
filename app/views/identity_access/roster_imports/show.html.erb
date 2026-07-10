@@ -11,15 +11,18 @@
 <%= render "shared/stat", value: (@batch.summary["update_count"] || 0).to_s, label: "a actualizar" %>
 <%= render "shared/stat", value: ((@batch.summary["error_count"] || 0) + (@batch.summary["collision_count"] || 0)).to_s, label: "con error" %>
 
-<%# Never a browsable student directory (privacy): only THIS batch's own
-    just-uploaded rows, and national_id is masked, never shown in full. %>
+<%# Never a browsable directory (privacy): only THIS batch's own
+    just-uploaded rows, and every document number is masked, never shown in
+    full — kind-agnostic, the columns/masking come entirely from the
+    strategy (Core::RosterImport::Strategy.for), computed in the controller. %>
 <%= render layout: "shared/table",
-      locals: { headers: ["Línea", "Nombre", "Documento", "Acción", "Detalle"] } do -%>
-  <% @rows.each do |row| -%>
+      locals: { headers: ["Línea", *@preview_headers, "Acción", "Detalle"] } do -%>
+  <% @previews.each do |row, columns| -%>
     <tr>
       <td><%= row.line_number %></td>
-      <td><%= [row.raw["first_name"], row.raw["last_name"]].compact.join(" ").presence || "—" %></td>
-      <td><%= mask_national_id(row.raw["national_id"]) %></td>
+      <% columns.each do |value| -%>
+        <td><%= value %></td>
+      <% end -%>
       <td><%= roster_import_row_status_badge(row.status) %></td>
       <td><%= row.message %></td>
     </tr>

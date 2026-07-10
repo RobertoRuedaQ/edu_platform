@@ -49,7 +49,7 @@ class RosterImportsTest < ActionDispatch::IntegrationTest
         "9002,Luis,Gómez,male,2014-05-10,ACC-2,2026,,,\n"
 
       # Step 1: upload -> parse + validate, redirect to preview.
-      post "/identity_access/roster_imports", params: { roster_import: { file: upload(content) } }
+      post "/identity_access/roster_imports", params: { roster_import: { kind: "students", file: upload(content) } }
       assert_redirected_to identity_access_roster_import_path(Core::RosterImportBatch.last)
       follow_redirect!
       assert_response :success
@@ -101,7 +101,7 @@ class RosterImportsTest < ActionDispatch::IntegrationTest
         "8002,Actualizado,Nombre,male,2014-01-01,PRE-EXISTING,2026,,,\n" + # update
         ",SinDocumento,Prueba,male,2014-01-01,MIX-3,2026,,,\n"        # error
 
-      post "/identity_access/roster_imports", params: { roster_import: { file: upload(content) } }
+      post "/identity_access/roster_imports", params: { roster_import: { kind: "students", file: upload(content) } }
       assert_response :redirect
       follow_redirect!
       assert_response :success
@@ -123,7 +123,7 @@ class RosterImportsTest < ActionDispatch::IntegrationTest
       get "/identity_access/roster_imports"
       assert_response :forbidden
 
-      post "/identity_access/roster_imports", params: { roster_import: { file: upload(CSV_HEADER) } }
+      post "/identity_access/roster_imports", params: { roster_import: { kind: "students", file: upload(CSV_HEADER) } }
       assert_response :forbidden
     end
   end

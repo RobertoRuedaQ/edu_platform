@@ -4,19 +4,17 @@ module Core
   module RosterImport
     # Phase 1 (J4): CSV (stdlib, no gem) -> raw RosterImportRow per line. Pure
     # structure — no business validation (Validator's job), no writes to real
-    # tables besides the raw rows themselves. Unknown extra columns are kept
-    # in `raw` but ignored downstream; missing expected columns just become
-    # blank values (Validator reports missing-required as a row error, not
-    # Parser). national_id is encrypted (Cipher) before it ever reaches the
-    # row's jsonb payload — the plaintext CSV value never touches the
-    # database (J6). The uploaded io is read once, in memory, and never
-    # persisted (see RosterImportBatch's comment on why).
+    # tables besides the raw rows themselves. Kind-AGNOSTIC orchestration
+    # (G7): which columns to expect and which are sensitive comes entirely
+    # from Strategy.for(batch.kind, ...) — this file never branches on kind.
+    # Unknown extra columns are kept in `raw` but ignored downstream; missing
+    # expected columns just become blank values (Validator reports
+    # missing-required as a row error, not Parser). Sensitive fields are
+    # encrypted (Cipher) before they ever reach the row's jsonb payload — the
+    # plaintext CSV value never touches the database (J6). The uploaded io is
+    # read once, in memory, and never persisted (see RosterImportBatch's
+    # comment on why).
     module Parser
-      EXPECTED_HEADERS = %w[
-        national_id first_name last_name gender birthdate student_code
-        entry_year grade_level section email
-      ].freeze
-
       Result = Data.define(:batch, :row_count)
 
       # `content` is the ALREADY-READ file body (a String, never a path or an
@@ -28,6 +26,7 @@ module Core
       # opens the file/IO, not against an already-read String).
       def self.call(batch:, content:)
         institution = batch.institution
+        strategy = Strategy.for(batch.kind, institution: institution)
         row_count = 0
 
         content = content.dup.force_encoding(Encoding::UTF_8).delete_prefix("﻿")
@@ -36,8 +35,8 @@ module Core
 
         csv.each do |csv_row|
           row_count += 1
-          payload = EXPECTED_HEADERS.index_with { |h| csv_row[h]&.to_s&.strip.presence }
-          payload["national_id"] = Cipher.encrypt(payload["national_id"])
+          payload = strategy.expected_headers.index_with { |h| csv_row[h]&.to_s&.strip.presence }
+          strategy.sensitive_fields.each { |field| payload[field] = Cipher.encrypt(payload[field]) }
 
           Core::RosterImportRow.create!(
             institution: institution, roster_import_batch: batch,

@@ -1,13 +1,17 @@
 module IdentityAccess
-  # Batch alta admin surface for students (RosterImport slice) — sibling of
-  # PeopleController's individual "crear persona", gated by the SAME
-  # people.manage capability (real via P1). Three explicit phases (J4):
+  # Batch alta admin surface — sibling of PeopleController's individual
+  # "crear persona", gated by the SAME people.manage capability (real via
+  # P1). Handles both kinds (students since v1.7.0, guardians since this
+  # slice) — the controller only threads `kind` through to
+  # Core::RosterImportBatch and the per-kind Strategy handles the rest
+  # (G7); it never branches on kind itself. Three explicit phases (J4):
   # #create parses+validates synchronously (capped, see MAX_ROWS) and
   # redirects to the preview (#show); #commit enqueues the async apply. No
-  # invitations are ever sent from here (J3) — this only creates/updates
-  # roster records.
+  # invitations are ever sent from here (J3/J3-bis) — this only
+  # creates/updates roster records.
   class RosterImportsController < ApplicationController
     MAX_ROWS = 2_000
+    KINDS = %w[students guardians].freeze
 
     def index
       authorize!("people.manage")
@@ -20,6 +24,12 @@ module IdentityAccess
 
     def create
       authorize!("people.manage")
+
+      kind = params.dig(:roster_import, :kind).to_s
+      unless KINDS.include?(kind)
+        @error = "Selecciona un tipo de carga válido."
+        return render :new, status: :unprocessable_entity
+      end
 
       file = params.dig(:roster_import, :file)
       if file.blank?
@@ -40,7 +50,7 @@ module IdentityAccess
       end
 
       batch = Core::RosterImportBatch.create!(
-        institution: Current.institution, academic_term: active_term, kind: "students",
+        institution: Current.institution, academic_term: active_term, kind: kind,
         created_by: Current.institution_user
       )
       Core::RosterImport::Parser.call(batch: batch, content: content)
@@ -55,7 +65,17 @@ module IdentityAccess
     def show
       authorize!("people.manage")
       @batch = find_batch
-      @rows = @batch.roster_import_rows.order(:line_number)
+      strategy = Core::RosterImport::Strategy.for(@batch.kind, institution: Current.institution)
+      @preview_headers = strategy.preview_headers
+
+      # Preview columns are computed HERE (never in the view) so the masked/
+      # decrypted values never leak into a helper that could be reused
+      # somewhere unmasked by mistake — the view only ever sees what the
+      # strategy decided is safe to show.
+      @previews = @batch.roster_import_rows.order(:line_number).map do |row|
+        plain = Core::RosterImport::Cipher.decrypt_row(row.raw, strategy.sensitive_fields)
+        [ row, strategy.preview_columns(plain) ]
+      end
     end
 
     def commit

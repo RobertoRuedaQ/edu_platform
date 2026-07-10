@@ -74,4 +74,53 @@ class Core::RosterImport::CommitJobTest < ActiveSupport::TestCase
       Core::RosterImport::CommitJob.enqueue_for(batch)
     end
   end
+
+  # Same GUC contract, exercised via the OTHER kind (guardians) — the job
+  # itself is kind-agnostic (Committer dispatches to Strategy.for(batch.kind)),
+  # so this is really testing that nothing about Core::User/GuardianStudent
+  # writes needs different GUC handling than GroupManagement::Student did.
+  GUARDIAN_HEADER = "guardian_national_id,guardian_first_name,guardian_last_name,guardian_email,relationship,student_national_id\n"
+
+  def build_validated_guardians_batch
+    slug = "cjg-#{SecureRandom.hex(4)}"
+    institution = Core::Institution.create!(name: "Colegio #{slug}", slug: slug,
+      code: "C-#{SecureRandom.hex(3)}", kind: "school")
+
+    batch = nil
+    ActiveRecord::Base.transaction do
+      Tenant::Guc.set_local(institution.id)
+      term = Core::AcademicTerm.create!(institution: institution, code: "2026-1", name: "2026-1",
+        starts_on: Date.new(2026, 1, 1), ends_on: Date.new(2026, 6, 30), status: "active")
+      GroupManagement::Student.create!(institution: institution, national_id: "CJG-S",
+        first_name: "Est", last_name: "Prueba", gender: "male", birthdate: Date.new(2014, 1, 1),
+        student_code: "CJG-CODE", entry_year: 2026)
+      batch = Core::RosterImportBatch.create!(institution: institution, academic_term: term, kind: "guardians")
+
+      content = GUARDIAN_HEADER + "CJG-G,Marta,Gómez,marta@correo.test,madre,CJG-S\n"
+      Core::RosterImport::Parser.call(batch: batch, content: content)
+      Core::RosterImport::Validator.call(batch: batch)
+    end
+
+    [ institution, batch ]
+  end
+
+  test "run_now_for commits a guardians batch and does not leak the GUC afterward" do
+    institution, batch = build_validated_guardians_batch
+
+    Core::RosterImport::CommitJob.run_now_for(batch)
+
+    # Check the leak FIRST, with no intervening GUC-setting code of our own —
+    # wrapping a verification block in ITS OWN `Tenant::Guc.set_local` before
+    # this point would itself leak (a savepoint's SET LOCAL isn't cleared on
+    # release, same gotcha this suite exists to catch in the job), producing
+    # a false "leak" that's actually the test's own fault, not the job's.
+    visible = ActiveRecord::Base.uncached { Core::GuardianStudent.count }
+    assert_equal 0, visible, "the job's GUC leaked past its own transaction"
+
+    ActiveRecord::Base.transaction do
+      Tenant::Guc.set_local(institution.id)
+      assert_equal "committed", batch.reload.status
+      assert_equal 1, Core::GuardianStudent.count
+    end
+  end
 end

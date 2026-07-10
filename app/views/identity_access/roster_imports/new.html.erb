@@ -1,20 +1,31 @@
 <% content_for :title, "Nueva carga de roster" %>
 
 <%= render "shared/page_header", title: "Nueva carga de roster",
-      subtitle: "Sube un CSV de estudiantes. Se valida antes de aplicar nada — no se guarda el archivo." %>
+      subtitle: "Sube un CSV de estudiantes o acudientes. Se valida antes de aplicar nada — no se guarda el archivo." %>
 
 <% if @error -%>
   <%= render "shared/alert", variant: :danger, message: @error %>
 <% end -%>
 
 <%= render "shared/detail_list", items: {
-      "Columnas esperadas" => "national_id, first_name, last_name, gender, birthdate, student_code, entry_year, grade_level, section, email",
-      "Requeridas" => "national_id, first_name, last_name, gender, birthdate, student_code",
-      "gender" => "\"male\" o \"female\"",
-      "grade_level / section" => "opcionales — deben existir ya en la institución (se referencian por nombre exacto)"
+      "Estudiantes — columnas" => "national_id, first_name, last_name, gender, birthdate, student_code, entry_year, grade_level, section, email",
+      "Estudiantes — requeridas" => "national_id, first_name, last_name, gender, birthdate, student_code",
+      "Estudiantes — gender" => "\"male\" o \"female\"",
+      "Estudiantes — grade_level / section" => "opcionales — deben existir ya en la institución (se referencian por nombre exacto)",
+      "Acudientes — columnas y requeridas" => "guardian_national_id, guardian_first_name, guardian_last_name, guardian_email, relationship, student_national_id",
+      "Acudientes — relationship" => "padre, madre, acudiente o tutor",
+      "Acudientes — student_national_id" => "debe existir ya como estudiante importado — una fila por cada hijo/a (el mismo guardian_national_id se repite, no es un error)"
     } %>
 
 <%= form_with url: identity_access_roster_imports_path, method: :post, multipart: true do %>
+  <div class="field">
+    <label class="field__label" for="roster-import-kind">Tipo de carga</label>
+    <select class="field__input" id="roster-import-kind" name="roster_import[kind]" required>
+      <option value="students">Estudiantes</option>
+      <option value="guardians">Acudientes</option>
+    </select>
+  </div>
+
   <%= render "shared/field", label: "Archivo CSV", name: "roster_import[file]", type: "file",
         required: true, accept: "text/csv,.csv" %>
 
