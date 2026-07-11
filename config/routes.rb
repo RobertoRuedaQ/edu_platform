@@ -12,6 +12,13 @@ Rails.application.routes.draw do
   # Role-aware landing (clic 0) for staff users.
   root to: "dashboard#show"
 
+  # "Mis datos" — staff self-service (v1.10.0). Identity-gated, not in
+  # Navigation::Registry on purpose: every registry entry is filtered by
+  # can?(item.permission), but this page has no permission gate at all
+  # (SS2) — it's reachable by every authenticated staff member regardless
+  # of role. Linked directly from the app shell header instead.
+  resource :self_service, only: :show, path: "mis_datos", controller: "self_service"
+
   # --- Authentication (per-subdomain login + mandatory email OTP) -----------
   # Singular resources, matching the institution_switch style below. new/create
   # run pre-session (allow_unauthenticated_access); destroy requires a session.

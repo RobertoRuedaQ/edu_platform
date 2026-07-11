@@ -11,11 +11,92 @@
 
 ---
 
-## Changelog completo (v1.0.0 → v1.9.0)
+## Changelog completo (v1.0.0 → v1.10.0)
 
 > Copiado verbatim de §14 de `PROJECT_STATE.md` v1.5.0, antes de que el split editorial (v1.5.1)
 > moviera el changelog fuera del doc magro. Las entradas v1.6.0+ se escribieron directamente aquí,
 > ya con el split vigente.
+
+### v1.10.0 — 2026-07-10 — Onboarding: autoservicio de staff ("mis datos")
+
+**Cuarto slice del track de onboarding.** Construye "mis datos" para personas de staff (docente,
+coordinador, director, cualquier rol) sobre datos reales, resuelto por identidad — el análogo, para
+staff, de lo que v1.9.0 hizo para estudiante/acudiente. A diferencia de ese slice, **no existía
+ningún stub que retirar**: el `DashboardController` ya real (Fase 0) es el landing de atajos
+**RBAC-gateado** (otra cosa por completo — supervisión, no autoservicio); esta sección es enteramente
+nueva.
+
+**Recon: hallazgos reales:**
+- Confirmado el molde: `GuardianScope`/`StudentSelfScope`/`EntitledAddonKeys` viven en
+  `services/access/`, `module_function`, `.for(user, institution: Current.institution)`. Los dos
+  self-scopes de staff replican esta forma exactamente.
+- **La cadena de identidad real del staff:** `Core::User` → `Core::InstitutionUser` →
+  `StaffManagement::StaffMember` (opcional) → `TeacherManagement::Teacher` (opcional, vía
+  `staff_member_id` nullable — frecuentemente sin poblar incluso para docentes reales, limitación ya
+  documentada desde P1/RosterImport). **`sections` no tiene ninguna columna `homeroom_teacher_id`** —
+  no hay ningún vínculo directo profesor↔grupo en el esquema. "Mis grupos" y "mi departamento" se
+  resuelven por lo tanto **directamente desde los `scope_group_id`/`scope_department_id` de los
+  propios `role_assignments` vigentes del actor** (`.effective_now`, real desde P1) — no desde la
+  cadena `Teacher→StaffMember→department`, que además suele estar vacía en la práctica.
+- **Hallazgo que contradijo una premisa del prompt:** "mi horario" se asumía filtrable por un FK real
+  a `academic_terms` en `schedules`. El recon confirmó que **`schedules` no tiene ninguna tabla real
+  en absoluto** — ni siquiera parcial, a diferencia de `teachers`/`students` — solo `enrollments`/
+  `subjects`/`assessments` (notas), sin ningún componente temporal. El único FK real a
+  `academic_terms` en todo el esquema es el de `roster_import_batches`. Se presentó la discrepancia
+  al usuario: **decisión tomada — incluir el tile de horario reusando el `ScheduleEventRoster`/stub
+  ya existente, filtrado por identidad (los propios grupos del actor, nunca por `can?`/RBAC) y
+  marcado explícitamente "vista previa"** en vez de omitirlo. No se inventó ninguna tabla.
+- No existía ninguna entrada de navegación identity-gated — `Navigation::Registry` filtra TODA
+  entrada por `can?(item.permission)`, así que forzar "mis datos" ahí habría violado SS2 (se vería
+  como RBAC-gateado sin serlo). Se agregó un enlace persistente en el header del shell
+  (`shared/_self_service_link`), visible para cualquier staff autenticado, fuera del registry.
+
+**`Core::Access::StaffProfileScope`** — hermano de `StudentSelfScope`: un `StaffManagement::
+StaffMember` o `nil` (no todo staff tiene fila de perfil — estado vacío normal, no error).
+**`Core::Access::StaffRoleAssignmentsScope`** — hermano de `GuardianScope`: una relation componible
+de `role_assignments.effective_now` del actor — el límite de seguridad real sobre el que se derivan
+"mis grupos"/"mi departamento" (mapeando sus columnas de scope a `Section`/`Department`).
+
+**`SelfServiceController#show`** (`/mis_datos`) — **sin `authorize!`** en ninguna acción (SS2): los
+self-scopes SON la puerta. Tabs (reusa `shared/tabs`, mismo patrón que `teachers#show`): Perfil, Mis
+roles, Mis grupos, Mi departamento, y Mi horario (solo si `schedules` está entitled — mismo memo
+`Current.entitled_addon_keys` que la nav, sin reimplementar el chequeo). Empty states amables en
+cada tab cuando no aplica (SS8), nunca 403 ni error.
+
+**Caso de aceptación, verificado end-to-end:** docente T con un `role_assignment` vigente
+`(teacher, group:10-A)`, uno **expirado** `(teacher, group:9-C)`, y uno de departamento
+`(area_lead, department:Matemáticas)`; un segundo docente U con su propio grupo en la MISMA
+institución; los mismos datos de T replicados en una institución J distinta. Actuando como T bajo el
+GUC de I: aparecen perfil, "10°A", "Matemáticas" — **nunca** "9°C" (expirado), **nunca** el grupo de
+U, **nunca** el departamento de J. El tile de horario, filtrado por el grupo real de T (mismo id
+canónico que usa `GroupManagement::GroupRoster`), muestra el evento stub de "Cálculo" (etiquetado
+con esa misma sección) pero no "Sociología" (etiquetado con otra). Verificado también: identity-
+gating (un actor con **cero `RolePermission`** en toda la institución llega igual a su autoservicio
+completo), un coordinador con solo un rol institución-wide sin grupos ve empty states (no error), y
+el tile de horario desaparece por completo cuando la institución no tiene `schedules` entitled.
+
+**Resultado:** 356 runs / 1239 assertions / 0 failures / 0 errors / 1 skip preexistente (baseline
+342; 14 tests nuevos: 10 de unidad de los dos self-scopes, 4 de integración —incluido el caso de
+aceptación completo—). `bin/rails zeitwerk:check` verde. Sin migraciones.
+
+**Archivos creados/editados por rol:**
+- Self-scopes (nuevos): `app/domains/core/services/access/{staff_profile_scope,
+  staff_role_assignments_scope}.rb`.
+- Controller/rutas: `app/controllers/self_service_controller.rb` (nuevo), `config/routes.rb`
+  (+`resource :self_service`).
+- Vistas: `app/views/self_service/show.html.erb` (nueva), `app/views/shared/
+  _self_service_link.html.erb` (nueva), `app/views/layouts/application.html.erb` (+enlace en el
+  header).
+- Tests: `test/models/core/access/{staff_profile_scope,staff_role_assignments_scope}_test.rb`,
+  `test/integration/self_service_test.rb` (caso de aceptación + identity-gating + empty states +
+  entitlement).
+
+**Forward notes (backlog):** (a) visor de `audit_events` + bandeja de discrepancias es lo siguiente
+(#1.4); (b) vistas de negocio por dominio con scope (supervisión — ver a OTRAS personas dentro del
+propio alcance RBAC) sigue siendo #4, dominio por dominio, sin contaminar esta sección de
+autoservicio; (c) "mi horario" sigue siendo vista previa hasta que `schedules` tenga tablas reales
+— cuando eso pase, el tile se recablea sin tocar el resto de esta sección; (d) filtro por término
+lectivo para grupos/matrícula sigue diferido a B2.
 
 ### v1.9.0 — 2026-07-10 — Onboarding: `Core::Access::GuardianScope` + portales sobre datos reales
 
