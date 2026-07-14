@@ -410,7 +410,8 @@ CREATE TABLE public.enrollments (
     term character varying NOT NULL,
     status character varying DEFAULT 'enrolled'::character varying NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
-    updated_at timestamp(6) without time zone NOT NULL
+    updated_at timestamp(6) without time zone NOT NULL,
+    academic_term_id uuid
 );
 
 ALTER TABLE ONLY public.enrollments FORCE ROW LEVEL SECURITY;
@@ -1998,6 +1999,13 @@ CREATE INDEX index_employment_periods_on_institution_id_and_staff_member_id ON p
 
 
 --
+-- Name: index_enrollments_on_institution_and_academic_term; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_enrollments_on_institution_and_academic_term ON public.enrollments USING btree (institution_id, academic_term_id);
+
+
+--
 -- Name: index_enrollments_on_institution_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3024,6 +3032,14 @@ ALTER TABLE ONLY public.academic_terms
 
 
 --
+-- Name: enrollments fk_rails_6a2ee9516d; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.enrollments
+    ADD CONSTRAINT fk_rails_6a2ee9516d FOREIGN KEY (academic_term_id) REFERENCES public.academic_terms(id) ON DELETE SET NULL;
+
+
+--
 -- Name: staff_members fk_rails_6b44b8a383; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3994,6 +4010,7 @@ CREATE POLICY teaching_assignments_tenant_isolation ON public.teaching_assignmen
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260714201234'),
 ('20260714000001'),
 ('20260710152925'),
 ('20260710144823'),

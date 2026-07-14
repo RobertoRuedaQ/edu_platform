@@ -18,8 +18,9 @@ module Schedules
         return render :new, status: :unprocessable_entity
       end
 
+      active_term = Core::AcademicTerm.active.find_by(institution_id: Current.institution_id)
       enrollment = Schedules::Enrollment.find_or_create_by!(institution: Current.institution, student: student,
-        subject: @subject) { |e| e.term = @subject.term }
+        subject: @subject) { |e| e.term = @subject.term; e.academic_term = active_term }
       enrollment.assessments.create!(institution: Current.institution, kind: "parcial",
         title: params[:title], term: @subject.term, score: params[:score])
 

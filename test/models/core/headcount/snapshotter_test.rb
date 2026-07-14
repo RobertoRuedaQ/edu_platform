@@ -65,6 +65,49 @@ class Core::Headcount::SnapshotterTest < ActiveSupport::TestCase
     end
   end
 
+  # Regression for F3 (v1.15.0, Cav./B2 model half): adding a real
+  # enrollments.academic_term_id join must NOT change what the headcount
+  # counts. Two students with the SAME status ("active") but different term
+  # enrollment states (one enrolled in the active term, one enrolled only in
+  # a past term, one with no enrollment at all) must all count identically —
+  # proving the snapshot still depends solely on students.status, never on
+  # Schedules::Enrollment/academic_term_id.
+  test "REGRESSION: headcount is unaffected by term enrollment state (F3 — only students.status counts)" do
+    institution = build_institution
+
+    within_tenant(institution) do
+      active_term = Core::AcademicTerm.create!(institution: institution, code: "2026-1", name: "2026-1",
+        starts_on: Date.new(2026, 1, 1), ends_on: Date.new(2026, 6, 30), status: "active")
+      past_term = Core::AcademicTerm.create!(institution: institution, code: "2025-2", name: "2025-2",
+        starts_on: Date.new(2025, 7, 1), ends_on: Date.new(2025, 12, 15), status: "closed")
+      grade = GroupManagement::GradeLevel.create!(institution: institution, name: "Grado 6", level_number: 6)
+      subject = Schedules::Subject.create!(institution: institution, name: "Álgebra", code: "MAT-1", term: "2026-1")
+
+      enrolled_active = GroupManagement::Student.create!(institution: institution, grade_level: grade,
+        first_name: "Matriculado", last_name: "Activo", gender: "male", birthdate: Date.new(2015, 1, 1),
+        student_code: "MA-#{SecureRandom.hex(2)}", entry_year: 2026, status: "active")
+      Schedules::Enrollment.create!(institution: institution, student: enrolled_active, subject: subject,
+        term: "2026-1", academic_term: active_term, status: "enrolled")
+
+      enrolled_past_only = GroupManagement::Student.create!(institution: institution, grade_level: grade,
+        first_name: "Matriculado", last_name: "SoloPasado", gender: "female", birthdate: Date.new(2015, 1, 1),
+        student_code: "MP-#{SecureRandom.hex(2)}", entry_year: 2026, status: "active")
+      Schedules::Enrollment.create!(institution: institution, student: enrolled_past_only, subject: subject,
+        term: "2025-2", academic_term: past_term, status: "enrolled")
+
+      not_enrolled_at_all = GroupManagement::Student.create!(institution: institution, grade_level: grade,
+        first_name: "SinMatricula", last_name: "Prueba", gender: "male", birthdate: Date.new(2015, 1, 1),
+        student_code: "NE-#{SecureRandom.hex(2)}", entry_year: 2026, status: "active")
+
+      snapshot = Core::Headcount::Snapshotter.call(institution: institution, as_of: Date.current)
+
+      # All three are status "active" — the headcount must count all three,
+      # regardless of who has a real term enrollment and who doesn't.
+      assert_equal 3, snapshot.headcount
+      assert_equal({ "Grado 6" => 3 }, snapshot.breakdown)
+    end
+  end
+
   test "audits the push as a system action" do
     institution = build_institution
 

@@ -127,9 +127,36 @@ class SchedulesTest < ActionDispatch::IntegrationTest
 
       enrollment = Schedules::Enrollment.find_by(institution_id: @institution.id, student_id: student.id, subject_id: @algebra.id)
       assert_not_nil enrollment
+      # No Core::AcademicTerm exists in this test's institution at all — a
+      # nil academic_term_id here is the honest, normal state (v1.15.0), not
+      # a bug: nothing was resolvable to attach.
+      assert_nil enrollment.academic_term_id
       assessment = enrollment.assessments.sole
       assert_equal "Parcial 1", assessment.title
       assert_equal 4.2, assessment.score.to_f
+    end
+  end
+
+  # v1.15.0: when an active term DOES exist, the real write path populates
+  # academic_term_id — the join isn't purely theoretical.
+  test "registering a grade sets academic_term_id when an active term exists" do
+    active_term = within_tenant(@institution) do
+      Core::AcademicTerm.create!(institution: @institution, code: "2026-1", name: "2026-1",
+        starts_on: Date.new(2026, 1, 1), ends_on: Date.new(2026, 6, 30), status: "active")
+    end
+    student = within_tenant(@institution) do
+      GroupManagement::Student.create!(institution: @institution, first_name: "Camila", last_name: "Vargas",
+        gender: "female", birthdate: Date.new(2012, 4, 1), student_code: "COL-E-202", entry_year: 2023,
+        grade_level: @grado_9)
+    end
+
+    as_teacher_9a do
+      post "/schedules/grades/#{@algebra.id}/grade_entries",
+        params: { student_id: "COL-E-202", title: "Parcial 1", score: "3.5" }
+      assert_redirected_to schedules_subject_path(@algebra)
+
+      enrollment = Schedules::Enrollment.find_by(institution_id: @institution.id, student_id: student.id, subject_id: @algebra.id)
+      assert_equal active_term.id, enrollment.academic_term_id
     end
   end
 

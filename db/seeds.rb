@@ -107,6 +107,15 @@ def insert_rows(model, rows, returning: nil)
   out
 end
 
+# v1.15.0: gives every seeded institution a real, active academic_terms row
+# matching TERM, so the enrollments.academic_term_id join (Cav./B2, model
+# half) has real data to resolve against — without this, the new column
+# would be populated but never actually joinable in dev/demo data.
+def build_active_term(iid)
+  Core::AcademicTerm.create!(institution_id: iid, code: TERM, name: "Semestre #{TERM}",
+    starts_on: Date.new(2026, 1, 20), ends_on: Date.new(2026, 6, 15), status: "active")
+end
+
 def with_tenant(institution)
   ActiveRecord::Base.transaction do
     Tenant::Guc.set_local(institution.id)
@@ -115,13 +124,14 @@ def with_tenant(institution)
 end
 
 # Matrículas (estudiante x materia) + notas de mitad de semestre por matrícula.
-def build_enrollments(iid, student_ids, abilities, subject_ids)
+def build_enrollments(iid, student_ids, abilities, subject_ids, academic_term_id:)
   enr_rows = []
   enr_ab   = []
   student_ids.each_with_index do |sid, i|
     subject_ids.each do |subj|
       enr_rows << { institution_id: iid, student_id: sid, subject_id: subj,
-                    term: TERM, status: "enrolled", created_at: NOW, updated_at: NOW }
+                    term: TERM, academic_term_id: academic_term_id, status: "enrolled",
+                    created_at: NOW, updated_at: NOW }
       enr_ab << abilities[i]
     end
   end
@@ -178,7 +188,7 @@ def reset_institution!(slug)
   ActiveRecord::Base.transaction do
     Tenant::Guc.set_local(inst.id)
     [Schedules::Assessment, TeacherManagement::TeachingAssignment, Cafeteria::DietaryRestriction,
-     StudentSupport::StudentGuardian, Schedules::Enrollment, StudentSupport::Guardian,
+     StudentSupport::StudentGuardian, Schedules::Enrollment, Core::AcademicTerm, StudentSupport::Guardian,
      TeacherManagement::Teacher, Schedules::Subject, GroupManagement::Student,
      GroupManagement::Section, GroupManagement::Program, GroupManagement::GradeLevel,
      GroupManagement::Faculty, Core::InstitutionSetting].each(&:delete_all)
@@ -207,6 +217,8 @@ end
 def build_school(inst)
   iid = inst.id
   with_tenant(inst) do
+    term_id = build_active_term(iid).id
+
     levels = (6..11).to_a
     gl_rows = levels.map { |n| { institution_id: iid, name: "Grado #{n}", level_number: n, created_at: NOW, updated_at: NOW } }
     gl_ids  = insert_rows(GroupManagement::GradeLevel, gl_rows, returning: %w[id])
@@ -251,7 +263,7 @@ def build_school(inst)
           section_id: sec[:id], created_at: NOW, updated_at: NOW }
       end
       sid = insert_rows(GroupManagement::Student, srows, returning: %w[id])
-      build_enrollments(iid, sid, abil, subjects_by_level[sec[:level]])
+      build_enrollments(iid, sid, abil, subjects_by_level[sec[:level]], academic_term_id: term_id)
       sid.each_with_index { |id, i| student_gender[id] = srows[i][:gender] }
       all_student_ids.concat(sid)
     end
@@ -293,6 +305,8 @@ end
 def build_university(inst)
   iid = inst.id
   with_tenant(inst) do
+    term_id = build_active_term(iid).id
+
     fac_names = UNI_FACULTIES.keys
     fac_rows  = fac_names.each_with_index.map { |nm, i| { institution_id: iid, name: nm, code: "F#{i + 1}", created_at: NOW, updated_at: NOW } }
     fac_ids   = insert_rows(GroupManagement::Faculty, fac_rows, returning: %w[id])
@@ -338,7 +352,7 @@ def build_university(inst)
           entry_year: 2026 - rand(0..4), program_id: pr[:id], created_at: NOW, updated_at: NOW }
       end
       sid = insert_rows(GroupManagement::Student, srows, returning: %w[id])
-      build_enrollments(iid, sid, abil, subjects_by_program[pr[:id]])
+      build_enrollments(iid, sid, abil, subjects_by_program[pr[:id]], academic_term_id: term_id)
       all_student_ids.concat(sid)
     end
 

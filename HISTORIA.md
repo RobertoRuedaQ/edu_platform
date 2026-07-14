@@ -11,11 +11,137 @@
 
 ---
 
-## Changelog completo (v1.0.0 → v1.14.0)
+## Changelog completo (v1.0.0 → v1.15.0)
 
 > Copiado verbatim de §14 de `PROJECT_STATE.md` v1.5.0, antes de que el split editorial (v1.5.1)
 > moviera el changelog fuera del doc magro. Las entradas v1.6.0+ se escribieron directamente aquí,
 > ya con el split vigente.
+
+### v1.15.0 — 2026-07-14 — Matrícula por término real (ítem #1 del camino crítico del MVP)
+
+**Ítem #1 del camino crítico de `LINEAMIENTOS_MVP.md`.** Hace first-class "el estudiante en el
+término activo" — hoy inexistente: `enrollments.term` era un string libre sin FK a `academic_terms`
+(borde **Cav.**). Es un slice de MODELO fundacional (no de vistas), con checkpoint de diseño
+obligatorio antes de tocar esquema.
+
+**Recon (STOP #1) — la corrección que cambió el problema:** el prompt asumía **tres** estructuras
+"enrollment-ish" conviviendo (`core.enrollments`, `students.section_id`, `Schedules::Enrollment`).
+El recon confirmó que son **dos**, no tres: **no existe ninguna tabla `core.enrollments`** — hay UNA
+sola tabla `enrollments` en todo el esquema (`db/migrate/20260703000010_create_academics.rb`), y ya
+está modelada como `Schedules::Enrollment` desde el barrido de #4 (v1.14.0). `students.section_id`
+(grupo/homeroom) es una dimensión completamente separada, sin relación con término (atada a
+`Section.academic_year`, un entero, no a `academic_terms`). Otros hallazgos:
+- `Core::RosterImportBatch` ya tenía un FK real a `academic_terms` — el único precedente existente,
+  y el patrón de resolución (`Core::AcademicTerm.active.find_by(institution_id:)`) ya usado ahí.
+- `Core::Headcount::Snapshotter` confirmado: cuenta `students.status == "active"`, cero dependencia
+  de `enrollments`/término — su propio comentario ya documentaba la limitación.
+- **`db/seeds.rb` no crea NINGÚN `AcademicTerm`** — el `TERM = "2026-1"` de la demo es un string sin
+  ninguna fila real de `academic_terms` detrás. El join, aun cerrado, habría quedado inerte en datos
+  de desarrollo sin un ajuste al seed.
+
+**Checkpoint de diseño (STOP #2) — decisiones aprobadas:**
+1. **Tabla canónica**: `Schedules::Enrollment` (la única real) gana `academic_term_id` (FK nullable,
+   aditiva). `term` (string) sigue existiendo sin tocar — coexistencia, mismo patrón que
+   `guardian_students`/`student_guardians`. Sin backfill forzado (aditivo puro).
+2. **Ubicación del query object**: `Schedules::ActiveTermEnrollmentScope`
+   (`app/domains/schedules/queries/`), no `Core::Access::*` — consulta directamente
+   `Schedules::Enrollment`, la tabla que posee; los consumidores cross-domain futuros (asistencia,
+   actividades, asignaciones) lo leen por referencia, mismo patrón que `self_service_controller`
+   leyendo `StaffManagement::Department`.
+3. **Seed fix**: sí, agregar un `AcademicTerm` activo real por institución sembrada + backfillear
+   `academic_term_id` en las matrículas sembradas — para que el join tenga datos reales que resolver
+   desde el primer `bin/rails db:seed`, no solo en tests.
+4. **Wiring del único write-path real**: sí, `GradeEntriesController#create` (v1.14.0, el único lugar
+   del código que crea un `Enrollment` hoy) también resuelve y guarda el término activo — un cambio
+   de una línea sobre una llamada existente, no una vista nueva (F5 respetado).
+
+**Lo construido:**
+- Migración `20260714201234_add_academic_term_to_enrollments.rb`: `add_reference :enrollments,
+  :academic_term` (nullable, `on_delete: :nullify`) + índice `(institution_id, academic_term_id)`.
+  Corrida en dev y test.
+- `Schedules::Enrollment belongs_to :academic_term, optional: true`.
+- `Schedules::ActiveTermEnrollmentScope.resolve(institution:)` — resuelve `GroupManagement::Student`
+  distintos con al menos una `Enrollment` en el término activo de la institución. Sin buscador
+  (Habeas Data); no identity-gated (es un hecho crudo, cada consumidor aplica su propio RBAC encima,
+  igual que `TeacherManagement::TeacherScope`); se apoya en el invariante "un solo término activo"
+  (`Core::AcademicTerm.active`) sin reimplementarlo.
+- `GradeEntriesController#create` resuelve `Core::AcademicTerm.active.find_by(...)` y lo asigna al
+  crear el `Enrollment`.
+- `db/seeds.rb`: nuevo helper `build_active_term(iid)` — un `AcademicTerm` activo (código `2026-1`,
+  igual a la constante `TERM` ya usada) por institución sembrada; `build_enrollments` ahora recibe
+  `academic_term_id:` y lo escribe en el `insert_all!` masivo. `reset_institution!` limpia también
+  `Core::AcademicTerm` al re-sembrar.
+
+**F3 verificado (el riesgo #1 del prompt):** se agregó un test de regresión dedicado en
+`Core::Headcount::SnapshotterTest` que siembra tres estudiantes con el MISMO `status: "active"` pero
+tres estados de matrícula distintos (matriculado en el término activo, matriculado solo en un
+término pasado, sin matrícula alguna) y confirma que el headcount cuenta a los tres por igual — la
+prueba directa de que el nuevo join no se coló en la fuente de facturación. **B2** (fechado de
+`role_assignments` vs. calendario lectivo) — sin cambios, confirmado como borde distinto.
+
+**Resultado:** 397 runs / 1428 assertions / 0 failures / 0 errors / 1 skip preexistente (baseline
+387; 10 tests nuevos: 8 unitarios de `ActiveTermEnrollmentScope` —incluye cross-tenant bajo RLS real
+y el caso "enrollment legacy sin `academic_term_id`"—, 1 de regresión de headcount, 1 de integración
+en `schedules_test.rb` probando que el write-path real ahora sí guarda el término). `bin/rails
+zeitwerk:check` verde. Una migración, aplicada en dev y test.
+
+**Nota de verificación honesta:** no se pudo correr `bin/rails db:seed` de punta a punta contra la
+base de datos de desarrollo local en esta sesión — falla en `reset_institution!` por una
+`ControlPlane::Subscription` preexistente que bloquea el borrado de una institución demo (un estado
+de datos de desarrollo de una sesión manual anterior, no causado por este slice ni relacionado con
+el cambio). Se verificó la sintaxis del script (`ruby -c`) y la lógica completa vía la suite de
+tests (base de datos de test separada, sin ese estado preexistente).
+
+**Archivos nuevos/editados:**
+- Migración: `db/migrate/20260714201234_add_academic_term_to_enrollments.rb`.
+- Modelo: `app/domains/schedules/models/enrollment.rb` (+`belongs_to :academic_term`).
+- Query object (nuevo): `app/domains/schedules/queries/active_term_enrollment_scope.rb`.
+- Controller: `app/controllers/schedules/grade_entries_controller.rb` (resuelve+guarda término activo).
+- Seeds: `db/seeds.rb` (`build_active_term`, `build_enrollments` con `academic_term_id:`,
+  `reset_institution!` incluye `Core::AcademicTerm`).
+- Tests: `test/models/schedules/active_term_enrollment_scope_test.rb` (nuevo),
+  `test/models/core/headcount/snapshotter_test.rb` (+regresión F3),
+  `test/integration/schedules_test.rb` (+2 tests sobre `academic_term_id`).
+
+Con esto, el ítem #1 del camino crítico del MVP (`LINEAMIENTOS_MVP.md` §7) queda cerrado. Próximo
+candidato según ese documento: `attendance` (asistencia, net-new, con su propio checkpoint de diseño).
+
+### v1.14.1 — 2026-07-14 — patch editorial: `LINEAMIENTOS_MVP.md`
+
+El usuario compartió un documento de lineamientos de MVP para un perfil de cliente concreto (colegio
+K-12: extracurriculares, comunicación interna/externa, asignaciones académicas/responsabilidades, y
+calendario compartido con cuidadores). El documento mismo aclara que **no es un prompt de
+implementación** — es la guía que va a alimentar los slices siguientes, respetando en cada dominio
+nuevo la misma disciplina recon-first que el resto del proyecto.
+
+Se preguntó explícitamente qué hacer con él antes de actuar (guardarlo como referencia, actualizar
+el backlog, o arrancar el primer slice del camino crítico ya) — el usuario eligió **guardarlo como
+documento del proyecto + actualizar el backlog del magro**, sin tocar código.
+
+**Qué dice el documento (resumen, el detalle completo vive en `LINEAMIENTOS_MVP.md`):**
+- **Principio de encaje**: todo lo externo (comunicación, calendario, asignaciones, actividades)
+  cuelga del portal del cuidador vía `Core::Access::GuardianScope` — nunca una segunda puerta RBAC
+  para acudientes. Un addon = un dominio; los nuevos (`extracurriculars`, `communication`,
+  `calendar`, `assignments`) se habilitan por entitlement, igual que los existentes.
+- **Reconcilia el pedido contra v1.14.0 real**, no contra un estado asumido: la libreta de notas
+  (`Schedules::Assessment`) ya existe — el MVP construye boletines encima, no una libreta nueva;
+  `finance` ya tiene modelos reales — el MVP construye la UI de tesorería, no el modelo; la
+  matrícula (`students.section_id`) ya escribe real — falta solo cerrar el join con
+  `academic_terms` (B2/Cav.), no construir matrícula desde cero.
+- **Cuatro dominios genuinamente net-new** (sin ninguna tabla hoy, cada uno con su propio checkpoint
+  de diseño al construirse, al estilo CHECKPOINT E): `attendance` (asistencia), `assignments`
+  (asignaciones académicas — decisión ya resuelta de ser dominio propio, no faceta de
+  `communication`), `calendar`, `extracurriculars`.
+- **`student_support`/`counseling`/`cafeteria`/`transportation` reales no aplican a este perfil de
+  cliente** — no es que el backlog general los excluya, es que este MVP concreto no los pide.
+- Camino crítico propuesto (§7 del documento): cerrar matrícula/término primero (desbloquea casi
+  todo lo demás) → asistencia → boletines → tesorería → comunicación → asignaciones → calendario →
+  extracurriculares → portal del cuidador ampliado → provisioning + correo real.
+
+**Resultado:** `LINEAMIENTOS_MVP.md` creado (hermano de `PROJECT_STATE.md`/`HISTORIA.md`/
+`CONCEPTOS_TECNICOS.md`). `PROJECT_STATE.md` §11 (backlog) actualizado con una nota que apunta a
+este documento como el que reordena/prioriza el backlog para ese perfil de cliente. Ningún archivo
+de código tocado; ninguna migración; suite sin cambios (387/0/1, sin necesidad de re-correr).
 
 ### v1.14.0 — 2026-07-14 — #4 barrido: el molde de teacher_management aplicado a todos los dominios cableables
 

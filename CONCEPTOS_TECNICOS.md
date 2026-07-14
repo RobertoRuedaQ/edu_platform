@@ -304,6 +304,41 @@ contrario. La única señal confiable es reconciliar contra `db/migrate/` direct
 es, por definición, un slice de modelado distinto, con sus propias decisiones de diseño de esquema.
 📍 Ver la tabla de triage completa (8 dominios candidatos) en `HISTORIA.md` v1.14.0.
 
+**Matrícula en el término activo — el resolver canónico y su frontera dura con el headcount de
+facturación (v1.15.0, cierra la mitad de modelo de Cav./B2).**
+*Qué es.* `Schedules::Enrollment.academic_term_id` (FK real, nullable) conecta la matrícula
+estudiante×materia con `academic_terms`; `Schedules::ActiveTermEnrollmentScope.resolve(institution:)`
+es EL resolver canónico de "qué estudiantes están matriculados en el término activo de esta
+institución" — todo slice académico que siga (asistencia, notas-por-término, inscripción a
+actividades, targeting de asignaciones, ver `LINEAMIENTOS_MVP.md`) lo consume, no re-deriva su
+propio join.
+*Por qué coexiste con el string legacy en vez de reemplazarlo.* `enrollments.term` (string libre)
+sigue existiendo sin tocar — mismo patrón de coexistencia que `guardian_students`/
+`student_guardians`: un FK nuevo, aditivo y nullable, nunca invalida ni migra destructivamente lo
+que ya escribía el string. Una fila con `academic_term_id` nulo (una matrícula previa a esta
+columna, o creada sin término activo resolvible) es un estado normal, no un error.
+*La frontera dura que NO se cruza: el headcount de facturación.* `Core::Headcount::Snapshotter`
+(S3a/S4) sigue contando `students.status == "active"`, deliberadamente, **aunque el join ya
+exista**. Que la matrícula-por-término se vuelva real no convierte, por sí solo, en correcto
+facturar sobre ella — eso es una decisión de NEGOCIO separada (reabrir Cav. del lado de
+facturación), nunca un efecto colateral de cablear un consumidor académico del nuevo resolver.
+Verificado con un test de regresión dedicado que prueba que el headcount da el mismo número para
+estudiantes con distintos estados de matrícula-por-término, mientras su `status` sea el mismo.
+*Dónde vive y por qué ahí, no en `core/services/access/`.* El query object vive junto al modelo que
+consulta (`app/domains/schedules/queries/`, no `Core::Access::*`) — a diferencia de `GuardianScope`/
+`StudentSelfScope` (identity-gated, "lo mío"), este resuelve un hecho académico crudo sobre TODA la
+institución; cada consumidor cross-domain aplica su propio scope de RBAC encima, mismo layering que
+`TeacherManagement::TeacherScope`. Se lee por referencia cross-domain, igual que cualquier otro query
+object de otro dominio.
+*Invariantes.* (1) Sin buscador, nunca (Habeas Data). (2) Se apoya en el invariante "un solo término
+activo por institución" (el índice parcial único de `academic_terms`) sin reimplementarlo — siempre
+vía `Core::AcademicTerm.active`. (3) B2 (fechado de `role_assignments` vs. calendario lectivo) es un
+borde DISTINTO, no tocado por esto — comparten la tabla `academic_terms`, nada más.
+📍 `app/domains/schedules/models/enrollment.rb`,
+`app/domains/schedules/queries/active_term_enrollment_scope.rb`,
+`db/migrate/20260714201234_add_academic_term_to_enrollments.rb`,
+`app/domains/core/services/headcount/snapshotter.rb` (la frontera que NO cruza).
+
 **Staff generalizado / docente como especialización (D1, no D2).**
 *Qué es.* Un solo hogar de datos para TODO el personal (`StaffManagement::StaffMember`: empleo,
 número de empleado, categoría, departamento, tipo de vinculación), y el docente NO es un dominio
