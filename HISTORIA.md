@@ -11,11 +11,104 @@
 
 ---
 
-## Changelog completo (v1.0.0 → v1.15.0)
+## Changelog completo (v1.0.0 → v1.16.0)
 
 > Copiado verbatim de §14 de `PROJECT_STATE.md` v1.5.0, antes de que el split editorial (v1.5.1)
 > moviera el changelog fuera del doc magro. Las entradas v1.6.0+ se escribieron directamente aquí,
 > ya con el split vigente.
+
+### v1.16.0 — 2026-07-14 — `attendance`: asistencia diaria por homeroom (ítem #2 del MVP)
+
+**Ítem #2 del camino crítico de `LINEAMIENTOS_MVP.md`**, ahora que la matrícula/término cerró su
+mitad de modelo (v1.15.0). Construye el registro de asistencia — el loop diario que el colegio
+piloto exige. Dominio NET-NEW (cero tablas antes de este slice) → checkpoint de diseño obligatorio.
+
+**Recon (STOP #1):** confirmado `grep -i attendance db/migrate/*.rb` sin resultados — Clase C/
+net-new real, sin sorpresas esta vez (a diferencia de `student_support` en v1.14.0).
+`Schedules::ActiveTermEnrollmentScope.resolve(institution:)` (v1.15.0) confirmado como una relation
+`GroupManagement::Student` **componible** — no necesita un parámetro de grupo propio; el caller
+simplemente encadena `.where(section_id: group.id)` encima, exactamente el layering que este slice
+necesitaba. `GroupManagement::MembershipsController#update` (v1.14.0) confirmado como el patrón de
+escritura tenant-scoped a imitar. El wiring de entitlement (`config/entitlements/*.rb` +
+`ControlPlane::AddonCatalog::DOMAIN_KEYS` + `registry_consistency_test.rb`) confirmado vía
+`counseling` como el ejemplo más reciente.
+
+**Checkpoint de diseño (STOP #2) — decisiones aprobadas:**
+1. **Dónde vive**: dominio `attendance` propio, addon-gated, diaria por homeroom — el fork (c) que
+   el propio prompt ya recomendaba. Ni `schedules` (grano equivocado — por materia, no por
+   homeroom) ni `group_management` (fundacional; asistencia es una capacidad que un colegio podría
+   NO comprar, así que addon-gated es lo correcto).
+2. **Forma de `attendance_records`**: `institution_id`, `student_id` (FK `students`), `group_id` (FK
+   `sections` — el homeroom para el que se tomó, guardado explícitamente y NO derivado del
+   `section_id` actual del estudiante, que puede cambiar después de que se tomó la asistencia
+   pasada), `date`, `status` (CHECK `present/absent/late/excused`), `recorded_by_staff_member_id`
+   (FK `staff_members`), `note`. **Dos desviaciones menores del texto literal del prompt, aprobadas
+   explícitamente**: (a) el índice único es `(institution_id, student_id, date)` — tenant-scoped
+   compuesto, como cualquier otro índice único del esquema, no el `(student_id, date)` literal del
+   prompt; (b) `recorded_by_staff_member_id` es **nullable** — no todo actor tiene una fila
+   `StaffManagement::StaffMember` (la transición aditiva de D1 sigue siendo parcial), y exigirlo
+   habría bloqueado el registro de asistencia para un actor legítimo sin ese link.
+3. **Roster tomable**: la intersección exacta de tres capas — `ActiveTermEnrollmentScope` (hecho
+   académico crudo) ∩ el grupo (`.where(section_id:)`, scope de negocio) ∩ el scope RBAC del actor
+   (`Attendance::GroupScope`, per-row `can?` sobre `attendance.record`). Un alumno del grupo pero
+   sin matrícula en el término activo nunca aparece — ni en el roster ni recibe una fila.
+4. **Forma del controller**: `GroupsController#index` (mis grupos, molde #4) → `RecordsController
+   #new/#create` (nested bajo `groups`), **sin `GroupsController#show`** — una página de grupo sin
+   fecha no tendría nada real que mostrar más allá del link hacia `records#new`, así que el índice
+   enlaza directo. Simplificación aprobada explícitamente.
+
+**Lo construido:**
+- Migración `20260714205355_create_attendance_records.rb`: tabla + 2 índices + CHECK de `status` +
+  `enable_rls` (ENABLE+FORCE+policy+WITH CHECK). Corrida en dev y test.
+- Modelo `Attendance::AttendanceRecord`.
+- Permiso nuevo `attendance.record` (un solo permiso cubre tomar Y ver, mismo criterio unificado
+  que `disciplinary_logs.manage` — sin separación read/write porque no hay nivel de confidencialidad
+  aquí).
+- `config/entitlements/attendance.rb` + `attendance` agregado a
+  `ControlPlane::AddonCatalog::DOMAIN_KEYS` + a `ControlPlane::SeedCatalog::ADDONS` (catálogo de
+  demo, para que el addon exista de verdad si alguien corre `control_plane:seed_catalog`).
+- `Attendance::GroupScope` — query object nuevo (NO reutiliza `GroupManagement::GroupScope`,
+  porque filtra por un permiso DISTINTO — `attendance.record` vs. `groups.view` — y un docente
+  puede tener uno sin el otro).
+- `Attendance::GroupsController#index` + `Attendance::RecordsController#new/#create` — el `#create`
+  hace upsert real por estudiante (`find_or_initialize_by(institution_id:, student_id:, date:)`),
+  aprovechando el índice único para que re-tomar el mismo (grupo, fecha) actualice en vez de duplicar.
+- Nav: `config/navigation/attendance.rb` ("Asistencia", permiso `attendance.record`).
+- Vistas: `attendance/groups/index` (mis grupos + link "Tomar asistencia"),
+  `attendance/records/new` (selector de fecha + roster con estado/nota por estudiante).
+
+**Caso de aceptación, verificado end-to-end:** un docente con `role_assignment` scoped a `group:9°A`
+ve solo 9°A en el índice; el roster de 9°A excluye a un estudiante del grupo que no está matriculado
+en el término activo; tomar asistencia persiste un `AttendanceRecord` por alumno del roster;
+re-tomar el mismo (grupo, fecha) actualiza los registros existentes (verificado con conteo,
+`1 → 1`, nunca `1 → 2`); el mismo docente recibe 403 al intentar `group:9°B` (fuera de su scope);
+sin entitlement de `attendance`, la petición da 403 con el texto "no está habilitado" (gate #1 antes
+que gate #2 — confirmado que ambos gates devuelven **el mismo status HTTP** 403, la diferencia real
+está en el cuerpo de la respuesta, no en el código); aislamiento cross-tenant verificado con query
+real bajo RLS; sin `input[type=search]`/`input[name=q]` en la vista de toma de asistencia (con el
+mismo scoping a `main#main` de siempre para excluir el buscador global del shell). Test de
+regresión adicional: el headcount de `Core::Headcount::Snapshotter` no se ve afectado por la
+existencia de `attendance_records` — no se tocó su fuente ni se re-derivó el join de término.
+
+**Resultado:** 407 runs / 1471 assertions / 0 failures / 0 errors / 1 skip preexistente (baseline
+397; 10 tests nuevos, todos en `test/integration/attendance_test.rb`). `bin/rails zeitwerk:check`
+verde. Una migración, aplicada en dev y test.
+
+**Archivos nuevos/editados:**
+- Migración: `db/migrate/20260714205355_create_attendance_records.rb`.
+- Modelo: `app/domains/attendance/models/attendance_record.rb`.
+- Query object: `app/domains/attendance/queries/group_scope.rb`.
+- Controllers: `app/controllers/attendance/{groups,records}_controller.rb`.
+- Vistas: `app/views/attendance/groups/index.html.erb`, `app/views/attendance/records/new.html.erb`.
+- Config: `config/entitlements/attendance.rb`, `config/navigation/attendance.rb`,
+  `app/control_plane/control_plane/addon_catalog.rb` (+`attendance`),
+  `app/control_plane/control_plane/seed_catalog.rb` (+`attendance`, catálogo de demo).
+- Permiso: `app/domains/identity_access/services/seed_permissions.rb` (+`attendance.record`).
+- Test: `test/integration/attendance_test.rb` (nuevo).
+
+Con esto, el ítem #2 del camino crítico del MVP queda cerrado. Próximo candidato según
+`LINEAMIENTOS_MVP.md` §7: boletines sobre la libreta ya real de `schedules` (agregación +
+mostrarlos en el portal del cuidador).
 
 ### v1.15.0 — 2026-07-14 — Matrícula por término real (ítem #1 del camino crítico del MVP)
 

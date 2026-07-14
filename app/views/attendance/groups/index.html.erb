@@ -1,0 +1,23 @@
+<% content_for :title, "Asistencia" %>
+
+<%= render "shared/page_header",
+      title: "Asistencia",
+      subtitle: "Grupos dentro de tu alcance." %>
+
+<% if @groups.any? -%>
+  <%= render layout: "shared/table",
+        locals: { headers: [ "Grupo", "Grado", "" ] } do -%>
+    <% @groups.each do |group| -%>
+      <tr>
+        <td><%= group.name %></td>
+        <td><%= group.grade_level&.name || "—" %></td>
+        <td><%= link_to "Tomar asistencia", new_attendance_group_record_path(group), class: "btn btn--secondary btn--sm" %></td>
+      </tr>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state",
+        icon: "alert-circle",
+        title: "No hay grupos en tu alcance",
+        description: "No ves grupos fuera de los que tienes asignados." %>
+<% end -%>

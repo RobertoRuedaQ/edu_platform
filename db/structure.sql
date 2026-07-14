@@ -210,6 +210,27 @@ ALTER TABLE ONLY public.assessments FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: attendance_records; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.attendance_records (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    student_id uuid NOT NULL,
+    group_id uuid NOT NULL,
+    date date NOT NULL,
+    status character varying DEFAULT 'present'::character varying NOT NULL,
+    recorded_by_staff_member_id uuid,
+    note text,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT attendance_records_status_check CHECK (((status)::text = ANY ((ARRAY['present'::character varying, 'absent'::character varying, 'late'::character varying, 'excused'::character varying])::text[])))
+);
+
+ALTER TABLE ONLY public.attendance_records FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: audit_events; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1289,6 +1310,14 @@ ALTER TABLE ONLY public.assessments
 
 
 --
+-- Name: attendance_records attendance_records_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.attendance_records
+    ADD CONSTRAINT attendance_records_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: audit_events audit_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1849,6 +1878,34 @@ CREATE INDEX index_assessments_on_enrollment_id ON public.assessments USING btre
 --
 
 CREATE INDEX index_assessments_on_institution_id ON public.assessments USING btree (institution_id);
+
+
+--
+-- Name: index_attendance_records_on_group_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_attendance_records_on_group_id ON public.attendance_records USING btree (group_id);
+
+
+--
+-- Name: index_attendance_records_on_institution_group_date; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_attendance_records_on_institution_group_date ON public.attendance_records USING btree (institution_id, group_id, date);
+
+
+--
+-- Name: index_attendance_records_on_institution_student_date; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_attendance_records_on_institution_student_date ON public.attendance_records USING btree (institution_id, student_id, date);
+
+
+--
+-- Name: index_attendance_records_on_student_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_attendance_records_on_student_id ON public.attendance_records USING btree (student_id);
 
 
 --
@@ -2752,6 +2809,14 @@ ALTER TABLE ONLY public.subjects
 
 
 --
+-- Name: attendance_records fk_rails_1b3d8c1086; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.attendance_records
+    ADD CONSTRAINT fk_rails_1b3d8c1086 FOREIGN KEY (recorded_by_staff_member_id) REFERENCES public.staff_members(id) ON DELETE SET NULL;
+
+
+--
 -- Name: roster_import_batches fk_rails_1ddd8e9cad; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2765,6 +2830,14 @@ ALTER TABLE ONLY public.roster_import_batches
 
 ALTER TABLE ONLY public.invitations
     ADD CONSTRAINT fk_rails_1e69da856c FOREIGN KEY (created_by_id) REFERENCES public.institution_users(id) ON DELETE SET NULL;
+
+
+--
+-- Name: attendance_records fk_rails_24851af891; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.attendance_records
+    ADD CONSTRAINT fk_rails_24851af891 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
 
 
 --
@@ -3008,6 +3081,14 @@ ALTER TABLE ONLY public.role_assignments
 
 
 --
+-- Name: attendance_records fk_rails_67992edee0; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.attendance_records
+    ADD CONSTRAINT fk_rails_67992edee0 FOREIGN KEY (group_id) REFERENCES public.sections(id) ON DELETE CASCADE;
+
+
+--
 -- Name: usage_events fk_rails_68b7a87222; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3117,6 +3198,14 @@ ALTER TABLE ONLY public.counseling_cases
 
 ALTER TABLE ONLY public.invoice_line_items
     ADD CONSTRAINT fk_rails_80427eb9d3 FOREIGN KEY (invoice_id) REFERENCES public.invoices(id) ON DELETE CASCADE;
+
+
+--
+-- Name: attendance_records fk_rails_828d16c97c; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.attendance_records
+    ADD CONSTRAINT fk_rails_828d16c97c FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE CASCADE;
 
 
 --
@@ -3559,6 +3648,19 @@ ALTER TABLE public.assessments ENABLE ROW LEVEL SECURITY;
 --
 
 CREATE POLICY assessments_tenant_isolation ON public.assessments USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: attendance_records; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.attendance_records ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: attendance_records attendance_records_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY attendance_records_tenant_isolation ON public.attendance_records USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
 
 
 --
@@ -4010,6 +4112,7 @@ CREATE POLICY teaching_assignments_tenant_isolation ON public.teaching_assignmen
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260714205355'),
 ('20260714201234'),
 ('20260714000001'),
 ('20260710152925'),

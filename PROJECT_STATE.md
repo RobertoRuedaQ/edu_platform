@@ -18,10 +18,10 @@
 
 | Campo | Valor |
 |---|---|
-| **Versión del documento** | `v1.15.0` |
+| **Versión del documento** | `v1.16.0` |
 | **Fecha** | 2026-07-14 |
-| **Tests** | 397 runs / 0 fallos / 1 skip preexistente (suite completa, en serie — ver Guardrails) |
-| **Estado en una línea** | Identidad real (login+MFA, invitaciones, gestión de personas, alta batch de estudiantes Y acudientes por CSV) + plano de control con track de billing completo S0→S4 + RBAC del inquilino real (P1 cerrado) + `Core::RosterImport` real para ambos kinds + `Core::Access::GuardianScope`/portales de persona + autoservicio de staff por identidad + visor de `audit_events` (RBAC-gated) — onboarding cerrado salvo #1.5 — + CHECKPOINT E cerrado (D1) + #4 barrido (`teacher_management`/`group_management`/`schedules`-calificaciones/`counseling`) + **matrícula por término real (ítem #1 del camino crítico del MVP): `enrollments.academic_term_id` conecta `Schedules::Enrollment`↔`academic_terms`; `Schedules::ActiveTermEnrollmentScope` es el resolver canónico. Cierra la mitad de MODELO de Cav./B2 — la mitad de FACTURACIÓN (headcount) queda intacta a propósito, con test de regresión**. `LINEAMIENTOS_MVP.md` (v1.14.1) fija el alcance del MVP K-12 que ordena lo que sigue. |
+| **Tests** | 407 runs / 0 fallos / 1 skip preexistente (suite completa, en serie — ver Guardrails) |
+| **Estado en una línea** | Identidad real + RBAC/entitlement reales + portales de persona + autoservicio de staff + auditoría + CHECKPOINT E + #4 barrido (`teacher_management`/`group_management`/`schedules`-calificaciones/`counseling`) + matrícula por término real (`Schedules::ActiveTermEnrollmentScope`, v1.15.0) + **`attendance` (asistencia diaria por homeroom, ítem #2 del MVP): dominio NET-NEW addon-gated, real desde el día uno, molde #4 completo, consume `ActiveTermEnrollmentScope` ∩ grupo ∩ scope RBAC del docente — headcount y el resolver de término intactos**. `LINEAMIENTOS_MVP.md` ordena lo que sigue: boletines sobre `schedules` es el próximo ítem. |
 
 ### Convención de versionado de ESTE documento
 
@@ -143,6 +143,7 @@ El **plano de control vive FUERA de `app/domains/*`** — namespace propio `app/
 | `counseling` | Psicoorientación. **Carve-out de `student_support`.** Casos/expedientes, sesiones/notas, remisiones, planes de intervención. Puede *leer* (no poseer) la historia médica de `student_support`. **Frontera de confidencialidad más estricta** que convivencia. |
 | `finance` | Tesorería/cartera **dentro** del tenant (el colegio cobra pensiones a acudientes). Cargos, pagos, estados de cuenta, planes de pago. **≠ billing de plataforma.** Tenant-scoped. |
 | `communication` | Hub de comunicación. Ver §8 (anexo). Sigue en fase stub. |
+| `attendance` | **Asistencia diaria por homeroom (v1.16.0, item #2 del MVP)** — dominio NET-NEW, real desde el día uno (sin fase stub). `AttendanceRecord` (`student_id`+`group_id`+`date`, único `(institution_id, student_id, date)`). Consume `Schedules::ActiveTermEnrollmentScope` (nunca re-deriva el join a término); molde #4 completo (per-row `can?`, `authorize!`, nav). Addon-gated. Por-materia diferido. |
 
 ### Tier C — candidatos (crear SOLO bajo confirmación explícita)
 
@@ -488,9 +489,10 @@ firma del método (no acepta término de búsqueda) y con aserciones sobre la vi
 > calendario del cuidador) y **reordena/reprioriza** los ítems de este backlog para ese perfil de
 > cliente — léelo antes de elegir el próximo slice si el trabajo apunta a ese MVP. Camino crítico
 > propuesto ahí (§7): ~~cerrar matrícula/término (B2/Cav.)~~ **✅ mitad de modelo cerrada (v1.15.0)**
-> → `attendance` (net-new, **siguiente**) → boletines sobre `schedules` → UI de tesorería (`finance`)
-> → `communication` → `assignments` (net-new) → `calendar` (net-new) → `extracurriculars` (net-new)
-> → portal del cuidador ampliado → provisioning + correo real. Dominios
+> → ~~`attendance` (net-new)~~ **✅ cerrado (v1.16.0)** → **boletines sobre `schedules`
+> (siguiente)** → UI de tesorería (`finance`) → `communication` → `assignments` (net-new) →
+> `calendar` (net-new) → `extracurriculars` (net-new) → portal del cuidador ampliado →
+> provisioning + correo real. Dominios
 > `student_support`/`counseling`/`cafeteria`/`transportation` reales no aplican
 > a este perfil (no se piden) — no confundir con "backlog general cerrado".
 
@@ -591,13 +593,26 @@ firma del método (no acepta término de búsqueda) y con aserciones sobre la vi
 - **Un dominio con modelos reales pero CERO vista/controller (`finance`) no es lo mismo que un stub a reemplazar** — cablearlo es construir desde cero (rutas, controller, nav), no swapear una fuente de datos. Tratarlo como su propio slice de alcance distinto, no como un ítem más del barrido de #4.
 - **`students.section_id`/`Schedules::Assessment` ya existían como target real** — a diferencia de `teacher.evaluate` (v1.13.0, sin modelo destino), la acción de matrícula de `group_management` y el registro de nota de `schedules` SÍ se cablearon como escritura real completa, no solo el gate. La regla general (BV6): cablear el gate siempre; el workflow completo SOLO si el modelo destino ya existe — verificarlo caso por caso, no asumir "gate-only" por defecto.
 - **`Schedules::ActiveTermEnrollmentScope` es EL resolver canónico de "estudiante matriculado en el término activo"** (v1.15.0, cierra la mitad de modelo de Cav./B2) — todo slice académico futuro (asistencia, notas-por-término, actividades, asignaciones, ver `LINEAMIENTOS_MVP.md`) lo CONSUME, no re-deriva su propio join a `academic_terms`. No es identity-gated (a diferencia de `GuardianScope`/`StudentSelfScope`) ni RBAC-scoped por sí mismo — resuelve el hecho académico crudo; cada consumidor aplica su propio scope de RBAC encima (mismo layering que `TeacherManagement::TeacherScope`). Solo un término activo por institución (invariante de BD ya existente) — el query NUNCA reimplementa esa resolución, solo lee `Core::AcademicTerm.active`.
+- **"Roster tomable" = resolver académico ∩ scope de negocio ∩ scope RBAC — tres capas, nunca colapsadas en una** (`attendance`, v1.16.0, primer consumidor real de `ActiveTermEnrollmentScope`): (1) `ActiveTermEnrollmentScope.resolve(institution:)` — el hecho crudo, institución completa; (2) `.where(section_id: group.id)` — el scope de NEGOCIO (este grupo/homeroom); (3) `authorize!("attendance.record", group)` + el query object per-row (`Attendance::GroupScope`) — el scope de RBAC del actor (sus propios grupos). El mismo layering aplica a todo slice académico futuro que "actúe sobre los alumnos de un grupo en el término activo" (notas-por-término, actividades, asignaciones) — no reinventar el orden ni colapsar las tres capas en una sola query ad hoc.
+- **Un dominio net-new addon-gated real desde el día uno (sin fase stub) es un patrón válido** (`attendance`, v1.16.0) — a diferencia de los dominios de la Fase 0 (que nacieron 100% stub y se cablearon después, backlog #4), un dominio construido HOY con recon-first + checkpoint de diseño no necesita pasar por una fase de roster en memoria: el modelo real, el query object y las vistas se construyen en el mismo slice.
 
 ---
 
 ## 13. Changelog
 
-El changelog completo (`v1.0.0` → `v1.15.0`) vive en **`HISTORIA.md`**. Entrada de esta versión:
+El changelog completo (`v1.0.0` → `v1.16.0`) vive en **`HISTORIA.md`**. Entrada de esta versión:
 
+- **`v1.16.0` — `attendance`: asistencia diaria por homeroom (ítem #2 del MVP, dominio net-new).**
+  Checkpoint de diseño (aprobado): dominio propio, addon-gated, diaria por homeroom — no `schedules`
+  (grano equivocado, por materia) ni `group_management` (fundacional, y asistencia es addon-able).
+  `attendance_records` (`student_id`+`group_id`+`date`, único `(institution_id, student_id, date)`,
+  `recorded_by_staff_member_id` nullable). El roster tomable es la intersección de tres capas:
+  `Schedules::ActiveTermEnrollmentScope` (hecho académico crudo, nunca re-derivado) ∩ el grupo
+  (scope de negocio) ∩ el scope RBAC del docente (`Attendance::GroupScope`, molde #4 completo:
+  per-row `can?`, `authorize!("attendance.record")`, nav). Escritura real en lote idempotente
+  (re-tomar el mismo grupo+fecha actualiza, nunca duplica — la unicidad lo garantiza). Portal del
+  cuidador explícitamente fuera (ítem #9). Headcount y `ActiveTermEnrollmentScope` verificados
+  intactos. Una migración, aplicada en dev y test. Narrativa completa en `HISTORIA.md`.
 - **`v1.15.0` — matrícula por término real (ítem #1 del camino crítico del MVP, cierra la mitad de
   modelo de Cav./B2).** Recon corrigió la premisa del prompt: no hay una tabla `core.enrollments`
   separada — existe UNA sola tabla `enrollments`, ya modelada como `Schedules::Enrollment` desde

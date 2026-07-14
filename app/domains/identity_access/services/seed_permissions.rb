@@ -45,7 +45,13 @@ module IdentityAccess
       # surface — unlike self-service, which is identity-gated with no
       # authorize! at all). Read-only: audit_events is append-only regardless
       # of who holds this.
-      "audit_events.read" => "Ver el registro de auditoría y discrepancias reportadas"
+      "audit_events.read" => "Ver el registro de auditoría y discrepancias reportadas",
+      # attendance (v1.16.0): daily-by-homeroom only. One permission covers
+      # both taking attendance and viewing what was already taken — same
+      # unified-permission call as disciplinary_logs.manage (no read/write
+      # split like accommodations/medical_history, since there's no
+      # confidentiality tier here).
+      "attendance.record" => "Registrar y ver la asistencia de un grupo"
     }.freeze
 
     def self.call

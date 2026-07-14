@@ -137,6 +137,16 @@ Rails.application.routes.draw do
     resources :balances, only: :index
   end
 
+  # --- attendance (net-new domain, v1.16.0, MVP critical path item #2) ------
+  # Daily-by-homeroom only. groups#index lists the actor's OWN groups (scope);
+  # records#new/#create take attendance for a (group, date) — no groups#show,
+  # a bare group page would have nothing real beyond the link into records#new.
+  namespace :attendance do
+    resources :groups, only: :index do
+      resources :records, only: %i[new create]
+    end
+  end
+
   # --- transportation (domain views, Prompt Unificado) ----------------------
   # No models/schema at all — the most greenfield domain yet. boarding.manage
   # introduced a new scope dimension (:route) since a bus route is neither a

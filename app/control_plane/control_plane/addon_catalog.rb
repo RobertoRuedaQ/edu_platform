@@ -16,6 +16,7 @@ module ControlPlane
       finance
       communication
       analytics_bi
+      attendance
     ].freeze
   end
 end
