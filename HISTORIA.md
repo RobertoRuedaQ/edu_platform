@@ -11,11 +11,91 @@
 
 ---
 
-## Changelog completo (v1.0.0 → v1.11.0)
+## Changelog completo (v1.0.0 → v1.12.0)
 
 > Copiado verbatim de §14 de `PROJECT_STATE.md` v1.5.0, antes de que el split editorial (v1.5.1)
 > moviera el changelog fuera del doc magro. Las entradas v1.6.0+ se escribieron directamente aquí,
 > ya con el split vigente.
+
+### v1.12.0 — 2026-07-14 — CHECKPOINT E cerrado (D1): staff generalizado, docente como especialización
+
+**El borde de arquitectura abierto desde el arranque del proyecto** — dónde vive el personal no
+docente (cocina, transporte, enfermería, etc.) — se atacó como si fuera un refactor fundacional
+pendiente, con recon pesado y una pausa de diseño obligatoria antes de tocar la BD (§2 del prompt).
+El recon cambió el problema por completo.
+
+**El hallazgo del recon (STOP #1):** D1 — "un solo hogar de staff, docente como especialización" —
+**ya estaba resuelto en el esquema desde el primer commit** (`637a998 Add staff_management domain
+(departments, staff_members, HR)`), muchísimo antes de que el track de onboarding (P1→v1.11.0)
+siquiera empezara:
+
+- `staff_members` (migración `20260706000001_create_staff_management.rb`) ya es el backbone de
+  empleo generalizado para TODO el personal: `staff_category IN ('teaching','kitchen','transport',
+  'maintenance','security','admin','other')`, `department_id` **nullable**, tenant-scoped + RLS.
+- `departments.kind IN ('academic','operational')` — ya generalizado más allá de "departamento
+  académico"; es la misma tabla que `role_assignments.scope_department_id` referencia por FK real
+  desde P1.
+- `teachers.staff_member_id` (migración `20260706000002_link_teachers_to_staff_members.rb`) es un FK
+  **nullable, aditivo** que liga `TeacherManagement::Teacher` (la especialización docente) a
+  `StaffManagement::StaffMember` (la base generalizada). El comentario de esa migración ya lo decía
+  textualmente: *"D1 additive link: a teacher is a staff_member with a teaching extension."*
+- `Core::Access::StaffProfileScope` (v1.10.0) **ya lee `StaffManagement::StaffMember` directamente**
+  — nunca `Teacher` — así que el autoservicio de staff YA resolvía a un docente y a un no-docente de
+  forma idéntica, sin ninguna rama especial, desde que ese scope se escribió.
+- Cero FK cruza desde `schedules`/`group_management` hacia `teachers`/`teacher_management` — no había
+  nada que un rename hubiera podido romper, ni falta que hacía.
+
+**Lo que sí faltaba (el gap real, no el que el prompt asumía):**
+- `TeacherManagement::TeacherRoster`/`DepartmentRoster` y `StaffManagement::StaffRoster` son STUBS en
+  memoria, completamente desconectados de las tablas reales — `db/seeds.rb` nunca crea una fila de
+  `Teacher`, `StaffMember` ni `Department`.
+- Ningún camino de alta real (`Core::People::Resolver`/`PeopleController`) crea un `StaffMember` al
+  contratar a alguien — solo existe si se crea a mano (como ya hacían los tests de v1.10.0).
+- `PROJECT_STATE.md` describía CHECKPOINT E como abierto y a `staff_management` como "un stub que
+  solo cierra un nav huérfano" — cierto de la VISTA, falso del MODELO. El documento nunca se
+  reconcilió contra el disco tras el commit `637a998`.
+
+**Checkpoint de diseño (STOP #2):** con este hallazgo en mano, se presentó al usuario la propuesta de
+**no hacer ningún rename ni migración** — tratar la forma ya existente (dos dominios, uno generalizado
++ uno especializado vía FK nullable) como la respuesta correcta y definitiva a D1, y limitar el slice
+a verificación + corrección de documentación. Se preguntó explícitamente: (1) la forma de D1 (aceptar
+la existente vs. renombrar `teacher_management`→`staff_management` vs. otra forma), (2) si wirear los
+directorios stub a datos reales entraba en este slice o era backlog #4, (3) si ampliar el enum de
+`staff_category` para roles de bienestar/registro (hoy caen en `'other'`), y (4) el bump de versión.
+**El usuario aprobó las cuatro recomendaciones**: aceptar la forma existente, dejar los directorios
+como backlog #4 (el propio prompt ya los listaba como fuera de alcance), no tocar el enum (YAGNI —
+`'other'` ya cubre el caso sin bloquear nada), y `v1.12.0` (MINOR, no MAJOR — no hay reestructuración
+real del mapa de dominios en este slice, solo confirmación de una que ya existía).
+
+**Trabajo real ejecutado:** un test de integración nuevo (`self_service_test.rb`) que siembra un
+`cafeteria_staff` — categoría `kitchen`, departamento **operacional** ("Cafetería"), **cero filas**
+`TeacherManagement::Teacher` en la institución — y verifica que `/mis_datos` lo resuelve exactamente
+igual que a un docente: perfil completo, número de empleado, departamento, sin ningún empty state de
+"perfil no vinculado". Esto prueba, de punta a punta (no solo por inferencia desde los tests unitarios
+de `StaffProfileScope`, que ya usaban categorías no-docentes incidentalmente), que E5 (no romper
+v1.10.0) y el caso de aceptación del prompt (staff no docente con perfil, `department` nullable,
+resuelto por identidad igual que un docente) se sostienen. **Cero migraciones. Cero cambios a
+`StaffProfileScope`/`StaffRoleAssignmentsScope`/nav** — no hicieron falta.
+
+**Resultado:** 369 runs / 1311 assertions / 0 failures / 0 errors / 1 skip preexistente (baseline
+368; 1 test nuevo). `bin/rails zeitwerk:check` verde (sin renames, no había nada que romper). Sin
+migraciones.
+
+**Documentos actualizados:**
+- `PROJECT_STATE.md` → v1.12.0: §4 (mapa de dominios corregido: `staff_management` sale de "Tier C
+  candidato" y entra como dominio real generalizado; `teacher_management` re-descrito como su
+  especialización docente), §10 (CHECKPOINT E ✅ cerrado), §11.2 (tachado), guardrails (regla nueva
+  sobre el hogar único de staff).
+- `CONCEPTOS_TECNICOS.md` → nuevo concepto: "Staff generalizado / docente como especialización" (ver
+  ese archivo para el bloque completo: definición, rationale D1 vs. D2, dónde vive en código,
+  invariantes).
+
+**Lección durable para futuros slices de "cerrar un checkpoint arquitectónico":** el recon SIEMPRE
+va antes que la propuesta, incluso (especialmente) cuando el prompt ya asume una forma concreta de
+solución (acá, una migración de rename) — el estado real del código puede haber superado al
+documento vivo sin que nadie lo haya notado. Reconciliar `PROJECT_STATE.md` contra el disco no es
+opcional ni un paso burocrático: en este caso evitó una migración innecesaria sobre una tabla
+fundacional y un rename de dominio con cero beneficio funcional.
 
 ### v1.11.0 — 2026-07-14 — Onboarding: visor de `audit_events` + bandeja de discrepancias
 

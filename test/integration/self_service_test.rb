@@ -172,4 +172,39 @@ class SelfServiceTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_no_match(/Mi horario/, response.body)
   end
+
+  # CHECKPOINT E (D1): a non-teaching staff member is a StaffManagement::
+  # StaffMember with NO TeacherManagement::Teacher extension at all — the
+  # link (teachers.staff_member_id) is nullable precisely so the teaching
+  # extension is optional, not because the base profile is incomplete.
+  # StaffProfileScope/self-service already read StaffMember directly, so
+  # this proves end-to-end (not just by unit-test inference) that a
+  # kitchen/operational-department staff member resolves identically to a
+  # teacher — no special-casing anywhere for "docente vs. no docente".
+  test "a non-teaching staff member (no Teacher row, operational department) gets full self-service, same as a teacher" do
+    institution = build_institution
+
+    department = within_tenant(institution) do
+      StaffManagement::Department.create!(institution: institution, name: "Cafetería", code: "CAF", kind: "operational")
+    end
+
+    cook = Core::User.create!(email: "cook@correo.test", name: "Rosa Cocina", password: "password-123456")
+    iu = within_tenant(institution) { institution.memberships.create!(user: cook) }
+
+    within_tenant(institution) do
+      create_role_assignment!(institution, institution_user: iu, role_key: "cafeteria_staff", scope_department_id: department.id)
+      StaffManagement::StaffMember.create!(institution: institution, institution_user: iu,
+        employee_number: "EMP-COOK", staff_category: "kitchen", employment_type: "full_time", department: department)
+
+      assert_equal 0, TeacherManagement::Teacher.where(institution_id: institution.id).count
+    end
+
+    sign_in_as(cook, institution: institution, password: "password-123456")
+
+    get "/mis_datos"
+    assert_response :success
+    assert_match(/EMP-COOK/, response.body)
+    assert_match(/Cafetería/, response.body)
+    assert_select ".empty-state__title", text: "Aún no tienes un perfil de personal vinculado", count: 0
+  end
 end

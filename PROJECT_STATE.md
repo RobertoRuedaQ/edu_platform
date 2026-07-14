@@ -18,10 +18,10 @@
 
 | Campo | Valor |
 |---|---|
-| **Versión del documento** | `v1.11.0` |
+| **Versión del documento** | `v1.12.0` |
 | **Fecha** | 2026-07-14 |
-| **Tests** | 368 runs / 0 fallos / 1 skip preexistente (suite completa, en serie — ver Guardrails) |
-| **Estado en una línea** | Identidad real (login+MFA, invitaciones, gestión de personas, alta batch de estudiantes Y acudientes por CSV) + plano de control con track de billing completo S0→S4 + RBAC del inquilino real (P1 cerrado) + `Core::RosterImport` real para ambos kinds + `Core::Access::GuardianScope`/portales de persona + autoservicio de staff sobre datos reales por identidad + **visor de `audit_events` + bandeja de discrepancias reales (RBAC-gated)** — con esto el track de onboarding queda cerrado salvo los disparadores opcionales de `Expirer`/`BounceHandler` (#1.5). Próximo candidato: CHECKPOINT E o vistas de negocio por dominio (#4) — a decidir. |
+| **Tests** | 369 runs / 0 fallos / 1 skip preexistente (suite completa, en serie — ver Guardrails) |
+| **Estado en una línea** | Identidad real (login+MFA, invitaciones, gestión de personas, alta batch de estudiantes Y acudientes por CSV) + plano de control con track de billing completo S0→S4 + RBAC del inquilino real (P1 cerrado) + `Core::RosterImport` real para ambos kinds + `Core::Access::GuardianScope`/portales de persona + autoservicio de staff sobre datos reales por identidad + visor de `audit_events` + bandeja de discrepancias (RBAC-gated) — onboarding cerrado salvo #1.5 — + **CHECKPOINT E cerrado (D1): el staff generalizado ya existía en el esquema desde el primer commit (`StaffManagement::StaffMember` + `TeacherManagement::Teacher` vía FK nullable), solo faltaba la verificación y la corrección de este documento**. Próximo candidato: vistas de negocio por dominio (#4) — a decidir. |
 
 ### Convención de versionado de ESTE documento
 
@@ -121,7 +121,8 @@ El **plano de control vive FUERA de `app/domains/*`** — namespace propio `app/
 | Dominio | Propósito | Posee / notas |
 |---|---|---|
 | `core` | Espina académica **+ identidad de personas** | `students`, matrícula (`enrollments`), acudientes (`guardian_students`), cursos, `academic_terms` (con índice de "un solo término activo"), `grade_levels`, `disciplinary_logs`. También posee `Core::User`, `Core::InstitutionUser`, `Core::Session`, `Core::People::Resolver`, y `Core::Headcount::{Snapshotter,SnapshotJob}` (S3a) — la identidad y el pipe de headcount viven aquí, no en `identity_access` ni en el control plane. Casi todo le hace FK. |
-| `teacher_management` | Docentes | Perfiles, `departments` (áreas), cualificaciones. |
+| `staff_management` | **Staff generalizado (D1, CHECKPOINT E cerrado)** | `StaffManagement::StaffMember` — empleo/vinculación de TODO el personal (`staff_category` incl. `teaching`), `Department` (`kind` academic/operational, referenciado por `role_assignments.scope_department_id`), `EmploymentPeriod` (profundidad HR opcional). `department_id` **nullable** — un no-académico no necesita departamento académico. Fundacional (sin `Entitlement::Registry`). |
+| `teacher_management` | Docentes — **especialización de staff (D1)** | `Teacher` es la extensión docente de un `StaffManagement::StaffMember` (`teachers.staff_member_id`, FK **nullable**, aditiva — un docente puede o no tener el link poblado). Posee lo exclusivamente docente: `teacher_code`, `faculty` (universidad), `teaching_assignments` (materia). Departamentos/perfil base viven en `staff_management`, no aquí. |
 | `group_management` | Grupos | `groups` (`kind` homeroom/…), membresía/rosters. `students.user_id` y `students.national_id` (cifrado) viven en el modelo de este dominio (`GroupManagement::Student`). |
 | `schedules` | Horarios/timetabling | Rooms, patrones de reunión. Usa PG18 `WITHOUT OVERLAPS` (doble-booking de aula/profesor). Depende de `academic_terms`. |
 | `student_support` | Bienestar | Convivencia, **historia médica (dueño)**, acomodaciones. Sensible. Tabla legacy `student_guardians` coexiste con `core.guardian_students` (no migrada; ver §3.2). |
@@ -145,11 +146,13 @@ El **plano de control vive FUERA de `app/domains/*`** — namespace propio `app/
 
 ### Tier C — candidatos (crear SOLO bajo confirmación explícita)
 
-`staff_management` **o** `human_resources` (personal no docente; **CHECKPOINT E pendiente** — ver §11) · `admissions` (pipeline aspirante→matriculado) · `library`.
+`admissions` (pipeline aspirante→matriculado) · `library`. (`staff_management` ya NO es candidato —
+CHECKPOINT E cerrado v1.12.0, ver §10/`HISTORIA.md`: existe y resuelve el staff generalizado desde
+el primer commit del repo.)
 
 ### Orden de dependencias (creación / migraciones)
 
-1. `core`, `teacher_management`, `group_management` (proveen destinos de scope).
+1. `core`, `staff_management`, `teacher_management` (extensión docente de `staff_management`), `group_management` (proveen destinos de scope).
 2. `identity_access` (referencia los anteriores por FK).
 3. `schedules`, `student_support`, `cafeteria`, `transportation`, `analytics_bi`.
 4. `counseling` y `finance` (FK a `core`; `counseling` puede leer `student_support`).
@@ -430,7 +433,7 @@ firma del método (no acepta término de búsqueda) y con aserciones sobre la vi
 |---|---|---|---|
 | ⚠-1 | Identidad global vs. un-correo-un-tenant | — | ✅ Cerrado — ver `HISTORIA.md`. No re-abrir sin razón de negocio explícita. |
 | ⚠-2 | Dónde vive el campo de documento | — | ✅ Cerrado — ver `HISTORIA.md`. |
-| **E** | **CHECKPOINT E: `teacher_management` → `staff_management`** | Personal no docente (cocina, transporte, etc.) sin dominio claro. D1 (generalizar) vs D2 (dominio HR nuevo). Ya existe un `staff_management` mínimo (solo cierra un nav huérfano) que **no** resuelve este checkpoint. | 🔴 Abierto. Recomendado D1. Cerrar antes de crear Tier C de personal. |
+| **E** | **CHECKPOINT E: `teacher_management` → `staff_management`** | Personal no docente (cocina, transporte, etc.) sin dominio claro. D1 (generalizar) vs D2 (dominio HR nuevo). | ✅ **Cerrado (D1, v1.12.0)** — ver `HISTORIA.md`. Recon reveló que D1 **ya estaba resuelto en el esquema desde el primer commit** (`637a998`, anterior al track de onboarding): `StaffManagement::StaffMember` es el empleo generalizado de TODO staff (`staff_category` incl. `teaching`, `department_id` nullable); `TeacherManagement::Teacher` es su extensión docente vía `teachers.staff_member_id` (FK nullable, aditiva). No fue necesaria ninguna migración ni rename — el gap real era que nadie lo había verificado end-to-end para un staff NO docente ni corregido este documento (que describía `staff_management` como "solo cierra un nav huérfano", cierto de la vista pero no del modelo). Las vistas de directorio (`StaffManagement::StaffRoster`/`TeacherManagement::TeacherRoster`) siguen en stub — eso es backlog #4, no este checkpoint. |
 | B1 | Estudiantes sin login | `students.user_id` nullable. | ✅ Confirmado como diseño (ver `HISTORIA.md`). Consistencia en portales ya documentada (v1.9.0): un estudiante sin `user_id` propio simplemente no tiene cuenta con la que entrar al portal en primer lugar (no hay sesión que iniciar); uno CON `user_id` pero cuyo registro aún no se resolvió ve el empty state de `Core::Access::StudentSelfScope`, nunca un error. |
 | **B2** | **Fechado efectivo de asignaciones vs. `academic_terms`** | ¿`role_assignments.valid_from/until` se acopla a ciclos lectivos o es independiente? | 🔴 Abierto. Las columnas `valid_from`/`valid_until` **ya existen** (agregadas en P1, calendario simple, sin FK a `academic_terms`) — la pregunta de si acoplarlas a ciclos lectivos sigue sin decidirse; hoy son fechas de calendario independientes. |
 | **M1** | **Unidad de metering por dominio medido** | El control plane solo consume rollups; `addons.unit` sigue provisional. | 🔴 Abierto. Se fija cuando cada dominio medido defina su evento facturable — bloquea S3b. |
@@ -453,9 +456,9 @@ firma del método (no acepta término de búsqueda) y con aserciones sobre la vi
    4. ~~Visor de `audit_events` + bandeja de discrepancias~~ — ✅ **cerrado (v1.11.0)**, ver `HISTORIA.md`. Con esto el track de onboarding queda cerrado salvo el punto 5 (opcional) abajo.
    5. Batch-invite tras el alta de acudientes, full-async de parse+validar, y purga de `roster_import_rows` post-commit — hardening documentado, no construido (ver `HISTORIA.md` v1.7.0).
    5. Job recurrente para `Invitations::Expirer` y webhook real para `Invitations::BounceHandler` (opcional / según necesidad real de producción, no bloqueante — único remanente del track).
-2. **Cerrar CHECKPOINT E** (`staff_management` vs `human_resources`) y, si aplica, scaffold del dominio de personal no docente.
+2. ~~Cerrar CHECKPOINT E~~ (`staff_management` vs `human_resources`) — ✅ **cerrado (D1, v1.12.0)**, ver `HISTORIA.md`. Ya estaba resuelto en el esquema; este slice fue verificación + corrección de doc, sin migración.
 3. ~~Cablear la puerta de auth real (gate #2, RBAC)~~ — ✅ **P1 cerrado (v1.6.0)**, ver `HISTORIA.md`.
-4. **Vistas de negocio por dominio** que aún estén en stub → conectarlas a modelos reales, dominio por dominio (empezando por `core` y `teacher_management` con el caso de aceptación de §6.4). El descriptor de scope de P1 solo se cableó de verdad en `teacher_management`; el resto de dominios (student_support, group_management, schedules, counseling, cafeteria, transportation) sigue con su catálogo de recursos en stub y se adopta aquí, incrementalmente, dominio por dominio.
+4. **Vistas de negocio por dominio** que aún estén en stub → conectarlas a modelos reales, dominio por dominio (empezando por `core` y `teacher_management` con el caso de aceptación de §6.4). El descriptor de scope de P1 solo se cableó de verdad en `teacher_management`; el resto de dominios (student_support, group_management, schedules, counseling, cafeteria, transportation) sigue con su catálogo de recursos en stub y se adopta aquí, incrementalmente, dominio por dominio. Incluye `StaffManagement::StaffRoster`/`TeacherManagement::TeacherRoster`/`DepartmentRoster` (directorios "Personal"/"Docentes", CHECKPOINT E dejó el modelo real listo en v1.12.0 pero las vistas siguen en stub — deliberadamente fuera de ese slice).
 5. **Plano de control — pendientes del track de billing** (S0→S4 completo, ver §7):
    1. **S3b — emisión real por dominio**: cablear cada dominio medido para llamar `ControlPlane::Usage::Ingest` en su evento facturable real. **Requiere cerrar M1 primero** (unidad de metering por dominio). Slice transversal, tocará `app/domains/*` — mismo patrón de "una sola pieza" que S2b, no ramificar por dominio. Una vez cerrado, las líneas `usage_overage` del corte dejarán de dar cero — no hace falta tocar `PeriodCut` para eso, ya las suma correctamente.
    2. **Riel de pago** — fuera de alcance de v1. Finalizar una factura la congela; no la cobra ni la envía.
@@ -513,13 +516,25 @@ firma del método (no acepta término de búsqueda) y con aserciones sobre la vi
 - **El filtro de término activo es real solo donde el FK existe** — `role_assignments.effective_now` (P1) y cualquier futuro dato de `schedules` una vez tenga tabla real, **sí** filtran por término. Grupos/matrícula (`enrollments.term`, sin FK a `academic_terms`) **no** — término ahí es solo etiqueta descriptiva (salvedad B2 vigente). `schedules` en general no tiene ninguna tabla real todavía (ni parcial) — cualquier tile que lo use hoy es necesariamente vista previa sobre el stub existente, marcada como tal, nunca presentada como dato real.
 - **El visor de auditoría se gatea por RBAC (`authorize!`), a diferencia de las superficies self-service — y `audit_events` es append-only: ninguna vista lo muta.** Un futuro "marcar atendida" (si se construye) **es un evento nuevo append** (`Audit.log` de, p. ej., `discrepancy_acknowledged`) con estado **derivado** de su presencia — nunca un `UPDATE` sobre la fila original (la BD ya lo impediría: `REVOKE UPDATE, DELETE ON audit_events FROM edu_app_runtime`).
 - **Los filtros del visor de auditoría nunca son un directorio de estudiantes** — actor/acción/fecha sobre metadata, con acción tomada de un **conjunto conocido** (`IdentityAccess::AuditEventIndex::ACTIONS`), jamás texto libre ni autocompletado de personas (Habeas Data, mismo invariante que `GuardianScope`). El filtro de actor sí lista al STAFF de la propia institución (no son menores; es la misma superficie ya visible en "Personas").
+- **El staff vive en UN SOLO hogar (`staff_management`), y el docente es una especialización, no un dominio aparte** (CHECKPOINT E, D1, v1.12.0) — `StaffManagement::StaffMember` es el empleo generalizado de TODO staff (`department_id` **nullable** para no-académicos); `TeacherManagement::Teacher` es su extensión docente vía `teachers.staff_member_id` (FK **nullable, aditiva** — el link puede faltar sin que el perfil base esté incompleto). `Core::Access::StaffProfileScope` ya resuelve a ambos por identidad, sin distinguir. Esto **ya estaba en el esquema desde el primer commit** — no inventar una migración de "generalizar staff" sin releer `HISTORIA.md` v1.12.0 primero; lo que falta (directorios `StaffRoster`/`TeacherRoster` reales) es backlog #4, no un borde de arquitectura.
 
 ---
 
 ## 13. Changelog
 
-El changelog completo (`v1.0.0` → `v1.11.0`) vive en **`HISTORIA.md`**. Entrada de esta versión:
+El changelog completo (`v1.0.0` → `v1.12.0`) vive en **`HISTORIA.md`**. Entrada de esta versión:
 
+- **`v1.12.0` — CHECKPOINT E cerrado (D1): staff generalizado, docente como especialización.**
+  Recon reveló que la generalización pedida ya existía en el esquema desde el primer commit del
+  repo (`637a998`, previo al track de onboarding): `StaffManagement::StaffMember` (empleo de TODO
+  staff, `department_id` nullable) + `TeacherManagement::Teacher` (extensión docente vía
+  `teachers.staff_member_id`, FK nullable/aditiva) + `Core::Access::StaffProfileScope` (v1.10.0, ya
+  leía `StaffMember` sin distinguir docente/no-docente). **Ninguna migración, ningún rename** — el
+  gap real era la falta de verificación end-to-end para un staff NO docente y un `PROJECT_STATE.md`
+  desactualizado. Se agregó un test de aceptación (personal de cocina, departamento operacional, CERO
+  fila `Teacher`) que prueba que el autoservicio resuelve idéntico al de un docente. Los directorios
+  `StaffRoster`/`TeacherRoster` (aún stub) quedan explícitamente como backlog #4, no parte de este
+  checkpoint. Narrativa completa, con el detalle del recon que encontró esto, en `HISTORIA.md`.
 - **`v1.11.0` — Onboarding: visor de `audit_events` + bandeja de discrepancias.**
   `IdentityAccess::AuditEventIndex` — tenant-scoped, filtros actor/acción(conjunto conocido)/fecha,
   paginado (`PER_PAGE = 25`), nunca `default_scope`. Alimenta el visor

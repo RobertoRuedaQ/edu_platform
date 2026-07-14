@@ -213,6 +213,49 @@ Claves tipo `teacher.evaluate`, `roles.manage`, `people.manage` en vez de roles 
 Permite separar capacidades que en la vida real son de personas distintas (un registrador puede
 invitar personas sin poder otorgar rol de admin).
 
+**Staff generalizado / docente como especialización (D1, no D2).**
+*Qué es.* Un solo hogar de datos para TODO el personal (`StaffManagement::StaffMember`: empleo,
+número de empleado, categoría, departamento, tipo de vinculación), y el docente NO es un dominio
+aparte sino una **especialización opcional** de ese registro: `TeacherManagement::Teacher` agrega
+las columnas exclusivamente docentes (`teacher_code`, `faculty`, `teaching_assignments`) y se liga a
+su `StaffMember` vía un FK **nullable, aditivo** (`teachers.staff_member_id`) — no una jerarquía STI,
+no una tabla por categoría de personal.
+*Por qué D1 (generalizar) sobre D2 (dominio HR aparte).* Cocina/transporte/mantenimiento/seguridad/
+administración comparten el 90% de sus atributos con un docente (institución, número de empleado,
+tipo de vinculación, estado, departamento) — modelarlos como un dominio de RR.HH. totalmente
+separado habría duplicado ese 90% y obligado a decidir, ARTIFICIALMENTE, en cuál de los dos dominios
+vive cada permiso/reporte que toque "cualquier miembro del staff" (p. ej. el autoservicio "mis
+datos", que no le importa si sos docente o no). Generalizar con el docente como caso particular deja
+un solo lugar para esa pregunta.
+*Cómo se modela el discriminador.* `staff_members.staff_category` (`teaching|kitchen|transport|
+maintenance|security|admin|other`, `CHECK` constraint) distingue el TIPO de empleo; la presencia (o
+no) de una fila `teachers` con `staff_member_id` apuntando de vuelta es lo que distingue si además
+tiene la extensión docente. `departments.kind` (`academic|operational`) generaliza igual de lejos:
+un departamento no tiene por qué ser una materia académica. `staff_members.department_id` es
+**nullable** a propósito — el personal no académico no tiene por qué tener un departamento asignado.
+*Relación con RBAC y con `StaffProfileScope`.* El catálogo de roles (`cafeteria_staff`,
+`transport_coordinator`, `driver`, `teacher`, …) y sus `role_assignments` no cambian en nada por
+esto — siguen siendo el mecanismo real de "qué puede hacer" y "sobre qué alcance". Lo que este
+modelado resuelve es "de quién es el registro de empleo", que es una pregunta *distinta* de RBAC.
+`Core::Access::StaffProfileScope` (v1.10.0) es el punto donde esto se vuelve visible: lee
+`StaffManagement::StaffMember` directamente y nunca `Teacher`, así que un docente y un no-docente se
+resuelven exactamente igual — la especialización docente es un detalle que el autoservicio ni
+necesita mirar.
+*Invariantes.* (1) El link `teachers.staff_member_id` es **opcional en ambos sentidos**: un
+`StaffMember` puede no tener extensión docente (la mayoría del personal), y un `Teacher` puede no
+tener el link poblado todavía (transición aditiva, sin backfill forzado) — ninguno de los dos casos
+es un error, son estados normales. (2) Nunca forzar `department_id` `NOT NULL` para "arreglar" un
+reporte que asuma que todo el staff tiene departamento académico — el nullable es el invariante, no
+un descuido. (3) No inventar una migración de "generalizar staff" sin antes verificar si ya existe
+esta forma — este concepto se cerró en `HISTORIA.md` v1.12.0 (CHECKPOINT E) precisamente porque el
+recon encontró que ya estaba construido desde el primer commit del repo, antes incluso del track de
+onboarding.
+📍 `app/domains/staff_management/models/staff_member.rb`,
+`app/domains/teacher_management/models/teacher.rb`,
+`db/migrate/20260706000001_create_staff_management.rb`,
+`db/migrate/20260706000002_link_teachers_to_staff_members.rb`,
+`app/domains/core/services/access/staff_profile_scope.rb`.
+
 ---
 
 ## 5. Postgres específico
