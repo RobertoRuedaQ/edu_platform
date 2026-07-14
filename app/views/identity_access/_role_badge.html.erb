@@ -1,0 +1,7 @@
+<%# locals: (role_name:, scope_label: nil, system: false, **attrs) -%>
+<%# A role as a badge (system roles emphasized) with an optional scope suffix. -%>
+<% attrs[:class] = class_names("role-badge", attrs[:class]) -%>
+<%= tag.span(**attrs) do -%>
+  <%= ui_badge role_name, variant: (system ? :primary : :neutral) %>
+  <% if scope_label.present? -%><span class="role-badge__scope"><%= scope_label %></span><% end -%>
+<% end -%>

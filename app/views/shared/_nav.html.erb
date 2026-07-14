@@ -1,0 +1,22 @@
+<%#
+  Role-aware primary navigation. Data-driven from Navigation::Registry, filtered
+  to what the actor may see (cosmetic — every destination still gates with
+  authorize!). Domains self-register in config/navigation/<domain>.rb, so this
+  partial NEVER changes when a domain is added. Text-only on purpose: the shared
+  icon set has no per-domain glyphs, and a wrong icon is worse than none.
+  Semantic <nav> + <ul>, aria-current marks the active item; focus ring is global.
+-%>
+<nav class="app-nav" aria-label="Principal">
+  <ul class="app-nav__list">
+    <li>
+      <%= link_to "Inicio", "/", class: "app-nav__link",
+            aria: { current: current_page?("/") ? "page" : nil } %>
+    </li>
+    <% nav_items.each do |item| -%>
+      <li>
+        <%= link_to item.label, item.path, class: "app-nav__link",
+              aria: { current: current_page?(item.path) ? "page" : nil } %>
+      </li>
+    <% end -%>
+  </ul>
+</nav>

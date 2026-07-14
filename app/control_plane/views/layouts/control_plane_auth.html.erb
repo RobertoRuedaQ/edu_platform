@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <title><%= page_title %></title>
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="application-name" content="EduPlatform · Control">
+    <%= csrf_meta_tags %>
+    <%= csp_meta_tag %>
+
+    <%= yield :head %>
+
+    <link rel="icon" href="/icon.png" type="image/png">
+    <link rel="icon" href="/icon.svg" type="image/svg+xml">
+
+    <%= stylesheet_link_tag "tokens", "base", "layout", "components", "utilities",
+                            "control_plane", "data-turbo-track": "reload" %>
+    <%= javascript_importmap_tags %>
+  </head>
+
+  <body>
+    <a class="skip-link" href="#cp-main">Saltar al contenido</a>
+
+    <%# Minimal pre-login shell for the control plane, analogous to
+        layouts/auth on the tenant side but deliberately NOT shared with it
+        (opposite security rules, separate plane — see F1). No sidebar nav:
+        ControlPlane::Current.platform_admin doesn't exist yet at this point. %>
+    <div class="cp-shell">
+      <header class="cp-band">
+        <div class="cp-band__inner">
+          <span class="cp-band__mark">EduPlatform</span>
+          <span class="cp-band__tag">Plano de control</span>
+        </div>
+      </header>
+
+      <main id="cp-main" class="cp-main" tabindex="-1">
+        <% if flash.any? %>
+          <div class="flash-region" aria-live="polite">
+            <% flash.each do |type, message| %>
+              <%= render "shared/flash", type: type, message: message %>
+            <% end %>
+          </div>
+        <% end %>
+
+        <%= yield %>
+      </main>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,21 @@
+<%# locals: (name:, email:, roles: [], **attrs) -%>
+<%# Identity summary: who the person is + the roles they hold (with scope). -%>
+<%# roles: array of { role_name:, scope_label:, system: } -%>
+<%= render layout: "shared/card", locals: { class: "identity-card" } do -%>
+  <div class="identity-card__head">
+    <%= ui_avatar name, size: :lg %>
+    <div>
+      <h3 class="identity-card__name"><%= name %></h3>
+      <p class="identity-card__email"><%= email %></p>
+    </div>
+  </div>
+  <% if roles.any? -%>
+    <div class="identity-card__roles">
+      <% roles.each do |r| -%>
+        <%= render "identity_access/role_badge", role_name: r[:role_name], scope_label: r[:scope_label], system: r[:system] %>
+      <% end -%>
+    </div>
+  <% else -%>
+    <%= render "shared/empty_state", title: "Sin roles asignados", icon: "users" %>
+  <% end -%>
+<% end -%>

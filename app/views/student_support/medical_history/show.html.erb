@@ -1,0 +1,26 @@
+<% content_for :title, "Historia médica · #{@record.student_name}" %>
+
+<%= render "shared/page_header",
+      title: @record.student_name,
+      subtitle: @tier == :full ? "Historia médica completa" : "Alergias y contraindicaciones" %>
+
+<% if @tier == :full -%>
+  <%= render "shared/detail_list", items: {
+        "Tipo de sangre" => @record.blood_type,
+        "Condiciones"    => @record.conditions.presence&.join(", "),
+        "Medicamentos"   => @record.medications.presence&.join(", ")
+      } %>
+<% else -%>
+  <%= render "shared/alert",
+        variant: :info,
+        message: "Estás viendo solo alergias y contraindicaciones. La historia médica completa es exclusiva del personal médico." %>
+<% end -%>
+
+<h3>Alergias y contraindicaciones</h3>
+<% if @record.allergies.any? -%>
+  <% @record.allergies.each do |allergy| -%>
+    <%= render "shared/allergen_flag", name: allergy.name, severity: allergy.severity, reaction: allergy.reaction %>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state", title: "Sin alergias registradas" %>
+<% end -%>

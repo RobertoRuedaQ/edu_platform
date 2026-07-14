@@ -1,0 +1,151 @@
+<% content_for :title, @institution.name %>
+<%#
+  Screen 2 (detail) — hub for one institution's contract + entitlements.
+  Real data as of S2a. institution_id here is a global FK, never RLS scope.
+-%>
+
+<%= render "shared/page_header",
+      title: @institution.name,
+      subtitle: "#{@institution.code} · #{@institution.kind.humanize}" %>
+
+<section class="cp-section" aria-labelledby="cp-sub-h">
+  <h2 id="cp-sub-h">Contrato / suscripción</h2>
+
+  <% if @active_subscription %>
+    <% sub = @active_subscription %>
+    <%= render "shared/detail_list", items: {
+          "Plan"              => render("control_plane/shared/plan_badge", name: sub.plan_key.humanize, plan_key: sub.plan_key),
+          "Estado"            => render("control_plane/shared/subscription_status_badge", status: sub.status),
+          "Tarifa base"       => "#{money(sub.base_price_per_student, currency: sub.currency)} por alumno",
+          "Tiers congelados"  => "#{sub.price_tiers_snapshot.size} tiers (snapshot al firmar, no cambia con el plan vivo)",
+          "Vigente desde"     => datetime(sub.starts_on.to_time, format: :date),
+          "Firmada"           => datetime(sub.signed_at, format: :date)
+        } %>
+    <%= button_to "Terminar suscripción",
+          terminate_control_plane_institution_subscription_path(@institution, sub), method: :patch,
+          class: "btn btn--secondary",
+          data: { turbo_confirm: "¿Terminar la suscripción vigente? Podrás firmar una nueva después." } %>
+  <% else %>
+    <%= render "shared/alert", variant: :info, message: "Esta institución no tiene una suscripción activa." %>
+    <%= ui_button "Firmar suscripción", href: new_control_plane_institution_subscription_path(@institution), variant: :primary %>
+  <% end %>
+
+  <% if @subscription_history.any? %>
+    <h3>Historial</h3>
+    <%= render layout: "shared/table",
+          locals: { headers: [ "Plan", "Desde", "Hasta", "Firmada" ] } do %>
+      <% @subscription_history.each do |sub| %>
+        <tr>
+          <td><%= link_to sub.plan_key.humanize, control_plane_institution_subscription_path(@institution, sub) %></td>
+          <td><%= datetime(sub.starts_on.to_time, format: :date) %></td>
+          <td><%= sub.ends_on ? datetime(sub.ends_on.to_time, format: :date) : "—" %></td>
+          <td><%= datetime(sub.signed_at, format: :date) %></td>
+        </tr>
+      <% end %>
+    <% end %>
+  <% end %>
+</section>
+
+<section class="cp-section" aria-labelledby="cp-ent-h">
+  <h2 id="cp-ent-h">Addons habilitados</h2>
+  <p>
+    <%= link_to "Abrir editor de entitlements", control_plane_entitlements_path(institution_id: @institution.id) %>
+  </p>
+
+  <% if @entitlements.any? %>
+    <div class="cp-stack">
+      <% @entitlements.each do |ent| %>
+        <%= render "control_plane/shared/entitlement_toggle_row",
+              addon_name: ent.addon.name, enabled: ent.active?,
+              valid_from: ent.valid_from, valid_until: ent.valid_until,
+              override_fee: ent.override_monthly_fee_cents && ent.override_monthly_fee_cents / 100.0,
+              override_quota: ent.override_included_quota,
+              currency: ent.override_currency || ent.addon.currency %>
+      <% end %>
+    </div>
+  <% else %>
+    <p>Sin addons habilitados todavía.</p>
+  <% end %>
+</section>
+
+<section class="cp-section" aria-labelledby="cp-headcount-h">
+  <h2 id="cp-headcount-h">Headcount</h2>
+  <%#
+    Read-only (S3a) — this number is PUSHED by the tenant
+    (Core::Headcount::SnapshotJob, running under its own GUC), never a live
+    cross-tenant read. No form here on purpose.
+  -%>
+  <% if @headcount_snapshots.any? %>
+    <%= render layout: "shared/table",
+          locals: { headers: [ "Fecha", "Alumnos", "Término", "Desglose" ] } do %>
+      <% @headcount_snapshots.each do |snap| %>
+        <tr>
+          <td><%= datetime(snap.as_of_date.to_time, format: :date) %></td>
+          <td><%= number_with_delimiter(snap.headcount, delimiter: ".") %></td>
+          <td><%= snap.academic_term_label || "—" %></td>
+          <td>
+            <% if snap.breakdown.any? %>
+              <%= snap.breakdown.map { |grade, count| "#{grade}: #{count}" }.join(", ") %>
+            <% else %>
+              —
+            <% end %>
+          </td>
+        </tr>
+      <% end %>
+    <% end %>
+  <% else %>
+    <p>Sin snapshots de headcount todavía.</p>
+  <% end %>
+</section>
+
+<section class="cp-section" aria-labelledby="cp-usage-h">
+  <h2 id="cp-usage-h">Uso (rollups diarios)</h2>
+  <%#
+    Read-only (S3a) — aggregated by ControlPlane::Usage::RollupJob from
+    usage_events. No domain emits real events yet (S3b); any rows here come
+    from synthetic/manual Ingest calls.
+  -%>
+  <% if @usage_rollups.any? %>
+    <%= render layout: "shared/table",
+          locals: { headers: [ "Addon", "Unidad", "Fecha", "Cantidad", "Eventos" ] } do %>
+      <% @usage_rollups.each do |rollup| %>
+        <tr>
+          <td><%= rollup.addon.name %></td>
+          <td><%= rollup.unit %></td>
+          <td><%= datetime(rollup.usage_date.to_time, format: :date) %></td>
+          <td><%= number_with_delimiter(rollup.total_quantity, delimiter: ".") %></td>
+          <td><%= number_with_delimiter(rollup.event_count, delimiter: ".") %></td>
+        </tr>
+      <% end %>
+    <% end %>
+  <% else %>
+    <p>Sin uso registrado todavía.</p>
+  <% end %>
+</section>
+
+<section class="cp-section" aria-labelledby="cp-invoices-h">
+  <h2 id="cp-invoices-h">Facturas</h2>
+  <%#
+    S4 — the one section here with real actions (generate/finalize/void/
+    re-cut all live on the invoice's own show page). A draft is regenerable;
+    finalized/void are not. Never auto-emitted — finalizing is a manual,
+    audited platform_admin action, and finalizing is NOT charging.
+  -%>
+  <p><%= ui_button "Generar borrador", href: new_control_plane_institution_invoice_path(@institution), variant: :primary %></p>
+
+  <% if @invoices.any? %>
+    <%= render layout: "shared/table",
+          locals: { headers: [ "Periodo", "Estado", "Subtotal", "" ] } do %>
+      <% @invoices.each do |invoice| %>
+        <tr>
+          <td><%= datetime(invoice.period_start.to_time, format: :date) %> – <%= datetime(invoice.period_end.to_time, format: :date) %></td>
+          <td><%= render "control_plane/shared/invoice_status_badge", status: invoice.status %></td>
+          <td><%= money(invoice.subtotal_cents / 100.0, currency: invoice.currency) %></td>
+          <td><%= link_to "Ver", control_plane_institution_invoice_path(@institution, invoice) %></td>
+        </tr>
+      <% end %>
+    <% end %>
+  <% else %>
+    <p>Sin facturas todavía.</p>
+  <% end %>
+</section>

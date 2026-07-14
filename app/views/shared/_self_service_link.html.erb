@@ -1,0 +1,7 @@
+<%#
+  Persistent "Mis datos" link — identity-gated (SS2), so it does NOT go
+  through Navigation::Registry (every entry there is filtered by
+  can?(item.permission); this page has no permission at all). Shown to
+  every authenticated staff member regardless of role/permissions.
+-%>
+<%= link_to "Mis datos", self_service_path, class: "self-service-link" %>

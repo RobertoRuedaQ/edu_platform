@@ -1,0 +1,20 @@
+<% content_for :title, "Módulo no habilitado" %>
+
+<%# Friendly "not entitled" page. Rendered by Entitlement::Controller#require_entitlement!
+    when the INSTITUTION hasn't contracted this module — distinct from the RBAC
+    403 (errors/forbidden): this is never about the user's permissions, and it
+    runs before authorize! ever gets a chance to say otherwise. No jargon, no
+    stack trace, no RBAC details. Severity is carried by text + icon, never
+    color alone. %>
+<section class="forbidden">
+  <%= render "shared/alert",
+        variant: :warning,
+        title: "Este módulo no está habilitado",
+        message: "Tu institución no tiene contratado este módulo. Si crees que " \
+                 "deberías tener acceso, contacta a un administrador de tu institución.",
+        role: "alert" %>
+
+  <p class="forbidden__actions">
+    <%= render "shared/button", label: "Volver al inicio", href: "/", variant: :primary %>
+  </p>
+</section>

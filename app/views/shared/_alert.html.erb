@@ -1,0 +1,20 @@
+<%# locals: (message:, variant: :info, title: nil, icon: nil, body: nil, role: nil, **attrs) -%>
+<%#
+  Inline callout — static and embeddable. NOT _flash (that is the dismissible
+  toast bound to Rails flash). Use for form notices, blocked states, warnings.
+  variant: :info | :success | :warning | :danger
+  role: pass "alert" when the callout appears dynamically and must be announced.
+  body: optional html_safe slot for extra content (e.g. allergen flags).
+  Accessible: icon is decorative (aria-hidden); the text carries the meaning.
+-%>
+<% glyph = icon || { info: "alert-circle", success: "check-circle",
+                     warning: "alert-triangle", danger: "alert-triangle" }.fetch(variant.to_sym, "alert-circle") -%>
+<% attrs[:class] = class_names("alert", "alert--#{variant}", attrs[:class]) -%>
+<%= tag.div(**attrs, role: role) do -%>
+  <span class="alert__icon" aria-hidden="true"><%= ui_icon glyph, size: 20 %></span>
+  <div class="alert__body">
+    <% if title.present? -%><p class="alert__title"><%= title %></p><% end -%>
+    <p class="alert__message"><%= message %></p>
+    <% if body.present? -%><div class="alert__extra"><%= body %></div><% end -%>
+  </div>
+<% end -%>

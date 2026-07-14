@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+# Migrations run as the schema-owning role — NEVER as the app runtime role.
+# Everything else (server, console, jobs) connects as edu_app_runtime.
+export EDU_DB_USER="${EDU_MIGRATOR_USER:-edu_migrator}"
+export EDU_DB_PASSWORD="${EDU_MIGRATOR_PASSWORD:?set EDU_MIGRATOR_PASSWORD before migrating}"
+exec bin/rails db:migrate "$@"

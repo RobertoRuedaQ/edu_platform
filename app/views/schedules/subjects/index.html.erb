@@ -1,0 +1,25 @@
+<% content_for :title, "Calificaciones" %>
+
+<%= render "shared/page_header",
+      title: "Calificaciones",
+      subtitle: "Cursos dentro de tu alcance." %>
+
+<%# A subject has no group/section link in the real schema (only
+    grade_level/program) — "Grado" replaces the stub's "Grupo" column. %>
+<% if @subjects.any? -%>
+  <%= render layout: "shared/table",
+        locals: { headers: ["Curso", "Grado", "Periodo"] } do -%>
+    <% @subjects.each do |subject| -%>
+      <tr>
+        <td><%= link_to subject.name, schedules_subject_path(subject.id) %></td>
+        <td><%= subject.grade_level&.name || subject.program&.name || "—" %></td>
+        <td><%= subject.term %></td>
+      </tr>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state",
+        icon: "alert-circle",
+        title: "No hay cursos en tu alcance",
+        description: "No ves cursos fuera de tu grupo o institución." %>
+<% end -%>

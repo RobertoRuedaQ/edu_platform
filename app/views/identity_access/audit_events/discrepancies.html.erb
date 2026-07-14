@@ -1,0 +1,10 @@
+<% content_for :title, "Discrepancias reportadas" %>
+
+<%= render "shared/page_header",
+      title: "Discrepancias reportadas",
+      subtitle: "Discrepancias que un invitado reportó sobre sus datos al completar el registro — solo lectura.",
+      actions: ui_button("Ver todo el registro", href: identity_access_audit_events_path, variant: :secondary) %>
+
+<%= render "events_table", page: @page,
+      empty_title: "No hay discrepancias reportadas",
+      empty_description: "Ningún invitado ha marcado un dato como incorrecto todavía." %>

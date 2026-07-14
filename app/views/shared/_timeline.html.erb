@@ -1,0 +1,24 @@
+<%# locals: (items: [], **attrs) -%>
+<%#
+  Chronological timeline as a semantic <ol> (order carries meaning). Reused by
+  counseling notes, disciplinary incidents, boarding events, etc.
+  items: array of Hashes, each:
+    { title:, meta: (date/time string), body:, icon: (name), badge: { label:, variant: } }
+  Only title is required per item; the rest are optional.
+-%>
+<% attrs[:class] = class_names("timeline", attrs[:class]) -%>
+<%= tag.ol(**attrs) do -%>
+  <% Array(items).each do |item| -%>
+    <li class="timeline__item">
+      <span class="timeline__marker" aria-hidden="true"><%= ui_icon(item[:icon] || "check-circle", size: 14) %></span>
+      <div class="timeline__content">
+        <div class="timeline__head">
+          <span class="timeline__title"><%= item[:title] %></span>
+          <% if item[:badge] -%><%= ui_badge item[:badge][:label], variant: (item[:badge][:variant] || :neutral) %><% end -%>
+        </div>
+        <% if item[:meta].present? -%><div class="timeline__meta"><%= item[:meta] %></div><% end -%>
+        <% if item[:body].present? -%><div class="timeline__body"><%= item[:body] %></div><% end -%>
+      </div>
+    </li>
+  <% end -%>
+<% end -%>

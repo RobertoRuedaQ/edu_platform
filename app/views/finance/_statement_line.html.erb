@@ -1,0 +1,11 @@
+<%# locals: (date:, concept:, amount:, kind: :charge, currency: "COP") -%>
+<%# One statement line. kind: :charge (debit, +) | :payment (credit, shown -). -%>
+<% credit = kind.to_sym == :payment -%>
+<tr class="statement-line statement-line--<%= credit ? "credit" : "debit" %>">
+  <td><%= date %></td>
+  <td><%= concept %></td>
+  <td class="finance-amount">
+    <%= credit ? "−" : "" %><%= money(amount, currency: currency) %>
+    <span class="visually-hidden"><%= credit ? "abono" : "cargo" %></span>
+  </td>
+</tr>

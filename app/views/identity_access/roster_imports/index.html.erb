@@ -1,0 +1,26 @@
+<% content_for :title, "Cargas de roster" %>
+
+<%= render "shared/page_header",
+      title: "Cargas de roster",
+      subtitle: "Altas batch de estudiantes por CSV.",
+      actions: ui_button("Nueva carga", href: new_identity_access_roster_import_path, variant: :primary) %>
+
+<% if @batches.empty? -%>
+  <%= render "shared/empty_state", title: "Todavía no hay cargas", icon: "upload",
+        description: "Sube un CSV de estudiantes para empezar.",
+        action: ui_button("Nueva carga", href: new_identity_access_roster_import_path, variant: :primary) %>
+<% else -%>
+  <%= render layout: "shared/table",
+        locals: { headers: ["Fecha", "Estado", "Filas", "Crear", "Actualizar", "Errores"] } do -%>
+    <% @batches.each do |batch| -%>
+      <tr>
+        <td><%= link_to batch.created_at.to_fs(:long), identity_access_roster_import_path(batch) %></td>
+        <td><%= roster_import_batch_status_badge(batch.status) %></td>
+        <td><%= batch.summary["total_rows"] || 0 %></td>
+        <td><%= batch.summary["create_count"] || 0 %></td>
+        <td><%= batch.summary["update_count"] || 0 %></td>
+        <td><%= (batch.summary["error_count"] || 0) + (batch.summary["collision_count"] || 0) %></td>
+      </tr>
+    <% end -%>
+  <% end -%>
+<% end -%>

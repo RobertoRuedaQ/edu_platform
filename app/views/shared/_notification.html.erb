@@ -1,0 +1,27 @@
+<%# locals: (title:, message: nil, timestamp: nil, icon: "check-circle", read: true, href: nil, **attrs) -%>
+<%#
+  Presentational in-app notification item. NO delivery/streaming/broadcast —
+  that comes later. Unread state is shown by a dot AND text (visually-hidden
+  "No leído") plus a bolder title, never by color alone.
+  timestamp: a preformatted string (use the datetime helper at the call site).
+-%>
+<% inner = capture do -%>
+  <span class="notification__icon" aria-hidden="true"><%= ui_icon icon, size: 18 %></span>
+  <div class="notification__body">
+    <div class="notification__head">
+      <span class="notification__title"><%= title %></span>
+      <% unless read -%>
+        <span class="notification__dot" aria-hidden="true"></span>
+        <span class="visually-hidden">No leído</span>
+      <% end -%>
+    </div>
+    <% if message.present? -%><p class="notification__message"><%= message %></p><% end -%>
+    <% if timestamp.present? -%><time class="notification__time"><%= timestamp %></time><% end -%>
+  </div>
+<% end -%>
+<% attrs[:class] = class_names("notification", ("is-unread" unless read), attrs[:class]) -%>
+<% if href -%>
+  <%= link_to inner, href, **attrs %>
+<% else -%>
+  <%= tag.div inner, **attrs %>
+<% end -%>

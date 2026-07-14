@@ -1,0 +1,5 @@
+<% content_for :title, "Nuevo plan" %>
+
+<%= render "shared/page_header", title: "Nuevo plan", subtitle: "Base por alumno + brackets de volumen" %>
+
+<%= render "form", plan: @plan, url: control_plane_plans_path %>

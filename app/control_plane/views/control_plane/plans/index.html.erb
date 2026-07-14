@@ -1,0 +1,39 @@
+<% content_for :title, "Planes y precios" %>
+<%#
+  Screen 5 — plans & pricing (real CRUD, S1). Base por alumno + brackets.
+  Addon fees/overage live in the addon catalog — F9, no FK between them.
+-%>
+
+<%= render "shared/page_header",
+      title: "Planes y precios",
+      subtitle: "Base por alumno en brackets de volumen",
+      actions: ui_button("Nuevo plan", href: new_control_plane_plan_path, variant: :primary) %>
+
+<% if @plans.none? -%>
+  <%= render "shared/empty_state", title: "Sin planes todavía",
+        description: "Crea el primero para empezar a modelar precios.",
+        action: ui_button("Nuevo plan", href: new_control_plane_plan_path, variant: :primary) %>
+<% else -%>
+  <section class="cp-section" aria-labelledby="cp-plans-h">
+    <h2 id="cp-plans-h">Base por alumno (brackets)</h2>
+    <% @plans.each do |plan| %>
+      <%= render layout: "shared/card",
+            locals: { title: link_to(plan.name, control_plane_plan_path(plan)),
+                      subtitle: plan.active? ? "Activo" : "Retirado" } do %>
+        <p><strong>Base:</strong> <%= money(plan.base_price_per_student, currency: plan.currency) %> /alumno</p>
+        <% if plan.price_tiers.any? -%>
+          <%= render layout: "shared/table",
+                locals: { headers: [ "Desde", "Hasta", "Por alumno" ] } do %>
+            <% plan.price_tiers.each do |tier| %>
+              <tr>
+                <td><%= number_with_delimiter(tier.min_students, delimiter: ".") %></td>
+                <td><%= tier.open_ended? ? "y más" : number_with_delimiter(tier.max_students, delimiter: ".") %></td>
+                <td><%= money(tier.price_per_student, currency: plan.currency) %></td>
+              </tr>
+            <% end %>
+          <% end %>
+        <% end -%>
+      <% end %>
+    <% end %>
+  </section>
+<% end -%>

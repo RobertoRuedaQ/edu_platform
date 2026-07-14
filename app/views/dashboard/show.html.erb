@@ -1,0 +1,20 @@
+<% content_for :title, "Inicio" %>
+
+<%= render "shared/page_header",
+      title: "Hola, #{current_actor.name}",
+      subtitle: "Estos son tus accesos." %>
+
+<% if @tiles.any? -%>
+  <div class="tile-grid">
+    <% @tiles.each do |tile| -%>
+      <%= render "shared/dashboard_tile",
+            label: tile[:label], path: tile[:path], stat: tile[:stat] %>
+    <% end -%>
+  </div>
+<% else -%>
+  <%# Never a blank screen: a role with no grants gets a clear next step. %>
+  <%= render "shared/empty_state",
+        icon: "alert-circle",
+        title: "Aún no tienes accesos asignados",
+        description: "Un administrador de tu institución debe asignarte un rol para empezar." %>
+<% end -%>

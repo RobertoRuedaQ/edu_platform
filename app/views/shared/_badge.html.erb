@@ -1,0 +1,4 @@
+<%# locals: (label:, variant: :neutral, **attrs) -%>
+<%# variant: :neutral | :primary | :success | :warning | :danger | :info -%>
+<% attrs[:class] = class_names("badge", "badge--#{variant}", attrs[:class]) -%>
+<%= tag.span label, **attrs %>

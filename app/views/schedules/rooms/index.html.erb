@@ -1,0 +1,21 @@
+<% content_for :title, "Salones" %>
+
+<%= render "shared/page_header", title: "Salones", subtitle: "Directorio de salones y su capacidad." %>
+
+<% if @rooms.any? -%>
+  <%= render layout: "shared/table",
+        locals: { headers: ["Salón", "Tipo", "Capacidad", "Bloque"] } do -%>
+    <% @rooms.each do |room| -%>
+      <tr>
+        <td><%= link_to room.name, schedules_room_path(room.id) %></td>
+        <td><%= room.kind.humanize %></td>
+        <td><%= room.capacity %></td>
+        <td><%= room.building %></td>
+      </tr>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state",
+        icon: "alert-circle",
+        title: "No hay salones en tu alcance" %>
+<% end -%>

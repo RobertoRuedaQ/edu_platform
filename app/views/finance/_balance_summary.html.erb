@@ -1,0 +1,10 @@
+<%# locals: (balance:, currency: "COP", label: "Saldo", overdue_total: nil, **attrs) -%>
+<%# Wallet/account balance as a _stat. Owes money (balance > 0) reads as a -%>
+<%# warning; settled/credit reads calm. Optional overdue hint. -%>
+<% owes = balance.to_f > 0 -%>
+<%= render "shared/stat",
+      value: money(balance, currency: currency),
+      label: label,
+      variant: (owes ? :warning : :success),
+      hint: (overdue_total && overdue_total.to_f > 0 ? "En mora: #{money(overdue_total, currency: currency)}" : nil),
+      **attrs %>

@@ -1,0 +1,31 @@
+<% content_for :title, "Instituciones" %>
+<%#
+  Screen 2 (list) — institutions as seen from the control plane. `id` is a
+  global FK here, never an RLS scope. Real data as of S2a: subscription is
+  looked up per institution (no MRR/students_count/next_invoice — those are
+  S3/S4 concerns, not stored anywhere yet).
+-%>
+
+<%= render "shared/page_header",
+      title: "Instituciones",
+      subtitle: "#{@institutions.size} instituciones" %>
+
+<%= render layout: "shared/table",
+      locals: { headers: [ "Institución", "Código", "Plan", "Suscripción", "" ] } do %>
+  <% @institutions.each do |inst| %>
+    <% sub = @active_subscriptions[inst.id] %>
+    <tr>
+      <th scope="row"><%= link_to inst.name, control_plane_institution_path(inst) %></th>
+      <td><%= inst.code %></td>
+      <td>
+        <% if sub %>
+          <%= render "control_plane/shared/plan_badge", name: sub.plan_key.humanize, plan_key: sub.plan_key %>
+        <% else %>
+          —
+        <% end %>
+      </td>
+      <td><%= render "control_plane/shared/subscription_status_badge", status: sub&.status %></td>
+      <td><%= link_to "Ver", control_plane_institution_path(inst) %></td>
+    </tr>
+  <% end %>
+<% end %>

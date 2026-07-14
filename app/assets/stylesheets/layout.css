@@ -1,0 +1,142 @@
+/* =============================================================================
+   layout.css — Page scaffolding: container, header/nav, main, footer, skip-link.
+   Visual identity (wordmark, nav polish) is refined in Part 5; this is the frame.
+   ============================================================================= */
+
+@layer layout {
+  .container {
+    width: 100%;
+    max-width: var(--container-max);
+    margin-inline: auto;
+    padding-inline: var(--space-4);
+  }
+
+  /* Sticky footer: header / main / footer stack fills the viewport. */
+  .app-shell {
+    display: flex;
+    flex-direction: column;
+    min-height: 100dvh;
+  }
+  .app-main { flex: 1 0 auto; padding-block: var(--space-6); }
+
+  /* --- Skip link: first focusable element, hidden until focused. --------- */
+  .skip-link {
+    position: absolute;
+    left: var(--space-3);
+    top: -3rem;
+    z-index: var(--z-toast);
+    padding: var(--space-2) var(--space-4);
+    background: var(--color-primary);
+    color: var(--color-primary-contrast);
+    border-radius: var(--radius-md);
+    text-decoration: none;
+    transition: top var(--transition-fast);
+  }
+  .skip-link:focus { top: var(--space-3); }
+
+  /* --- Header / nav ------------------------------------------------------ */
+  .app-header {
+    position: sticky;
+    top: 0;
+    z-index: var(--z-sticky);
+    background: var(--color-surface);
+    border-bottom: 1px solid var(--color-border);
+  }
+  .app-header__inner {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    min-height: 3.5rem;
+    flex-wrap: wrap; /* frame only; responsive polish lands in Part 5 */
+  }
+
+  /* Global search: takes the middle, pushing nav + switcher to the right. */
+  .app-search {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex: 1 1 12rem;
+    max-width: 24rem;
+  }
+  .app-search__icon { display: inline-flex; color: var(--color-text-muted); }
+  .app-search__input {
+    width: 100%;
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+    color: inherit;
+    font: inherit;
+  }
+
+  .app-nav { display: flex; align-items: center; }
+  .app-nav__list {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .app-nav__link {
+    color: var(--color-text-muted);
+    text-decoration: none;
+    padding-block: var(--space-2);
+    border-bottom: 2px solid transparent;
+  }
+  .app-nav__link:hover { color: var(--color-text); }
+  .app-nav__link[aria-current="page"] {
+    color: var(--color-text);
+    border-bottom-color: var(--color-primary);
+    font-weight: var(--weight-medium);
+  }
+
+  /* Institution switcher. */
+  .role-switcher { display: flex; align-items: center; }
+  .role-switcher__form { display: flex; align-items: center; gap: var(--space-2); }
+  .role-switcher__select {
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+    color: inherit;
+    font: inherit;
+  }
+  .role-switcher__current { color: var(--color-text-muted); font-size: var(--text-sm); }
+
+  /* Portal header identity (student/guardian portals — no nav/search/switcher). */
+  .portal-identity {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2);
+    margin-inline-start: auto;
+    font-size: var(--text-sm);
+  }
+  .portal-identity__kind { color: var(--color-text-muted); }
+  .portal-identity__person { font-weight: var(--weight-medium); }
+
+  /* --- Footer ------------------------------------------------------------ */
+  .app-footer {
+    flex-shrink: 0;
+    border-top: 1px solid var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-text-muted);
+    font-size: var(--text-sm);
+  }
+  .app-footer__inner {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3) var(--space-5);
+    align-items: center;
+    justify-content: space-between;
+    padding-block: var(--space-5);
+  }
+
+  /* --- Flash region ------------------------------------------------------ */
+  .flash-region {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding-block: var(--space-3);
+  }
+}

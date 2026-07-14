@@ -1,0 +1,9 @@
+<%# locals: (type:, message:) -%>
+<%# One flash message. Auto-dismisses + closes via the flash Stimulus controller. -%>
+<div class="flash <%= flash_class_for(type) %>" role="status"
+     data-controller="flash" data-flash-dismiss-after-value="6000">
+  <span class="flash__message"><%= message %></span>
+  <button type="button" class="flash__close" data-action="flash#dismiss" aria-label="Cerrar aviso">
+    <%= ui_icon "x", size: 16 %>
+  </button>
+</div>

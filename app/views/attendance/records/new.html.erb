@@ -1,0 +1,48 @@
+<% content_for :title, "Asistencia · #{@group.name}" %>
+
+<%= render "shared/page_header",
+      title: "Asistencia de #{@group.name}",
+      subtitle: @date.to_fs(:long) %>
+
+<% if @error -%>
+  <%= render "shared/alert", variant: :danger, message: @error %>
+<% end -%>
+
+<%# Switch date — a plain GET so re-submitting never mutates anything. -%>
+<%= form_with url: new_attendance_group_record_path(@group), method: :get, class: "audit-filters" do -%>
+  <%= render "shared/field", label: "Fecha", name: "date", type: "date", value: @date.iso8601 %>
+  <%= ui_button "Ver", type: "submit", variant: :secondary %>
+<% end -%>
+
+<% if @roster.any? -%>
+  <%= form_with url: attendance_group_records_path(@group), method: :post do -%>
+    <%= hidden_field_tag :date, @date.iso8601 %>
+
+    <%= render layout: "shared/table", locals: { headers: [ "Estudiante", "Estado", "Nota" ] } do -%>
+      <% @roster.each do |student| -%>
+        <% existing = @existing[student.id] -%>
+        <% student_name = "#{student.first_name} #{student.last_name}" -%>
+        <tr>
+          <td><%= student_name %></td>
+          <td>
+            <select class="field__input" name="statuses[<%= student.id %>]">
+              <% { "present" => "Presente", "absent" => "Ausente", "late" => "Tarde", "excused" => "Justificado" }.each do |value, label| -%>
+                <option value="<%= value %>" <%= "selected" if (existing&.status || "present") == value %>><%= label %></option>
+              <% end -%>
+            </select>
+          </td>
+          <td>
+            <input class="field__input" type="text" name="notes[<%= student.id %>]" value="<%= existing&.note %>" placeholder="Opcional">
+          </td>
+        </tr>
+      <% end -%>
+    <% end -%>
+
+    <%= ui_button "Guardar asistencia", type: "submit", variant: :primary %>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state",
+        icon: "users",
+        title: "Sin estudiantes matriculados en el término activo",
+        description: "Este grupo no tiene estudiantes matriculados en el término activo de la institución." %>
+<% end -%>

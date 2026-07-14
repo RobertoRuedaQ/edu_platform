@@ -1,0 +1,9 @@
+<%# locals: (invoice_number:, amount:, status:, currency: "COP", description: nil, due_on: nil) -%>
+<%# A charge as a table row, for shared/_table. -%>
+<tr>
+  <td><code><%= invoice_number %></code></td>
+  <td><%= description %></td>
+  <td><%= due_on %></td>
+  <td class="finance-amount"><%= money(amount, currency: currency) %></td>
+  <td><%= render "finance/payment_status_badge", status: status %></td>
+</tr>

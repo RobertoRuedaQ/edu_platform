@@ -1,0 +1,9 @@
+<% content_for :title, @user.name %>
+
+<%= render "identity_access/user_identity_card",
+      name: @user.name, email: @user.email,
+      roles: @user.roles.map { |r| { role_name: r.role_name, scope_label: r.scope_label, system: r.system } } %>
+
+<% if can?("roles.manage") -%>
+  <%= ui_button "Asignar rol", href: new_identity_access_assignment_path(user_id: @user.id), variant: :primary %>
+<% end -%>

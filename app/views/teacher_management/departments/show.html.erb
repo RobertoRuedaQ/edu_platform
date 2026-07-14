@@ -1,0 +1,29 @@
+<% content_for :title, @department.name %>
+
+<%= render "shared/page_header", title: @department.name, subtitle: @department.kind.humanize %>
+
+<%= render "shared/detail_list", items: {
+      "Nombre" => @department.name,
+      "Tipo"   => @department.kind.humanize
+    } %>
+
+<h3>Docentes del área</h3>
+<% if @teachers.any? -%>
+  <%= render layout: "shared/table", locals: { headers: ["Docente", "Materias", "Estado"] } do -%>
+    <% @teachers.each do |teacher| -%>
+      <% teacher_name = "#{teacher.first_name} #{teacher.last_name}" -%>
+      <tr>
+        <td>
+          <%= link_to teacher_management_teacher_path(teacher.id), class: "teacher-row__person" do %>
+            <%= ui_avatar teacher_name, size: :sm %>
+            <span><%= teacher_name %></span>
+          <% end %>
+        </td>
+        <td><%= teacher.subjects.join(", ") %></td>
+        <td><%= teacher_status_badge(teacher.status) %></td>
+      </tr>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state", title: "Sin docentes asignados", description: "Este departamento aún no tiene docentes vinculados." %>
+<% end -%>

@@ -1,0 +1,29 @@
+<% content_for :title, "Grupos" %>
+
+<%= render "shared/page_header",
+      title: "Grupos",
+      subtitle: "Grupos/secciones dentro de tu alcance." %>
+
+<%# No real teacher<->group link exists anywhere in the schema (sections has
+    no homeroom_teacher_id — same gap documented since v1.10.0 self-service),
+    and no real timetable table exists either (schedules' timetable half is
+    Class C) — neither "Director de grupo" nor "Horario" has real data to
+    show, so this table shows what IS real instead: grado, año, matrícula. -%>
+<% if @groups.any? -%>
+  <%= render layout: "shared/table",
+        locals: { headers: ["Grupo", "Grado", "Año", "Estudiantes"] } do -%>
+    <% @groups.each do |group| -%>
+      <tr>
+        <td><%= link_to group.name, group_management_group_path(group.id) %></td>
+        <td><%= group.grade_level&.name || "—" %></td>
+        <td><%= group.academic_year %></td>
+        <td><%= @student_counts.fetch(group.id.to_s, 0) %></td>
+      </tr>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state",
+        icon: "alert-circle",
+        title: "No hay grupos en tu alcance",
+        description: "No ves grupos fuera de tu institución." %>
+<% end -%>

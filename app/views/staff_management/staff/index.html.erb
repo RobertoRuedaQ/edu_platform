@@ -1,0 +1,19 @@
+<% content_for :title, "Personal" %>
+
+<%= render "shared/page_header", title: "Personal", subtitle: "Personal dentro de tu alcance." %>
+
+<% if @staff.any? -%>
+  <%= render layout: "shared/table",
+        locals: { headers: ["Persona", "N.º empleado", "Categoría", "Departamento", "Estado"] } do -%>
+    <% @staff.each do |member| -%>
+      <%= render "staff_management/staff_directory_row",
+            name: member.name, employee_number: member.employee_number, category: member.staff_category,
+            employment_type: member.employment_type, status: member.status, department: member.department&.name %>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state",
+        icon: "alert-circle",
+        title: "No hay personal en tu alcance",
+        description: "No ves personal fuera de tu departamento o institución." %>
+<% end -%>

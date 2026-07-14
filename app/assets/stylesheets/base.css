@@ -1,0 +1,84 @@
+/* =============================================================================
+   base.css — Modern reset + element defaults. Everything references tokens.
+   ============================================================================= */
+
+@layer base {
+  *, *::before, *::after { box-sizing: border-box; }
+
+  * { margin: 0; }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    min-height: 100dvh;
+    font-family: var(--font-sans);
+    font-size: var(--text-base);
+    line-height: var(--leading-normal);
+    color: var(--color-text);
+    background-color: var(--color-surface-sunken);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Media defaults — never overflow their container. */
+  img, picture, video, canvas, svg { display: block; max-width: 100%; }
+  svg { fill: currentColor; }
+
+  /* Forms inherit typography instead of the browser's ugly defaults. */
+  input, button, textarea, select { font: inherit; color: inherit; }
+
+  /* Headings — display face, tight leading, balanced wrapping. */
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+    line-height: var(--leading-tight);
+    font-weight: var(--weight-semibold);
+    text-wrap: balance;
+  }
+  h1 { font-size: var(--text-2xl); }
+  h2 { font-size: var(--text-xl); }
+  h3 { font-size: var(--text-lg); }
+
+  p { text-wrap: pretty; }
+
+  a {
+    color: var(--color-primary);
+    text-decoration-thickness: 1px;
+    text-underline-offset: 2px;
+    transition: color var(--transition-fast);
+  }
+  a:hover { color: var(--color-primary-hover); }
+
+  ul, ol { padding-inline-start: var(--space-5); }
+
+  code, pre, kbd, samp { font-family: var(--font-mono); font-size: 0.9em; }
+
+  hr {
+    border: 0;
+    border-top: 1px solid var(--color-border);
+  }
+
+  /* ------------------------------------------------------------------------
+     Accessibility: ONE visible focus ring, keyboard-only via :focus-visible.
+     Established from the start, not bolted on later.
+     ------------------------------------------------------------------------ */
+  :focus-visible {
+    outline: 2px solid transparent;   /* keep an outline for forced-colors */
+    box-shadow: var(--focus-ring);
+    border-radius: var(--radius-sm);
+  }
+  :focus:not(:focus-visible) { outline: none; }
+
+  /* Respect users who ask for less motion. */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}

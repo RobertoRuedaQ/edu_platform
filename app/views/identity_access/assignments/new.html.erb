@@ -1,0 +1,14 @@
+<% content_for :title, "Nueva asignación de rol" %>
+
+<%= render "shared/page_header",
+      title: "Nueva asignación de rol",
+      subtitle: (@user ? "Para #{@user.name}" : "Selecciona un rol y un alcance.") %>
+
+<%= render "shared/alert",
+      variant: :info,
+      message: "Cada rol solo admite ciertos alcances (ver el catálogo de roles). " \
+               "Si el alcance elegido no aplica para el rol, la asignación se rechaza." %>
+
+<%= render "identity_access/assignment_form",
+      url: identity_access_assignments_path,
+      roles: @roles.map { |role| [role.name, role.id] } %>

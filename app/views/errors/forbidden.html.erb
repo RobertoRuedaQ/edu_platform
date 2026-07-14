@@ -1,0 +1,19 @@
+<% content_for :title, "Acceso denegado" %>
+
+<%# Friendly 403. Rendered by Authorization::Controller#deny_access when a hard
+    gate (authorize!) refuses. No jargon, no stack trace — say what happened and
+    offer the way back. Severity is carried by text + icon, never color alone. %>
+<section class="forbidden">
+  <%= render "shared/alert",
+        variant: :warning,
+        title: "No tienes acceso a esta sección",
+        message: "Tu rol actual no incluye el permiso necesario para ver esta " \
+                 "página. Si crees que deberías tener acceso, contacta a un " \
+                 "administrador de tu institución.",
+        role: "alert" %>
+
+  <p class="forbidden__actions">
+    <%# root lands with the dashboard (Part 3); "/" is the intended home. %>
+    <%= render "shared/button", label: "Volver al inicio", href: "/", variant: :primary %>
+  </p>
+</section>

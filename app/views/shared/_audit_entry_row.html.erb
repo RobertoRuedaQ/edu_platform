@@ -1,0 +1,20 @@
+<%# locals: (actor:, action:, target:, occurred_at:, actor_role: nil, ip: nil, zone: "America/Bogota", **attrs) -%>
+<%#
+  One audit line: who / what / when. A flexible row (NOT a <tr>) so it works in
+  a compact list and in a full log alike. Text carries the meaning (no color-only
+  signalling). Reusable app-wide — promoted here from the control plane. Fed by
+  IdentityAccess::AuditEvent (identity_access/audit_events) since v1.11.0.
+-%>
+<% attrs[:class] = class_names("audit-entry", attrs[:class]) -%>
+<%= tag.div(**attrs) do -%>
+  <time class="audit-entry__when" datetime="<%= occurred_at.iso8601 %>">
+    <%= datetime(occurred_at, zone: zone, format: :long) %>
+  </time>
+  <div class="audit-entry__body">
+    <span class="audit-entry__actor"><%= actor %></span><%
+      %><% if actor_role -%> <span class="audit-entry__role"><%= actor_role %></span><% end -%>
+    <span class="audit-entry__action"><%= action %></span>
+    <span class="audit-entry__target"><%= target %></span>
+  </div>
+  <% if ip -%><span class="audit-entry__ip"><%= ip %></span><% end -%>
+<% end -%>

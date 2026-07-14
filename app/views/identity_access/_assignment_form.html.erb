@@ -1,0 +1,24 @@
+<%# locals: (roles: [], departments: [], grade_levels: [], groups: [], url: "#", **attrs) -%>
+<%#
+  roles: [label, id] pairs. url defaults to "#" (pure UI exercise, e.g. a
+  preview gallery); pass the real endpoint to actually submit.
+  # TODO: conectar scope_selector a datos reales (departments/grade_levels/groups).
+-%>
+<%= form_with url: url, method: :post, class: "assignment-form" do |f| -%>
+  <div class="field">
+    <label class="field__label" for="assignment-role">Rol</label>
+    <select class="field__input" id="assignment-role" name="assignment[role_id]">
+      <% Array(roles).each do |label, id| -%><option value="<%= id %>"><%= label %></option><% end -%>
+    </select>
+  </div>
+
+  <fieldset class="assignment-form__scope">
+    <legend class="field__label">Alcance</legend>
+    <%= render "identity_access/scope_selector",
+          departments: departments, grade_levels: grade_levels, groups: groups %>
+  </fieldset>
+
+  <div class="assignment-form__actions">
+    <%= ui_button "Asignar rol", type: "submit", variant: :primary %>
+  </div>
+<% end -%>

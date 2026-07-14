@@ -1,0 +1,15 @@
+<% content_for :title, "Analítica institucional" %>
+
+<%= render "shared/page_header", title: "Analítica institucional", subtitle: "KPIs de tu institución." %>
+
+<div class="tile-grid">
+  <%= render "shared/stat", value: @kpis[:total_students].to_s, label: "Estudiantes" %>
+  <%= render "shared/stat", value: @kpis[:avg_grade].to_s, label: "Nota promedio" %>
+  <%= render "shared/stat", value: "#{@kpis[:attendance_rate]}%", label: "Asistencia" %>
+</div>
+
+<%= render "shared/line_chart", title: "Matrícula (últimos 6 meses)", points: @kpis[:enrollment_trend] %>
+
+<%= render "shared/bar_chart", title: "Nota promedio por curso", series: @kpis[:grades_by_subject] %>
+
+<%= render "shared/donut_chart", title: "Estado de los estudiantes", segments: @kpis[:status_breakdown] %>

@@ -1,0 +1,22 @@
+<%# locals: (kind:, description:, quantity:, unit:, unit_price:, amount:, currency: "USD") -%>
+<%#
+  One typed invoice line as a table row (<tr>), for use inside shared/_table.
+  kind drives a distinct look per hybrid-billing piece:
+    base_seats    — per-student base
+    addon_fee     — flat monthly addon fee
+    usage_overage — events beyond quota (NEVER students)
+  A left accent + a text kind-tag make the three legibly different (not color
+  alone). # TODO: reemplazar por ControlPlane::InvoiceLine.
+-%>
+<% kind_label = { "base_seats" => "Base/alumno", "addon_fee" => "Fee addon", "usage_overage" => "Overage" }
+     .fetch(kind.to_s, kind.to_s.humanize) -%>
+<tr class="invoice-line invoice-line--<%= kind %>">
+  <td class="invoice-line__kind">
+    <span class="invoice-line__tag"><%= kind_label %></span>
+    <span class="visually-hidden"><%= kind_label %>:</span>
+    <%= description %>
+  </td>
+  <td class="invoice-line__qty"><%= number_with_delimiter(quantity, delimiter: ".") %> <%= unit %></td>
+  <td class="invoice-line__unit-price"><%= money(unit_price, currency: currency) %></td>
+  <td class="invoice-line__amount"><%= money(amount, currency: currency) %></td>
+</tr>

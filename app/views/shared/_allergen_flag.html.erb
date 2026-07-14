@@ -1,0 +1,28 @@
+<%# locals: (name:, severity: :moderate, reaction: nil, note: nil, **attrs) -%>
+<%#
+  Allergen / dietary contraindication flag. Severity is encoded THREE ways so
+  it never depends on color alone: shape (icon), a text label, and a token color.
+  severity: :mild | :moderate | :severe | :anaphylaxis
+  Shows only what it is given (locals); no access rules live here.
+  Cafeteria reuses this to signal a real-time purchase block.
+-%>
+<%
+  meta = {
+    mild:        { variant: :info,    icon: "alert-circle",   label: "Leve" },
+    moderate:    { variant: :warning, icon: "alert-circle",   label: "Moderada" },
+    severe:      { variant: :danger,  icon: "alert-triangle", label: "Severa" },
+    anaphylaxis: { variant: :danger,  icon: "alert-triangle", label: "Anafilaxia" }
+  }.fetch(severity.to_sym, { variant: :warning, icon: "alert-circle", label: severity.to_s.humanize })
+-%>
+<% attrs[:class] = class_names("allergen", "allergen--#{severity}", attrs[:class]) -%>
+<%= tag.div(**attrs, role: "group", "aria-label": "Alérgeno #{name}, severidad #{meta[:label]}") do -%>
+  <span class="allergen__icon" aria-hidden="true"><%= ui_icon(meta[:icon], size: 18) %></span>
+  <div class="allergen__body">
+    <div class="allergen__head">
+      <span class="allergen__name"><%= name %></span>
+      <%= ui_badge meta[:label], variant: meta[:variant] %>
+    </div>
+    <% if reaction.present? -%><p class="allergen__reaction"><%= reaction %></p><% end -%>
+    <% if note.present? -%><p class="allergen__note"><%= note %></p><% end -%>
+  </div>
+<% end -%>

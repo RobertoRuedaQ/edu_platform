@@ -1,0 +1,13 @@
+<%# locals: (confidential: true, **attrs) -%>
+<%# Confidentiality state as icon + text (never color alone). -%>
+<% if confidential -%>
+  <span class="confidentiality-badge confidentiality-badge--on">
+    <%= ui_icon "alert-circle", size: 14 %>
+    <span>Confidencial</span>
+  </span>
+<% else -%>
+  <span class="confidentiality-badge">
+    <%= ui_icon "users", size: 14 %>
+    <span>Compartible</span>
+  </span>
+<% end -%>

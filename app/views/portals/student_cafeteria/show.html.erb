@@ -1,0 +1,14 @@
+<% content_for :title, "Cafetería" %>
+
+<%= render "shared/stat", value: money(@account.balance, currency: @account.currency), label: "Saldo disponible" %>
+
+<h3>Movimientos recientes</h3>
+<%= render layout: "shared/table", locals: { headers: ["Fecha", "Descripción", "Monto"] } do -%>
+  <% @account.transactions.each do |transaction| -%>
+    <tr>
+      <td><%= datetime(transaction.occurred_at, format: :date) %></td>
+      <td><%= transaction.description %></td>
+      <td><%= money(transaction.amount, currency: @account.currency) %></td>
+    </tr>
+  <% end -%>
+<% end -%>

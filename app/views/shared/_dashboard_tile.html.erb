@@ -1,0 +1,19 @@
+<%# locals: (label:, path:, icon: nil, description: nil, stat: nil) -%>
+<%#
+  Dashboard shortcut tile: a whole-card link to a domain index (the "clic 1"
+  level). Fed from the same Navigation::Registry as the nav, so each role lands
+  seeing exactly its permitted shortcuts. stat: optional { value:, label: } to
+  embed a (stub) metric. icon stays nil for now — text-only, like the nav.
+-%>
+<%= link_to path, class: "tile" do %>
+  <span class="tile__head">
+    <% if icon.present? -%>
+      <span class="tile__icon" aria-hidden="true"><%= ui_icon icon, size: 22 %></span>
+    <% end -%>
+    <span class="tile__label"><%= label %></span>
+  </span>
+  <% if description.present? -%><span class="tile__desc"><%= description %></span><% end -%>
+  <% if stat.present? -%>
+    <div class="tile__stat"><%= render "shared/stat", value: stat[:value], label: stat[:label] %></div>
+  <% end -%>
+<% end %>

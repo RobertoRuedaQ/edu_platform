@@ -1,0 +1,7 @@
+<%# locals: (name:, plan_key: nil, **attrs) -%>
+<%# Plan tier badge. Thin wrapper over shared/_badge; text carries meaning. -%>
+<%# plan_key maps to a tier color; unknown keys fall back to neutral. -%>
+<%# TODO: reemplazar plan_key/name por ControlPlane::Plan. -%>
+<% variant = { "starter" => :neutral, "growth" => :primary, "enterprise" => :info }
+     .fetch(plan_key.to_s, :neutral) -%>
+<%= ui_badge name, variant: variant, **attrs %>

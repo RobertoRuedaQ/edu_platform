@@ -1,0 +1,23 @@
+<% content_for :title, "Mi horario" %>
+
+<%= render "shared/page_header", title: "Mi horario", subtitle: "Tus clases de la semana." %>
+
+<% if @events.any? -%>
+  <%= render layout: "shared/table",
+        locals: { headers: ["Día", "Hora", "Curso", "Grupo", "Salón"] } do -%>
+    <% @events.each do |event| -%>
+      <tr>
+        <td><%= event.day %></td>
+        <td><%= render "shared/time_range", starts: event.starts_at, ends: event.ends_at %></td>
+        <td><%= event.subject_name %></td>
+        <td><%= event.group_name %></td>
+        <td><%= schedule_event_badge(event) %></td>
+      </tr>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state",
+        icon: "alert-circle",
+        title: "Sin clases asignadas",
+        description: "No tienes eventos en tu horario todavía." %>
+<% end -%>

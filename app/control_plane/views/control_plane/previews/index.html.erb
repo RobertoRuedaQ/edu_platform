@@ -1,0 +1,124 @@
+<% content_for :title, "Preview de componentes" %>
+<%#
+  DEV-ONLY component gallery (buildless). NOT an app view. Renders every
+  control-plane component across representative states with stub locals, so it
+  doubles as living documentation of each component's API.
+-%>
+
+<div class="cp-preview-banner" role="note">
+  <strong>PREVIEW · solo desarrollo.</strong>
+  Esto NO es una vista de la aplicación: es una galería de componentes con datos stub.
+</div>
+
+<%= render "shared/page_header",
+      title: "Preview de componentes",
+      subtitle: "Estados representativos · datos stub" %>
+
+<nav class="cp-preview-toc" aria-label="Componentes">
+  <a href="#badges">Badges</a>
+  <a href="#addon-card">Addon card</a>
+  <a href="#usage-meter">Usage meter</a>
+  <a href="#entitlement-row">Entitlement row</a>
+  <a href="#summary-card">Institution summary</a>
+  <a href="#invoice-line">Invoice line</a>
+  <a href="#audit-row">Audit row</a>
+</nav>
+
+<%# ---------------------------------------------------------------- Badges -%>
+<section class="cp-section" id="badges">
+  <h2>_plan_badge · _subscription_status_badge</h2>
+  <div class="cp-specimen">
+    <% %w[starter growth enterprise].each do |k| %>
+      <%= render "control_plane/shared/plan_badge", name: k.humanize, plan_key: k %>
+    <% end %>
+  </div>
+  <div class="cp-specimen">
+    <% %w[active trialing past_due canceled].each do |s| %>
+      <%= render "control_plane/shared/subscription_status_badge", status: s %>
+    <% end %>
+  </div>
+</section>
+
+<%# ------------------------------------------------------------ Addon card -%>
+<section class="cp-section" id="addon-card">
+  <h2>_addon_card <span class="cp-specimen__note">available/beta/deprecated · medido y plano</span></h2>
+  <div class="cp-grid">
+    <% @addons.each do |addon| %>
+      <%= render "control_plane/shared/addon_card",
+            name: addon.name, status: addon.status, monthly_fee: addon.monthly_fee,
+            currency: addon.currency, metered: addon.metered?, unit: addon.unit,
+            quota: addon.quota, domain: addon.domain,
+            actions: ui_button("Editar", href: "#", variant: :ghost, size: :sm) %>
+    <% end %>
+  </div>
+</section>
+
+<%# ----------------------------------------------------------- Usage meter -%>
+<section class="cp-section" id="usage-meter">
+  <h2>_usage_meter <span class="cp-specimen__note">dentro / umbral / overage / sin cupo</span></h2>
+  <div class="cp-stack">
+    <%= render "control_plane/shared/usage_meter", label: "Dentro del cupo", addon_name: "Analítica y BI",
+          unit: "consultas", used: 18_000, quota: 50_000, threshold: 40_000, overage_unit_price: 0.002, currency: "USD" %>
+    <%= render "control_plane/shared/usage_meter", label: "Cerca del umbral", addon_name: "Analítica y BI",
+          unit: "consultas", used: 43_000, quota: 50_000, threshold: 40_000, overage_unit_price: 0.002, currency: "USD" %>
+    <%= render "control_plane/shared/usage_meter", label: "Overage (excedido)", addon_name: "Cafetería",
+          unit: "transacciones", used: 22_450, quota: 20_000, threshold: 16_000, overage_unit_price: 0.01, currency: "USD" %>
+    <%= render "control_plane/shared/usage_meter", label: "Sin cupo (ilimitado)", addon_name: "Consejería",
+          unit: "casos", used: 320, quota: nil, threshold: nil, overage_unit_price: nil, currency: "USD" %>
+  </div>
+</section>
+
+<%# ------------------------------------------------------- Entitlement row -%>
+<section class="cp-section" id="entitlement-row">
+  <h2>_entitlement_toggle_row <span class="cp-specimen__note">toggle visual, sin submit</span></h2>
+  <div class="cp-stack">
+    <%= render "control_plane/shared/entitlement_toggle_row", addon_name: "Analítica y BI",
+          enabled: true, valid_from: Date.new(2026, 1, 1), valid_until: nil,
+          override_fee: nil, override_quota: nil, currency: "USD" %>
+    <%= render "control_plane/shared/entitlement_toggle_row", addon_name: "Cafetería",
+          enabled: true, valid_from: Date.new(2026, 2, 1), valid_until: Date.new(2026, 12, 31),
+          override_fee: 65, override_quota: 30_000, currency: "USD" %>
+    <%= render "control_plane/shared/entitlement_toggle_row", addon_name: "Transporte",
+          enabled: false, valid_from: nil, valid_until: nil,
+          override_fee: nil, override_quota: nil, currency: "USD" %>
+  </div>
+</section>
+
+<%# --------------------------------------------------------- Summary card -%>
+<section class="cp-section" id="summary-card">
+  <h2>_institution_summary_card</h2>
+  <div class="cp-grid">
+    <%= render "control_plane/shared/institution_summary_card",
+          name: @institution.name, plan_name: @institution.plan_name,
+          plan_key: @institution.plan_key, subscription_status: @institution.subscription_status,
+          students_count: @institution.students_count,
+          enabled_addon_names: @institution.enabled_addon_names,
+          next_invoice_estimate: @institution.next_invoice_estimate,
+          currency: @institution.currency %>
+  </div>
+</section>
+
+<%# ---------------------------------------------------------- Invoice line -%>
+<section class="cp-section" id="invoice-line">
+  <h2>_invoice_line <span class="cp-specimen__note">las 3 variantes: base_seats / addon_fee / usage_overage</span></h2>
+  <%= render layout: "shared/table",
+        locals: { headers: [ "Concepto", "Cantidad", "Precio unit.", "Importe" ] } do %>
+    <% @invoice.lines.each do |line| %>
+      <%= render "control_plane/shared/invoice_line",
+            kind: line.kind, description: line.description, quantity: line.quantity,
+            unit: line.unit, unit_price: line.unit_price, amount: line.amount, currency: line.currency %>
+    <% end %>
+  <% end %>
+</section>
+
+<%# ------------------------------------------------------------- Audit row -%>
+<section class="cp-section" id="audit-row">
+  <h2>shared/_audit_entry_row <span class="cp-specimen__note">promovido a shared/ (global)</span></h2>
+  <div class="cp-stack">
+    <% @audit.each do |entry| %>
+      <%= render "shared/audit_entry_row",
+            actor: entry.actor, actor_role: entry.actor_role, action: entry.action,
+            target: entry.target, occurred_at: entry.occurred_at, ip: entry.ip %>
+    <% end %>
+  </div>
+</section>

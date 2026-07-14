@@ -1,0 +1,11 @@
+<%# locals: (name:, src: nil, size: :md) -%>
+<%# Circular avatar. Falls back to initials on a token-tinted ground (no image dep). -%>
+<%# size: :sm | :md | :lg -%>
+<% initials = name.to_s.split.first(2).map { |part| part[0] }.join.upcase.presence || "?" -%>
+<span class="avatar avatar--<%= size %>" role="img" aria-label="<%= name %>">
+  <% if src -%>
+    <%= image_tag src, alt: "", loading: "lazy", class: "avatar__img" %>
+  <% else -%>
+    <span class="avatar__initials" aria-hidden="true"><%= initials %></span>
+  <% end -%>
+</span>

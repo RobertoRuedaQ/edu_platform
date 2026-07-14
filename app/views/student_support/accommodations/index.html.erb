@@ -1,0 +1,22 @@
+<% content_for :title, "Acomodaciones · #{@student.name}" %>
+
+<%= render "shared/page_header", title: "Acomodaciones", subtitle: @student.name %>
+
+<% if @accommodations.any? -%>
+  <% @accommodations.each do |accommodation| -%>
+    <%= render layout: "shared/card" do %>
+      <div class="accommodation-item__head">
+        <span class="accommodation-item__kind"><%= accommodation.kind.humanize %></span>
+        <%= ui_badge(accommodation.status == "active" ? "Vigente" : "Vencida",
+              variant: accommodation.status == "active" ? :success : :neutral) %>
+      </div>
+      <p class="accommodation-item__desc"><%= accommodation.description %></p>
+      <% if can?("accommodations.manage", accommodation) -%>
+        <%= ui_button "Editar", href: edit_student_support_student_accommodation_path(@student.id, accommodation.id),
+              variant: :secondary, size: :sm %>
+      <% end -%>
+    <% end %>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state", title: "Sin acomodaciones registradas" %>
+<% end -%>

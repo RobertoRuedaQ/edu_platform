@@ -1,0 +1,38 @@
+<% content_for :title, "Completa tu cuenta" %>
+
+<section class="auth-card">
+  <h1>Completa tu cuenta</h1>
+  <p class="auth-card__hint"><%= Current.institution&.name %></p>
+
+  <%# Críticos en solo lectura: la institución garantiza la identidad, no el
+      invitado — nunca editable desde aquí, solo reportable (ver discrepancia). %>
+  <%= render "shared/detail_list", items: {
+        "Nombre" => @invitation.user.name,
+        "Correo" => @invitation.user.email
+      } %>
+
+  <%= form_with url: invitation_path(params[:token]), method: :patch, class: "auth-form" do |f| %>
+    <div class="field">
+      <%= f.label :password, "Nueva contraseña" %>
+      <%= f.password_field :password, autocomplete: "new-password", required: true, minlength: 12 %>
+    </div>
+
+    <div class="field">
+      <%= f.label :password_confirmation, "Confirma tu contraseña" %>
+      <%= f.password_field :password_confirmation, autocomplete: "new-password", required: true, minlength: 12 %>
+    </div>
+
+    <%= ui_button "Activar cuenta", type: "submit", variant: :primary %>
+  <% end %>
+
+  <details>
+    <summary>¿Tus datos no son correctos?</summary>
+    <%= form_with url: discrepancy_invitation_path(params[:token]), method: :post, class: "auth-form" do |f| %>
+      <div class="field">
+        <%= f.label :message, "Cuéntanos qué está mal" %>
+        <%= f.text_area :message, required: true %>
+      </div>
+      <%= ui_button "Reportar discrepancia", type: "submit", variant: :secondary, size: :sm %>
+    <% end %>
+  </details>
+</section>

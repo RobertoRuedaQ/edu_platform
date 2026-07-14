@@ -1,0 +1,5 @@
+<% content_for :title, "Editar addon" %>
+
+<%= render "shared/page_header", title: "Editar #{@addon.name}" %>
+
+<%= render "form", addon: @addon, url: control_plane_addon_path(@addon) %>

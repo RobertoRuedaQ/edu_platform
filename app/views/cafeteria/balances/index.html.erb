@@ -1,0 +1,13 @@
+<% content_for :title, "Saldos de cafetería" %>
+
+<%= render "shared/page_header", title: "Saldos de cafetería", subtitle: "Vista de tesorería (lectura)." %>
+
+<%= render layout: "shared/table", locals: { headers: ["Estudiante", "Grupo", "Saldo"] } do -%>
+  <% @accounts.each do |account| -%>
+    <tr>
+      <td><%= account.student_name %></td>
+      <td><%= account.group_name %></td>
+      <td><%= money(account.balance, currency: account.currency) %></td>
+    </tr>
+  <% end -%>
+<% end -%>

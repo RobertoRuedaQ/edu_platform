@@ -1,0 +1,20 @@
+<%# locals: (plan:, url:) -%>
+<%= form_with model: plan, url: url, scope: :plan do |f| %>
+  <% if plan.errors.any? -%>
+    <%= render "shared/alert", variant: :danger,
+          message: plan.errors.full_messages.to_sentence %>
+  <% end -%>
+
+  <%= render "shared/field", label: "Key", name: "plan[key]", value: plan.key, required: true,
+        hint: "Slug único, p. ej. k12_standard." %>
+  <%= render "shared/field", label: "Nombre", name: "plan[name]", value: plan.name, required: true %>
+  <%= render "shared/field", label: "Descripción", name: "plan[description]", value: plan.description %>
+  <%= render "shared/field", label: "Tarifa base por alumno (centavos)",
+        name: "plan[base_price_per_student_cents]", type: "number",
+        value: plan.base_price_per_student_cents, required: true,
+        hint: "Aplica cuando el headcount no cae en ningún tier de abajo." %>
+  <%= render "shared/field", label: "Moneda", name: "plan[currency]", value: plan.currency || "COP",
+        maxlength: 3, hint: "Código ISO de 3 letras." %>
+
+  <%= ui_button (plan.persisted? ? "Guardar" : "Crear plan"), type: "submit", variant: :primary %>
+<% end %>

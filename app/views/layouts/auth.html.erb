@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <title><%= page_title %></title>
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="application-name" content="EduPlatform">
+    <meta name="mobile-web-app-capable" content="yes">
+    <%= csrf_meta_tags %>
+    <%= csp_meta_tag %>
+
+    <%= yield :head %>
+
+    <link rel="icon" href="/icon.png" type="image/png">
+    <link rel="icon" href="/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/icon.png">
+
+    <%= stylesheet_link_tag "tokens", "base", "layout", "components", "utilities",
+                            "data-turbo-track": "reload" %>
+    <%= javascript_importmap_tags %>
+  </head>
+
+  <body>
+    <a class="skip-link" href="#main">Saltar al contenido</a>
+
+    <%# Minimal pre-login shell: wordmark only. NO domain nav, search, or
+        institution switcher — those depend on an authenticated Current.user. %>
+    <div class="app-shell">
+      <header class="app-header">
+        <div class="container app-header__inner">
+          <%= render "shared/wordmark" %>
+        </div>
+      </header>
+
+      <main id="main" class="app-main">
+        <div class="container">
+          <% if flash.any? %>
+            <div class="flash-region" aria-live="polite">
+              <% flash.each do |type, message| %>
+                <%= render "shared/flash", type: type, message: message %>
+              <% end %>
+            </div>
+          <% end %>
+
+          <%= yield %>
+        </div>
+      </main>
+
+      <footer class="app-footer">
+        <div class="container app-footer__inner">
+          <span>&copy; <%= Time.current.year %> EduPlatform</span>
+          <span>Hecho para instituciones educativas</span>
+        </div>
+      </footer>
+    </div>
+  </body>
+</html>

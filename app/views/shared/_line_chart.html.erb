@@ -1,0 +1,60 @@
+<%# locals: (points:, title: nil, sparkline: false, unit: nil, id: nil, series_index: 1, area: true, **attrs) -%>
+<%#
+  Hand-rolled SVG line/area chart (no charting library). Single series.
+  points: array of { label:, value: } or plain numbers — already aggregated.
+  sparkline: true -> compact, decorative (aria-hidden), no axes/labels; meant to
+  sit inside _stat next to a delta that carries the meaning in text.
+  Full mode is accessible: role="img" + aria-labelledby + data table.
+  # TODO: reemplazar por vista materializada / agregado real.
+-%>
+<% points = Array(points) -%>
+<% vals = points.map { |p| p.is_a?(Hash) ? p[:value].to_f : p.to_f } -%>
+<% labels = points.map { |p| p.is_a?(Hash) ? p[:label] : nil } -%>
+<% min = vals.min || 0; max = vals.max || 1; span = (max - min).zero? ? 1 : (max - min) -%>
+<% n = [vals.size, 1].max -%>
+<% num = ->(v) { f = v.to_f; (f % 1).zero? ? f.to_i : f } -%>
+<% fmt = ->(v) { "#{num.call(v)}#{unit}" } -%>
+
+<% if sparkline -%>
+  <% w = 120; h = 32; pad = 3; plot_w = w - pad * 2; plot_h = h - pad * 2 -%>
+  <% pts = vals.each_with_index.map { |v, i| x = (pad + (n == 1 ? plot_w / 2.0 : i * plot_w.to_f / (n - 1))).round(1); y = (pad + plot_h - (v - min) / span * plot_h).round(1); "#{x},#{y}" } -%>
+  <% attrs[:class] = class_names("chart-sparkline", attrs[:class]) -%>
+  <%= tag.svg(**attrs, viewBox: "0 0 #{w} #{h}", preserveAspectRatio: "none", "aria-hidden": "true", focusable: "false") do -%>
+    <% if area && pts.size > 1 -%>
+      <polygon class="chart__area" points="<%= "#{pad},#{h - pad} #{pts.join(' ')} #{w - pad},#{h - pad}" %>" fill="var(--chart-<%= series_index %>)"></polygon>
+    <% end -%>
+    <polyline class="chart__line" points="<%= pts.join(' ') %>" fill="none" stroke="var(--chart-<%= series_index %>)"></polyline>
+  <% end -%>
+
+<% else -%>
+  <% base = id.presence || "line-#{title.to_s.parameterize}" -%>
+  <% w = 360; h = 200; pad_l = 12; pad_r = 12; pad_t = 16; pad_b = 28 -%>
+  <% plot_w = w - pad_l - pad_r; plot_h = h - pad_t - pad_b; baseline = pad_t + plot_h -%>
+  <% xy = vals.each_with_index.map { |v, i| x = (pad_l + (n == 1 ? plot_w / 2.0 : i * plot_w.to_f / (n - 1))).round(1); y = (pad_t + plot_h - (v - min) / span * plot_h).round(1); [x, y] } -%>
+  <% pts = xy.map { |x, y| "#{x},#{y}" } -%>
+  <% attrs[:class] = class_names("chart", attrs[:class]) -%>
+  <%= tag.figure(**attrs, "aria-labelledby": "#{base}-title") do -%>
+    <% if title.present? -%><figcaption class="chart__title" id="<%= base %>-title"><%= title %></figcaption><% end -%>
+    <svg class="chart__svg" role="img" aria-labelledby="<%= base %>-title"
+         viewBox="0 0 <%= w %> <%= h %>" preserveAspectRatio="xMidYMid meet">
+      <line class="chart__axis" x1="<%= pad_l %>" y1="<%= baseline %>" x2="<%= w - pad_r %>" y2="<%= baseline %>"></line>
+      <% if area && pts.size > 1 -%>
+        <polygon class="chart__area" points="<%= "#{pad_l},#{baseline} #{pts.join(' ')} #{w - pad_r},#{baseline}" %>" fill="var(--chart-<%= series_index %>)"></polygon>
+      <% end -%>
+      <polyline class="chart__line" points="<%= pts.join(' ') %>" fill="none" stroke="var(--chart-<%= series_index %>)"></polyline>
+      <% last_x, last_y = xy.last -%>
+      <% if last_x -%><circle class="chart__point" cx="<%= last_x %>" cy="<%= last_y %>" r="3.5" fill="var(--chart-<%= series_index %>)"></circle><% end -%>
+      <% labels.each_with_index do |lbl, i| -%>
+        <% next if lbl.blank? || !(i.zero? || i == n - 1 || n <= 7) -%>
+        <text class="chart__cat-label" x="<%= xy[i][0] %>" y="<%= h - 8 %>" text-anchor="middle"><%= lbl %></text>
+      <% end -%>
+    </svg>
+    <table class="visually-hidden">
+      <caption><%= title %></caption>
+      <thead><tr><th scope="col">Punto</th><th scope="col">Valor</th></tr></thead>
+      <tbody>
+        <% vals.each_with_index do |v, i| -%><tr><td><%= labels[i] || (i + 1) %></td><td><%= fmt.call(v) %></td></tr><% end -%>
+      </tbody>
+    </table>
+  <% end -%>
+<% end -%>

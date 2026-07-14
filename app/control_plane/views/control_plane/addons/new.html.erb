@@ -1,0 +1,5 @@
+<% content_for :title, "Nuevo addon" %>
+
+<%= render "shared/page_header", title: "Nuevo addon", subtitle: "Addon = dominio 1:1" %>
+
+<%= render "form", addon: @addon, url: control_plane_addons_path %>

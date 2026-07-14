@@ -1,0 +1,33 @@
+<%# locals: (name:, price:, currency: "COP", category: nil, allergens: [], dietary_tags: [], available: true, **attrs) -%>
+<%#
+  Domain-local (cafeteria) menu item card. Composes shared/_card and reuses
+  money, _allergen_flag, _badge. Receives already-prepared data via locals.
+  allergens: array of { name:, severity:, reaction: } hashes (stub).
+  # TODO: reemplazar por modelo real (Cafeteria::MenuItem).
+-%>
+<%= render layout: "shared/card", locals: { class: class_names("menu-item", ("is-unavailable" unless available)) } do -%>
+  <div class="menu-item__head">
+    <div>
+      <h3 class="menu-item__name"><%= name %></h3>
+      <% if category.present? -%><p class="menu-item__category"><%= category %></p><% end -%>
+    </div>
+    <div class="menu-item__aside">
+      <span class="menu-item__price"><%= money(price, currency: currency) %></span>
+      <% unless available -%><%= ui_badge "No disponible", variant: :neutral %><% end -%>
+    </div>
+  </div>
+
+  <% if dietary_tags.any? -%>
+    <div class="menu-item__tags">
+      <% dietary_tags.each do |tag| -%><%= ui_badge tag, variant: :neutral %><% end -%>
+    </div>
+  <% end -%>
+
+  <% if allergens.any? -%>
+    <div class="menu-item__allergens">
+      <% allergens.each do |a| -%>
+        <%= render "shared/allergen_flag", name: a[:name], severity: (a[:severity] || :moderate), reaction: a[:reaction] %>
+      <% end -%>
+    </div>
+  <% end -%>
+<% end -%>

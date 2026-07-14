@@ -1,0 +1,21 @@
+<% content_for :title, "Convivencia · #{@student.name}" %>
+
+<%= render "shared/page_header", title: "Convivencia", subtitle: @student.name %>
+
+<% if @logs.any? -%>
+  <%= render "shared/timeline", items: @logs.map { |log|
+        { title: log.category.humanize, meta: "#{datetime(log.occurred_at, format: :date)} · #{log.reported_by}",
+          body: log.description }
+      } %>
+<% else -%>
+  <%= render "shared/empty_state", title: "Sin registros de convivencia" %>
+<% end -%>
+
+<h3>Nuevo registro</h3>
+<%= form_with url: student_support_student_disciplinary_logs_path(@student.id), method: :post do %>
+  <%= render "shared/field", label: "Categoría", name: "category",
+        placeholder: "Ej. ausentismo, convivencia", required: true %>
+  <%= render "shared/field", label: "Descripción", name: "description", required: true %>
+
+  <%= ui_button "Guardar registro", type: "submit", variant: :primary %>
+<% end %>

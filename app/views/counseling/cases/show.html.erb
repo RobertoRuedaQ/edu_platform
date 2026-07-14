@@ -1,0 +1,33 @@
+<% content_for :title, @case.student_name %>
+
+<%= render "shared/page_header",
+      title: @case.student_name,
+      subtitle: "Caso de orientación · #{@case.category.humanize}" %>
+
+<%= render "shared/detail_list", items: {
+      "Categoría" => @case.category.humanize,
+      "Estado"    => counseling_case_status_badge(@case.status),
+      "Abierto"   => datetime(@case.opened_at, format: :date)
+    } %>
+
+<h3>Notas de seguimiento</h3>
+<% if @session_notes.any? -%>
+  <% @session_notes.each do |note| -%>
+    <%= render "counseling/session_note", author: note.author.user.name, occurred_at: note.occurred_at,
+          body: note.body, confidential: note.confidential %>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state", title: "Sin notas de seguimiento" %>
+<% end -%>
+
+<h3>Remisiones</h3>
+<% if @referrals.any? -%>
+  <%= render layout: "shared/table", locals: { headers: [ "Remitido a", "Motivo", "Estado" ] } do -%>
+    <% @referrals.each do |referral| -%>
+      <%= render "counseling/referral_row", referred_to: referral.referred_to, reason: referral.reason,
+            status: referral.status %>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state", title: "Sin remisiones registradas" %>
+<% end -%>

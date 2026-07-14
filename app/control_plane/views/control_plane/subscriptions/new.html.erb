@@ -1,0 +1,35 @@
+<% content_for :title, "Firmar suscripción · #{@institution.name}" %>
+<%#
+  Signing snapshots the LIVE plan (scalars + price_tiers) at this moment
+  (F15). Once created, the subscription's terms never change — editing the
+  plan afterwards has no effect on it.
+-%>
+
+<%= render "shared/page_header", title: "Firmar suscripción", subtitle: @institution.name %>
+
+<% if @plans.empty? %>
+  <%= render "shared/alert", variant: :warning,
+        message: "No hay planes activos en el catálogo — crea uno primero en Planes y precios." %>
+<% else %>
+  <%= form_with model: @subscription, url: control_plane_institution_subscriptions_path(@institution),
+        scope: :subscription do %>
+    <% if @subscription.errors.any? %>
+      <%= render "shared/alert", variant: :danger, message: @subscription.errors.full_messages.to_sentence %>
+    <% end %>
+
+    <div class="field">
+      <label class="field__label" for="subscription_plan_id">Plan</label>
+      <%= select_tag "subscription[plan_id]",
+            options_from_collection_for_select(@plans, :id, :name),
+            id: "subscription_plan_id", class: "field__input", required: true,
+            include_blank: "Selecciona un plan" %>
+    </div>
+
+    <%= render "shared/field", label: "Vigente desde", name: "subscription[starts_on]",
+          type: "date", value: Date.current, required: true %>
+
+    <%= ui_button "Firmar suscripción", type: "submit", variant: :primary %>
+  <% end %>
+<% end %>
+
+<p><%= link_to "Volver a la institución", control_plane_institution_path(@institution) %></p>

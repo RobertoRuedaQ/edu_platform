@@ -1,0 +1,29 @@
+<%# locals: (current_page:, total_pages:, param: :page) -%>
+<%#
+  Presentational pager. Builds hrefs by merging `param` into the current query
+  string, so it works with any controller without a pagination gem.
+-%>
+<% if total_pages.to_i > 1 -%>
+  <% page_url = ->(n) { url_for(request.query_parameters.merge(param => n)) } -%>
+  <nav class="pagination" aria-label="Paginación">
+    <% if current_page > 1 -%>
+      <%= link_to "Anterior", page_url.call(current_page - 1), class: "pagination__link", rel: "prev" %>
+    <% else -%>
+      <span class="pagination__link pagination__link--disabled" aria-disabled="true">Anterior</span>
+    <% end -%>
+
+    <% (1..total_pages).each do |n| -%>
+      <% if n == current_page -%>
+        <span class="pagination__link pagination__link--current" aria-current="page"><%= n %></span>
+      <% else -%>
+        <%= link_to n, page_url.call(n), class: "pagination__link" %>
+      <% end -%>
+    <% end -%>
+
+    <% if current_page < total_pages -%>
+      <%= link_to "Siguiente", page_url.call(current_page + 1), class: "pagination__link", rel: "next" %>
+    <% else -%>
+      <span class="pagination__link pagination__link--disabled" aria-disabled="true">Siguiente</span>
+    <% end -%>
+  </nav>
+<% end -%>

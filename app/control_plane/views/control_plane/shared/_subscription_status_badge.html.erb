@@ -1,0 +1,15 @@
+<%# locals: (status: nil, **attrs) -%>
+<%# Platform subscription status -> badge. Text carries meaning (never color -%>
+<%# alone). Mirrors finance/_payment_status_badge, but for PLATFORM billing. -%>
+<%#
+  Real vocabulary (ControlPlane::Subscription#status, S2a): active/ended,
+  plus nil for "no subscription at all". trialing/past_due/canceled are the
+  PRE-S2a stub vocabulary, kept only so the dev-only previews gallery (which
+  still exercises those states) keeps rendering.
+-%>
+<% variant = { "active" => :success, "ended" => :neutral, "trialing" => :info,
+               "past_due" => :warning, "canceled" => :neutral }.fetch(status.to_s, :neutral) -%>
+<% label = { "active" => "Activa", "ended" => "Terminada", "trialing" => "En prueba",
+             "past_due" => "Vencida", "canceled" => "Cancelada" }
+             .fetch(status.to_s, status.present? ? status.to_s.humanize : "Sin suscripción") -%>
+<%= ui_badge label, variant: variant, **attrs %>

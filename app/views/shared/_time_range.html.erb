@@ -1,0 +1,19 @@
+<%# locals: (days: [], starts: nil, ends: nil, label: nil, **attrs) -%>
+<%# Compact, accessible time pattern: days + hour range ("Lun·Mié·Vie 9:00–10:00"). -%>
+<%# days:   array of short day labels, e.g. ["Lun", "Mié", "Vie"]. -%>
+<%# starts/ends: "HH:MM" strings. label: full override string (used verbatim). -%>
+<%# Visual is terse; the whole span carries an aria-label with the readable form. -%>
+<% days = Array(days) -%>
+<% has_hours = starts.present? && ends.present? -%>
+<% aria = label.presence || [days.join(", ").presence, ("de #{starts} a #{ends}" if has_hours)].compact.join(" · ") -%>
+<% attrs[:class] = class_names("time-range", attrs[:class]) -%>
+<%= tag.span(**attrs, "aria-label": aria.presence) do -%>
+  <% if label.present? -%>
+    <span aria-hidden="true"><%= label %></span>
+  <% else -%>
+    <% if days.any? -%><span class="time-range__days" aria-hidden="true"><%= days.join("·") %></span><% end -%>
+    <% if has_hours -%>
+      <span class="time-range__hours" aria-hidden="true"><time datetime="<%= starts %>"><%= starts %></time>&ndash;<time datetime="<%= ends %>"><%= ends %></time></span>
+    <% end -%>
+  <% end -%>
+<% end -%>

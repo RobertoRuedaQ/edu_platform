@@ -1,0 +1,20 @@
+<% content_for :title, "Iniciar sesión" %>
+
+<section class="auth-card">
+  <h1>Iniciar sesión</h1>
+  <p class="auth-card__hint"><%= Current.institution&.name %></p>
+
+  <%= form_with url: session_path, method: :post, class: "auth-form" do |f| %>
+    <div class="field">
+      <%= f.label :email, "Correo" %>
+      <%= f.email_field :email, autocomplete: "email", autofocus: true, required: true %>
+    </div>
+
+    <div class="field">
+      <%= f.label :password, "Contraseña" %>
+      <%= f.password_field :password, autocomplete: "current-password", required: true %>
+    </div>
+
+    <%= ui_button "Continuar", type: "submit", variant: :primary %>
+  <% end %>
+</section>

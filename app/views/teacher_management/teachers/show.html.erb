@@ -1,0 +1,33 @@
+<% teacher_name = "#{@teacher.first_name} #{@teacher.last_name}" -%>
+<% content_for :title, teacher_name %>
+
+<%= render "shared/page_header",
+      title: teacher_name,
+      subtitle: @teacher.department&.name %>
+
+<% panels = {} -%>
+
+<% panels["Perfil"] = capture do %>
+  <%= render "shared/detail_list", items: {
+        "Código"       => @teacher.teacher_code,
+        "Departamento" => (can?("departments.view") && @teacher.department) ? link_to(@teacher.department.name, teacher_management_department_path(@teacher.department_id)) : @teacher.department&.name,
+        "Estado"       => teacher_status_badge(@teacher.status)
+      } %>
+
+  <%# No real teacher<->group link exists anywhere in the schema (sections
+      has no homeroom_teacher_id — same gap documented since v1.10.0
+      self-service), so no "grupos asignados" stat is shown here; subjects
+      (via teaching_assignments) IS real. %>
+  <%= render "shared/stat", value: @teacher.subjects.size.to_s, label: "materias asignadas" %>
+<% end -%>
+
+<% panels["Evaluaciones"] = capture do %>
+  <%# can? is cosmetic only — authorize! in TeacherEvaluationsController#new is the real gate. %>
+  <%= render "shared/empty_state",
+        icon: "alert-circle",
+        title: "Sin evaluaciones registradas",
+        description: "Este docente aún no tiene evaluaciones (stub).",
+        action: (ui_button("Nueva evaluación", href: new_teacher_management_teacher_evaluation_path(@teacher)) if can?("teacher.evaluate", @teacher)) %>
+<% end -%>
+
+<%= render "shared/tabs", panels: panels, id: "teacher-#{@teacher.id}", label: "Detalle del docente" %>

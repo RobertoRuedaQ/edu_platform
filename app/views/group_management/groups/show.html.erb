@@ -1,0 +1,33 @@
+<% content_for :title, @group.name %>
+
+<%= render "shared/page_header",
+      title: @group.name,
+      subtitle: @group.grade_level&.name,
+      actions: (can?("groups.manage", @group) ? ui_button("Editar matrícula", href: edit_group_management_group_membership_path(@group), variant: :secondary) : nil) %>
+
+<%# No real homeroom-teacher link (sections has no homeroom_teacher_id) and
+    no real timetable table exist — same limitation as the index. %>
+<%= render "shared/detail_list", items: {
+      "Grado"          => @group.grade_level&.name,
+      "Año académico"  => @group.academic_year
+    } %>
+
+<h3>Estudiantes del grupo</h3>
+<% if @students.any? -%>
+  <%= render layout: "shared/table", locals: { headers: ["Estudiante", "Estado"] } do -%>
+    <% @students.each do |student| -%>
+      <% student_name = "#{student.first_name} #{student.last_name}" -%>
+      <tr>
+        <td>
+          <%= link_to group_management_student_path(student.id), class: "student-row__person" do %>
+            <%= ui_avatar student_name, size: :sm %>
+            <span><%= student_name %></span>
+          <% end %>
+        </td>
+        <td><%= student_status_badge(student.status) %></td>
+      </tr>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state", title: "Sin estudiantes matriculados" %>
+<% end -%>

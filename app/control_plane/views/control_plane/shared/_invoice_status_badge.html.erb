@@ -1,0 +1,7 @@
+<%# locals: (status:, **attrs) -%>
+<%# Invoice lifecycle status -> badge (H8: draft/finalized/void). Text -%>
+<%# carries meaning, never color alone. -%>
+<% variant = { "draft" => :neutral, "finalized" => :success, "void" => :warning }.fetch(status.to_s, :neutral) -%>
+<% label = { "draft" => "Borrador", "finalized" => "Finalizada", "void" => "Anulada" }
+     .fetch(status.to_s, status.to_s.humanize) -%>
+<%= ui_badge label, variant: variant, **attrs %>

@@ -1,0 +1,62 @@
+<%# locals: (label:, used:, unit:, quota: nil, threshold: nil, overage_unit_price: nil, currency: "USD", addon_name: nil, **attrs) -%>
+<%#
+  Consumption bar AGAINST QUOTA. Overage counts EVENTS, never students.
+  Accessible by design: role=progressbar with aria-valuetext, the state is
+  stated in TEXT, and overage is shown with a STRIPE PATTERN (not color alone).
+  quota nil => unlimited (no denominator): renders a plain count, no bar.
+  # TODO: alimentar desde medición real (agregado de eventos).
+-%>
+<% unlimited = quota.nil? -%>
+<% over = !unlimited && used > quota -%>
+<% overage = over ? used - quota : 0 -%>
+<% percent = unlimited ? nil : [ (used.to_f / quota * 100).round, 100 ].min -%>
+<% threshold_pct = (threshold && !unlimited && quota.positive?) ? [ (threshold.to_f / quota * 100).round, 100 ].min : nil -%>
+<% at_threshold = threshold.present? && used >= threshold -%>
+<% state = over ? "over" : (at_threshold ? "warn" : "ok") -%>
+<% overage_cost = (over && overage_unit_price) ? overage * overage_unit_price : nil -%>
+<% attrs[:class] = class_names("usage-meter", "usage-meter--#{state}", attrs[:class]) -%>
+
+<%= tag.div(**attrs) do -%>
+  <div class="usage-meter__header">
+    <span class="usage-meter__label">
+      <%= label %><% if addon_name -%> <span class="usage-meter__addon"><%= addon_name %></span><% end -%>
+    </span>
+    <span class="usage-meter__values">
+      <%= number_with_delimiter(used, delimiter: ".") %><%
+        %><% unless unlimited -%> / <%= number_with_delimiter(quota, delimiter: ".") %><% end -%>
+      <%= unit %><% unless unlimited -%> · <%= percent %>%<% end -%>
+    </span>
+  </div>
+
+  <% if unlimited -%>
+    <p class="usage-meter__unlimited">Sin cupo — uso ilimitado.</p>
+  <% else -%>
+    <% valuetext = "#{number_with_delimiter(used, delimiter: '.')} de #{number_with_delimiter(quota, delimiter: '.')} #{unit} (#{percent}%)#{over ? ", excedido en #{number_with_delimiter(overage, delimiter: '.')}" : ''}" -%>
+    <div class="usage-meter__track" role="progressbar"
+         aria-label="<%= label %>"
+         aria-valuemin="0" aria-valuemax="<%= quota %>" aria-valuenow="<%= used %>"
+         aria-valuetext="<%= valuetext %>">
+      <div class="usage-meter__fill" style="width: <%= percent %>%"></div>
+      <% if over -%>
+        <%# Striped segment = overage. Pattern (not just color) marks the breach. -%>
+        <div class="usage-meter__overage" aria-hidden="true"></div>
+      <% end -%>
+      <% if threshold_pct -%>
+        <span class="usage-meter__threshold" style="left: <%= threshold_pct %>%"
+              aria-hidden="true"
+              title="Umbral de alerta: <%= number_with_delimiter(threshold, delimiter: '.') %> <%= unit %>"></span>
+      <% end -%>
+    </div>
+
+    <p class="usage-meter__note">
+      <% if over -%>
+        <strong>Overage:</strong> <%= number_with_delimiter(overage, delimiter: ".") %> <%= unit %> sobre el cupo<%
+          %><% if overage_cost -%> · <%= money(overage_cost, currency: currency) %><% end -%>.
+      <% elsif at_threshold -%>
+        Cerca del cupo (umbral <%= number_with_delimiter(threshold, delimiter: ".") %> <%= unit %>).
+      <% else -%>
+        Dentro del cupo<% if threshold -%> · umbral <%= number_with_delimiter(threshold, delimiter: ".") %> <%= unit %><% end -%>.
+      <% end -%>
+    </p>
+  <% end -%>
+<% end -%>

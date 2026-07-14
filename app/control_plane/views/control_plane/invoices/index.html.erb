@@ -1,0 +1,28 @@
+<% content_for :title, "Facturación" %>
+<%#
+  Screen 7 — platform billing (the PLATFORM charging the SCHOOL; NOT the
+  finance domain). Real data as of S4: a flat, cross-institution overview.
+  The per-institution workflow (generate/finalize/void/re-cut) lives on each
+  institution's own hub — see control_plane/institutions/show.
+-%>
+
+<%= render "shared/page_header",
+      title: "Facturación de plataforma",
+      subtitle: "Plataforma → colegio (no es el dominio finance) · #{@invoices.size} facturas" %>
+
+<% if @invoices.empty? %>
+  <p>Sin facturas todavía. Genera un borrador desde el hub de cada institución.</p>
+<% else %>
+  <%= render layout: "shared/table",
+        locals: { headers: [ "Institución", "Periodo", "Estado", "Subtotal", "" ] } do %>
+    <% @invoices.each do |invoice| %>
+      <tr>
+        <td><%= link_to invoice.institution.name, control_plane_institution_path(invoice.institution) %></td>
+        <td><%= datetime(invoice.period_start.to_time, format: :date) %> – <%= datetime(invoice.period_end.to_time, format: :date) %></td>
+        <td><%= render "control_plane/shared/invoice_status_badge", status: invoice.status %></td>
+        <td><%= money(invoice.subtotal_cents / 100.0, currency: invoice.currency) %></td>
+        <td><%= link_to "Ver", control_plane_institution_invoice_path(invoice.institution, invoice) %></td>
+      </tr>
+    <% end %>
+  <% end %>
+<% end %>

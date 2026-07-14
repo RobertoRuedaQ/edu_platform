@@ -1,0 +1,39 @@
+<%# locals: (roles:, permissions:, **attrs) -%>
+<%#
+  Roles × permissions cross-tab — the catalog-wide view, unlike
+  identity_access/_permission_list (one role's permissions, flat).
+  roles: array of { name:, permission_keys: [...] }.
+  permissions: array of { key:, description: }.
+  Never color-only: state is icon + visually-hidden text, same convention as
+  _permission_list's show_state. Wrapped for horizontal scroll — a full
+  catalog × role grid is wide by nature, the page never scrolls, this does.
+-%>
+<% attrs[:class] = class_names("table-wrap", attrs[:class]) -%>
+<%= tag.div(**attrs) do -%>
+  <table class="permission-matrix">
+    <thead>
+      <tr>
+        <th scope="col">Rol</th>
+        <% permissions.each do |permission| -%>
+          <th scope="col" title="<%= permission[:description] %>"><code><%= permission[:key] %></code></th>
+        <% end -%>
+      </tr>
+    </thead>
+    <tbody>
+      <% roles.each do |role| -%>
+        <tr>
+          <th scope="row"><%= role[:name] %></th>
+          <% permissions.each do |permission| -%>
+            <% granted = role[:permission_keys].include?(permission[:key]) -%>
+            <td>
+              <span class="permission-matrix__state <%= granted ? "is-granted" : "is-denied" %>">
+                <%= ui_icon(granted ? "check-circle" : "x", size: 14) %>
+                <span class="visually-hidden"><%= granted ? "Concedido" : "No concedido" %></span>
+              </span>
+            </td>
+          <% end -%>
+        </tr>
+      <% end -%>
+    </tbody>
+  </table>
+<% end -%>

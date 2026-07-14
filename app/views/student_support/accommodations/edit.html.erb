@@ -1,0 +1,8 @@
+<% content_for :title, "Editar acomodación" %>
+
+<%= render "shared/page_header", title: "Editar acomodación", subtitle: @accommodation.kind.humanize %>
+
+<%= form_with url: student_support_student_accommodation_path(@accommodation.student_id, @accommodation.id), method: :patch do %>
+  <%= render "shared/field", label: "Descripción", name: "description", value: @accommodation.description %>
+  <%= ui_button "Guardar cambios", type: "submit", variant: :primary %>
+<% end %>

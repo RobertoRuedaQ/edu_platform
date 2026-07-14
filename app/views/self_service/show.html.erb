@@ -1,0 +1,101 @@
+<% content_for :title, "Mis datos" %>
+
+<%= render "shared/page_header", title: "Mis datos",
+      subtitle: "Tu perfil, tus roles vigentes y tu propio alcance — nunca el de otra persona." %>
+
+<% panels = {} %>
+
+<% panels["Perfil"] = capture do %>
+  <% if @profile -%>
+    <%= render "shared/detail_list", items: {
+          "Número de empleado" => @profile.employee_number,
+          "Categoría" => @profile.staff_category.humanize,
+          "Tipo de vinculación" => @profile.employment_type.humanize,
+          "Estado" => @profile.status.humanize,
+          "Departamento" => @profile.department&.name
+        } %>
+  <% else -%>
+    <%= render "shared/empty_state", icon: "user",
+          title: "Aún no tienes un perfil de personal vinculado",
+          description: "Si esto no es lo esperado, contacta a tu institución." %>
+  <% end -%>
+<% end %>
+
+<% panels["Mis roles"] = capture do %>
+  <% if @role_assignments.any? -%>
+    <%= render layout: "shared/table", locals: { headers: ["Rol", "Alcance", "Vigente desde", "Vigente hasta"] } do -%>
+      <% @role_assignments.each do |assignment| -%>
+        <tr>
+          <td><%= assignment.role.name %></td>
+          <td><%= assignment.scope_label %></td>
+          <td><%= assignment.valid_from&.to_fs(:long) %></td>
+          <td><%= assignment.valid_until&.to_fs(:long) || "Indefinido" %></td>
+        </tr>
+      <% end -%>
+    <% end -%>
+  <% else -%>
+    <%= render "shared/empty_state", icon: "shield",
+          title: "No tienes roles vigentes",
+          description: "Un rol expirado no cuenta — solo se muestran los que aplican hoy." %>
+  <% end -%>
+<% end %>
+
+<% panels["Mis grupos"] = capture do %>
+  <% if @groups.any? -%>
+    <%= render layout: "shared/table", locals: { headers: ["Grupo", "Grado", "Año"] } do -%>
+      <% @groups.each do |section| -%>
+        <tr>
+          <td><%= section.name %></td>
+          <td><%= section.grade_level&.name || "—" %></td>
+          <td><%= section.academic_year %></td>
+        </tr>
+      <% end -%>
+    <% end -%>
+  <% else -%>
+    <%= render "shared/empty_state", icon: "users",
+          title: "No tienes grupos asignados",
+          description: "Aparecerán aquí cuando un rol tuyo esté vinculado a un grupo." %>
+  <% end -%>
+<% end %>
+
+<% panels["Mi departamento"] = capture do %>
+  <% if @departments.any? -%>
+    <%= render "shared/detail_list",
+          items: @departments.to_h { |d| [ d.name, d.kind.humanize ] } %>
+  <% else -%>
+    <%= render "shared/empty_state", icon: "briefcase",
+          title: "No tienes un departamento asignado",
+          description: "Aparecerá aquí cuando un rol tuyo esté vinculado a un departamento." %>
+  <% end -%>
+<% end %>
+
+<% if Current.entitled_addon_keys.include?("schedules") -%>
+  <% panels["Mi horario"] = capture do %>
+    <%# schedules has no real table yet (not even partially, unlike
+        teachers/students) — this reuses the existing stub roster, filtered
+        by identity (this actor's own groups above), never by can?/RBAC.
+        Marked explicitly as preview data, not to be confused with the real
+        sections above. %>
+    <%= render "shared/alert", variant: :info,
+          message: "Vista previa — el horario todavía corre sobre datos de ejemplo (schedules no tiene tablas reales aún)." %>
+    <% if @schedule_events.any? -%>
+      <%= render layout: "shared/table", locals: { headers: ["Día", "Hora", "Materia", "Grupo", "Salón"] } do -%>
+        <% @schedule_events.each do |event| -%>
+          <tr>
+            <td><%= event.day %></td>
+            <td><%= "#{event.starts_at}–#{event.ends_at}" %></td>
+            <td><%= event.subject_name %></td>
+            <td><%= event.group_name %></td>
+            <td><%= event.room_name %></td>
+          </tr>
+        <% end -%>
+      <% end -%>
+    <% else -%>
+      <%= render "shared/empty_state", icon: "calendar",
+            title: "No tienes clases en tus grupos (vista previa)",
+            description: "Este dominio todavía no tiene datos reales." %>
+    <% end -%>
+  <% end %>
+<% end -%>
+
+<%= render "shared/tabs", panels: panels, id: "self-service", label: "Mis datos" %>

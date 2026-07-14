@@ -1,0 +1,26 @@
+<% content_for :title, "Mi portal" %>
+
+<%= render "shared/page_header",
+      title: "Hola, #{@portal_person_name}",
+      subtitle: "Tus acudidos en esta institución." %>
+
+<% if @children.any? -%>
+  <%= render layout: "shared/table",
+        locals: { headers: ["Nombre", "Código", "Grado", "Grupo", ""] } do -%>
+    <% @children.each do |student| -%>
+      <tr>
+        <td><%= "#{student.first_name} #{student.last_name}" %></td>
+        <td><%= student.student_code %></td>
+        <td><%= student.grade_level&.name || "—" %></td>
+        <td><%= student.section&.name || "—" %></td>
+        <td><%= link_to "Ver", portal_guardian_student_path(student) %></td>
+      </tr>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <%# GS9: an empty scope is a normal, friendly state — never an error. %>
+  <%= render "shared/empty_state",
+        icon: "users",
+        title: "Aún no tienes acudidos registrados",
+        description: "Cuando la institución te vincule a un estudiante, aparecerá aquí." %>
+<% end -%>

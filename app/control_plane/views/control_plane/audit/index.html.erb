@@ -1,0 +1,20 @@
+<% content_for :title, "Auditoría" %>
+<%#
+  Screen 8 — control-plane audit log: who / what / when. Data stub via
+  @audit_entries. Rows via the promoted shared/_audit_entry_row (app-wide).
+  In production these are written by the audited BYPASSRLS role.
+-%>
+
+<%= render "shared/page_header",
+      title: "Auditoría del plano de control",
+      subtitle: "Quién · qué · cuándo · datos stub" %>
+
+<section class="cp-section" aria-label="Registro de auditoría">
+  <div class="cp-stack">
+    <% @audit_entries.each do |entry| %>
+      <%= render "shared/audit_entry_row",
+            actor: entry.actor, actor_role: entry.actor_role, action: entry.action,
+            target: entry.target, occurred_at: entry.occurred_at, ip: entry.ip %>
+    <% end %>
+  </div>
+</section>

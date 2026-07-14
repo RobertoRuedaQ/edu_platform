@@ -1,0 +1,45 @@
+<%# locals: (name:, status:, monthly_fee:, currency: "USD", metered: false, unit: nil, quota: nil, domain: nil, actions: nil, **attrs) -%>
+<%#
+  Catalog addon card. Addon = domain 1:1. Composes shared/_card + _badge.
+  metered addons bill overage by EVENTS: `unit` labels the event, `quota` is
+  the included allowance. Text (not color) carries the status meaning.
+  actions: optional html_safe slot (e.g. ui_button for edit/deprecate).
+  # TODO: alimentar desde ControlPlane::Addon vía locals.
+-%>
+<% status_variant = { "available" => :success, "beta" => :info, "deprecated" => :neutral,
+                      "active" => :success, "retired" => :neutral }
+     .fetch(status.to_s, :neutral) -%>
+<% status_label = { "available" => "Disponible", "beta" => "Beta", "deprecated" => "Deprecado",
+                    "active" => "Activo", "retired" => "Retirado" }
+     .fetch(status.to_s, status.to_s.humanize) -%>
+<% attrs[:class] = class_names("addon-card", attrs[:class]) -%>
+<%= render layout: "shared/card", locals: attrs do -%>
+  <div class="addon-card__head">
+    <div class="addon-card__title">
+      <h3 class="addon-card__name"><%= name %></h3>
+      <% if domain -%><p class="addon-card__domain">dominio: <%= domain %></p><% end -%>
+    </div>
+    <%= ui_badge status_label, variant: status_variant %>
+  </div>
+
+  <p class="addon-card__fee">
+    <span class="addon-card__fee-amount"><%= money(monthly_fee, currency: currency) %></span>
+    <span class="addon-card__fee-period">/mes</span>
+  </p>
+
+  <% if metered -%>
+    <p class="addon-card__metered">
+      <span class="addon-card__metered-tag">Medido</span>
+      <%= unit %>
+      <% if quota -%>
+        · cupo <%= number_with_delimiter(quota, delimiter: ".") %>
+      <% else -%>
+        · sin cupo
+      <% end -%>
+    </p>
+  <% else -%>
+    <p class="addon-card__metered addon-card__metered--off">Tarifa plana (no medido)</p>
+  <% end -%>
+
+  <% if actions -%><div class="addon-card__actions"><%= actions %></div><% end -%>
+<% end -%>

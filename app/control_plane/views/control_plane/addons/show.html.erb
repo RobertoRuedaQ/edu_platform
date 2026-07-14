@@ -1,0 +1,22 @@
+<% content_for :title, @addon.name %>
+
+<%= render "shared/page_header", title: @addon.name,
+      subtitle: "dominio: #{@addon.key}",
+      actions: ui_button("Editar", href: edit_control_plane_addon_path(@addon), variant: :ghost) %>
+
+<%= render "control_plane/shared/addon_card",
+      name: @addon.name, status: @addon.status, monthly_fee: @addon.monthly_fee,
+      currency: @addon.currency, metered: @addon.metered?, unit: @addon.unit,
+      quota: @addon.included_quota, domain: @addon.key %>
+
+<section class="cp-section">
+  <% if @addon.active? -%>
+    <%= button_to "Retirar", retire_control_plane_addon_path(@addon), method: :patch,
+          class: "btn btn--secondary" %>
+  <% else -%>
+    <%= button_to "Reactivar", reactivate_control_plane_addon_path(@addon), method: :patch,
+          class: "btn btn--secondary" %>
+  <% end -%>
+</section>
+
+<p><%= link_to "Volver al catálogo", control_plane_addons_path %></p>

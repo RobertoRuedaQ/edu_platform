@@ -1,0 +1,61 @@
+<%# locals: (segments:, title:, size: 168, center_value: nil, center_label: nil, id: nil, **attrs) -%>
+<%#
+  Hand-rolled SVG donut (no charting library). Proportion of a whole.
+  segments: array of { label:, value: } — already aggregated. Pass at most 6;
+  fold the rest into an "Otros" segment before calling (never cycle colors).
+  Accessible: role="img" + aria-labelledby, a text legend with labels+values
+  (identity never color-alone), and a visually-hidden data table.
+  # TODO: reemplazar por vista materializada / agregado real.
+-%>
+<% segments = Array(segments) -%>
+<% base = id.presence || "donut-#{title.to_s.parameterize}" -%>
+<% total = [segments.sum { |s| s[:value].to_f }, 1].max -%>
+<% r = 60.0; cx = cy = 84.0; sw = 26.0; circ = 2 * Math::PI * r; gap = 2.0 -%>
+<% attrs[:class] = class_names("chart chart--donut", attrs[:class]) -%>
+<%= tag.figure(**attrs, "aria-labelledby": "#{base}-title") do -%>
+  <figcaption class="chart__title" id="<%= base %>-title"><%= title %></figcaption>
+
+  <div class="chart__donut-wrap">
+    <svg class="chart__svg chart__svg--donut" role="img" aria-labelledby="<%= base %>-title"
+         viewBox="0 0 168 168" width="<%= size %>" height="<%= size %>">
+      <circle cx="<%= cx %>" cy="<%= cy %>" r="<%= r %>" fill="none" stroke="var(--color-border)" stroke-width="<%= sw %>"></circle>
+      <g transform="rotate(-90 <%= cx %> <%= cy %>)">
+        <% acc = 0.0 -%>
+        <% segments.each_with_index do |seg, i| -%>
+          <% len = seg[:value].to_f / total * circ -%>
+          <% dash = [len - gap, 0.1].max.round(2) -%>
+          <% color = i < 6 ? "var(--chart-#{i + 1})" : "var(--color-gray-400)" -%>
+          <circle cx="<%= cx %>" cy="<%= cy %>" r="<%= r %>" fill="none"
+                  stroke="<%= color %>" stroke-width="<%= sw %>"
+                  stroke-dasharray="<%= dash %> <%= (circ - dash).round(2) %>"
+                  stroke-dashoffset="<%= (-acc).round(2) %>"></circle>
+          <% acc += len -%>
+        <% end -%>
+      </g>
+      <% if center_value.present? -%>
+        <text class="chart__donut-value" x="84" y="80" text-anchor="middle"><%= center_value %></text>
+        <% if center_label.present? -%><text class="chart__donut-label" x="84" y="98" text-anchor="middle"><%= center_label %></text><% end -%>
+      <% end -%>
+    </svg>
+
+    <ul class="chart-legend">
+      <% segments.each_with_index do |seg, i| -%>
+        <% color = i < 6 ? "var(--chart-#{i + 1})" : "var(--color-gray-400)" -%>
+        <% pct = (seg[:value].to_f / total * 100).round -%>
+        <li class="chart-legend__item">
+          <span class="chart-legend__swatch" style="background: <%= color %>" aria-hidden="true"></span>
+          <span class="chart-legend__label"><%= seg[:label] %></span>
+          <span class="chart-legend__value"><%= seg[:value] %> · <%= pct %>%</span>
+        </li>
+      <% end -%>
+    </ul>
+  </div>
+
+  <table class="visually-hidden">
+    <caption><%= title %></caption>
+    <thead><tr><th scope="col">Segmento</th><th scope="col">Valor</th></tr></thead>
+    <tbody>
+      <% segments.each do |seg| -%><tr><td><%= seg[:label] %></td><td><%= seg[:value] %></td></tr><% end -%>
+    </tbody>
+  </table>
+<% end -%>
