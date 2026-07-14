@@ -1,0 +1,40 @@
+<% content_for :title, "Auditoría" %>
+
+<%= render "shared/page_header",
+      title: "Auditoría",
+      subtitle: "Registro de eventos de la institución — solo lectura, no se puede editar ni borrar.",
+      actions: ui_button("Discrepancias reportadas", href: discrepancies_identity_access_audit_events_path, variant: :secondary) %>
+
+<%= form_with url: identity_access_audit_events_path, method: :get, class: "audit-filters" do -%>
+  <div class="field">
+    <label class="field__label" for="audit-actor">Actor</label>
+    <select class="field__input" id="audit-actor" name="actor_institution_user_id">
+      <option value="">Todos</option>
+      <% @actor_options.each do |label, id| -%>
+        <option value="<%= id %>" <%= "selected" if params[:actor_institution_user_id] == id.to_s %>><%= label %></option>
+      <% end -%>
+    </select>
+  </div>
+
+  <div class="field">
+    <label class="field__label" for="audit-action">Acción</label>
+    <select class="field__input" id="audit-action" name="action_key">
+      <option value="">Todas</option>
+      <% IdentityAccess::AuditEventIndex::ACTIONS.each do |key, label| -%>
+        <option value="<%= key %>" <%= "selected" if params[:action_key] == key %>><%= label %></option>
+      <% end -%>
+    </select>
+  </div>
+
+  <%= render "shared/field", label: "Desde", name: "from", type: "date", value: params[:from] %>
+  <%= render "shared/field", label: "Hasta", name: "to", type: "date", value: params[:to] %>
+
+  <div class="audit-filters__actions">
+    <%= ui_button "Filtrar", type: "submit", variant: :primary %>
+    <%= link_to "Limpiar", identity_access_audit_events_path, class: "btn btn--secondary" %>
+  </div>
+<% end -%>
+
+<%= render "events_table", page: @page,
+      empty_title: "No hay eventos con estos filtros",
+      empty_description: "Ajusta el rango de fechas, el actor o la acción." %>

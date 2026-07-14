@@ -11,11 +11,107 @@
 
 ---
 
-## Changelog completo (v1.0.0 → v1.10.0)
+## Changelog completo (v1.0.0 → v1.11.0)
 
 > Copiado verbatim de §14 de `PROJECT_STATE.md` v1.5.0, antes de que el split editorial (v1.5.1)
 > moviera el changelog fuera del doc magro. Las entradas v1.6.0+ se escribieron directamente aquí,
 > ya con el split vigente.
+
+### v1.11.0 — 2026-07-14 — Onboarding: visor de `audit_events` + bandeja de discrepancias
+
+**Quinto y último slice regular del track de onboarding** (queda solo el disparador opcional de
+`Expirer`/`BounceHandler`, #1.5). El más barato de los que faltaban: los datos ya se escribían desde
+v1.6.0 (`IdentityAccess::Audit.log`) — este slice solo construye las superficies de LECTURA sobre
+ellos. A diferencia de los tres slices anteriores (portales de persona v1.9.0, autoservicio de staff
+v1.10.0), que se gatean por identidad/relación sin `authorize!`, este es el caso opuesto a propósito:
+una superficie **administrativa**, gateada por **RBAC**.
+
+**Recon: hallazgos reales:**
+- `IdentityAccess::AuditEvent` (tabla `audit_events`): `institution_id`, `actor_institution_user_id`
+  (nullable — eventos de sistema/job sin actor humano), `action` (string libre por convención, greppable
+  y con puntos: `"invitation.sent"`), `target_type`/`target_id` (columnas sueltas, no una asociación
+  polimórfica real de Rails), `metadata` (jsonb), `ip`, y **solo** `created_at` (`record_timestamps =
+  false`) — el `REVOKE UPDATE, DELETE ON audit_events FROM edu_app_runtime` de la migración original
+  confirma el append-only a nivel de rol de BD, no solo de convención de app.
+- **El set real de acciones**, grepeado de cada call site de `Audit.log`/`IdentityAccess::Audit.log`
+  en `identity_access` (nueve en total, ninguna inventada): `invitation.sent`, `invitation.bounced`,
+  `invitation.completed`, `invitation.discrepancy_reported`, `person.created`, `person.suspended`,
+  `person.reactivated`, `roster_import.validated`, `roster_import.commit_enqueued`. Este set se
+  convirtió literalmente en `IdentityAccess::AuditEventIndex::ACTIONS` — el filtro de acción es un
+  `<select>` sobre este hash, nunca un input de texto libre.
+- **El marcador de discrepancia**, confirmado en `Invitations::DiscrepancyReporter`:
+  `action: "invitation.discrepancy_reported"`. El propio comentario de esa clase ya documentaba la
+  intención — "reuses audit_events as the inbox instead of inventing a new table; a future 'bandeja
+  de discrepancias' view is just a filtered audit_events#index" — así que la bandeja de este slice es,
+  literalmente, `AuditEventIndex.call(action: DISCREPANCY_ACTION)`, sin tabla nueva.
+- **Ningún permiso de auditoría existía.** Se agregó `audit_events.read` a
+  `IdentityAccess::SeedPermissions::CATALOG` (estilo `.read`, igual que `students.read`/
+  `finance.read`/`counseling.read`). Recon adicional: no existe HOY ningún mecanismo de seed
+  automático que conceda un permiso del catálogo a `institution_admin` (u otro rol) por institución
+  — cada `RolePermission` real se crea ad hoc vía la superficie admin de roles/asignaciones (o
+  `grant_role!` en test). Esto es cierto para TODOS los permisos existentes, no una carencia nueva de
+  este slice — se documenta en vez de inventar infraestructura de seeding fuera de alcance.
+- **Gap real de índice, confirmado contra `db/structure.sql`:** los dos índices existentes de
+  `audit_events` son `(institution_id, action)` y `(institution_id, target_type, target_id)` — ninguno
+  soporta una lectura `institution_id`-leading ordenada por `created_at`. Sobre una tabla append-only
+  que crece sin cota, paginar "más reciente primero" sin ese índice degrada a un sort completo por
+  página a medida que crece. Única migración del slice: `add_index :audit_events, [:institution_id,
+  :created_at]` (orden `created_at DESC`) — corrida en dev y test vía `bin/migrate`.
+- `shared/_audit_entry_row` ya existía (con un TODO literal pidiendo un modelo real) pero no tenía
+  ningún consumidor — este slice es su primer uso real; el TODO se retiró.
+- `identity_access` es un dominio fundacional (no addon-gated) — el visor no tiene ninguna compuerta
+  de entitlement, solo RBAC.
+
+**`IdentityAccess::AuditEventIndex`** — query object explícito (no `default_scope`): scope de
+tenant + filtros opcionales (`actor_institution_user_id`, `action` ∈ `ACTIONS`, `from`/`to`) + orden
+`created_at desc, id desc` + paginación (`PER_PAGE = 25`, `limit`/`offset`, `Data.define` `Page` con
+`events`/`page`/`total_pages`/`total_count`). Un valor de `action` fuera del set conocido se ignora
+silenciosamente (nunca un error, nunca SQL crudo) — es la defensa real contra que el filtro derive en
+un buscador de texto libre.
+
+**`IdentityAccess::AuditEventsController`** — `authorize!("audit_events.read")` al inicio de
+`#index` y `#discrepancies` (las únicas dos acciones; ninguna acción de mutación existe). El actor
+en el filtro es un `<select>` sobre el staff de la propia institución (`institution.memberships.
+active`) — no es un buscador de personas/menores, es la misma superficie ya visible en "Personas".
+`AuditEvent#actor_label`/`#target_label` (nuevos métodos del modelo) resuelven una referencia mínima
+y no-navegable al target (nombre de un `Core::User`, o "Carga de <kind>" para un
+`Core::RosterImportBatch`) — nunca un link a un directorio.
+
+**Caso de aceptación, verificado end-to-end:** admin A con `audit_events.read` ve exactamente los
+eventos de su institución I (nunca los de J, verificado con query real bajo RLS, no con
+`current_setting()`); filtrar por actor/acción/fecha de forma independiente y compuesta reduce
+correctamente el set; la bandeja de discrepancias muestra exactamente el evento marcado por
+`DiscrepancyReporter`, ninguno más; un staff S sin `audit_events.read` recibe 403 en ambas rutas
+(la puerta dura SÍ está — a diferencia de los portales/autoservicio); un filtro sin resultados
+muestra el empty state, nunca un error; ninguna vista tiene `input[type=search]`/`input[name=q]`
+dentro de `#main`; no existe ninguna ruta ni método de controller para actualizar/borrar un evento.
+Paginación verificada con 30+ eventos (25 en la página 1, el resto en la 2, sin solapamiento de ids).
+
+**Resultado:** 368 runs / 1303 assertions / 0 failures / 0 errors / 1 skip preexistente (baseline
+356; 12 tests nuevos: 7 de unidad del query object, 5 de integración del visor/bandeja/RBAC/cross-
+tenant/Habeas Data). `bin/rails zeitwerk:check` verde. Una migración (índice nuevo), corrida en dev
+y test.
+
+**Archivos creados/editados por rol:**
+- Query object (nuevo): `app/domains/identity_access/services/audit_event_index.rb`.
+- Modelo (editado): `app/domains/identity_access/models/audit_event.rb` (+`actor_label`/
+  `target_label`).
+- Controller + rutas + nav (nuevos/editados): `app/controllers/identity_access/
+  audit_events_controller.rb`, `config/routes.rb`, `config/navigation/identity_access.rb`.
+- Vistas (nuevas): `app/views/identity_access/audit_events/{index,discrepancies,_events_table}.
+  html.erb`; `app/views/shared/_audit_entry_row.html.erb` (comentario TODO retirado).
+- Estilos (editado): `app/assets/stylesheets/components.css` (`.audit-filters`, `.audit-log`).
+- Permiso (editado): `app/domains/identity_access/services/seed_permissions.rb` (+`audit_events.
+  read`).
+- Migración (nueva): `db/migrate/20260714000001_add_institution_and_created_at_index_to_audit_
+  events.rb`.
+- Tests (nuevos): `test/models/identity_access/audit_event_index_test.rb`,
+  `test/integration/audit_events_test.rb`.
+
+Con este slice, el track de onboarding queda cerrado salvo el disparador opcional de
+`Expirer`/`BounceHandler` (#1.5, no bloqueante). Candidatos siguientes: CHECKPOINT E
+(`staff_management` vs. `human_resources`) o vistas de negocio por dominio con scope (#4) — a
+decidir con el usuario.
 
 ### v1.10.0 — 2026-07-10 — Onboarding: autoservicio de staff ("mis datos")
 

@@ -188,6 +188,13 @@ Rails.application.routes.draw do
     resources :roster_imports, only: %i[index new create show] do
       member { post :commit }
     end
+
+    # Audit viewer + discrepancy inbox (onboarding slice 5). audit_events.read
+    # gated (RBAC, unlike self-service). Read-only: index/discrepancies only —
+    # audit_events is append-only, no action here ever mutates a row.
+    resources :audit_events, only: :index do
+      collection { get :discrepancies }
+    end
   end
 
   # --- staff_management (closes an orphaned Fase 0 nav entry) ---------------

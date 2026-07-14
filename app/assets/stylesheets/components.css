@@ -662,6 +662,17 @@
     color: var(--color-text-subtle);
   }
 
+  /* --- identity_access: audit viewer filter form -------------------------- */
+  .audit-filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: var(--space-4);
+    margin-block-end: var(--space-4);
+  }
+  .audit-filters__actions { display: flex; gap: var(--space-2); }
+  .audit-log { display: flex; flex-direction: column; }
+
   /* --- Dashboard tile ---------------------------------------------------- */
   .tile-grid {
     display: grid;

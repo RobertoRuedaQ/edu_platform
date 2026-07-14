@@ -18,10 +18,10 @@
 
 | Campo | Valor |
 |---|---|
-| **Versión del documento** | `v1.10.0` |
-| **Fecha** | 2026-07-10 |
-| **Tests** | 356 runs / 0 fallos / 1 skip preexistente (suite completa, en serie — ver Guardrails) |
-| **Estado en una línea** | Identidad real (login+MFA, invitaciones, gestión de personas, alta batch de estudiantes Y acudientes por CSV) + plano de control con track de billing completo S0→S4 + RBAC del inquilino real (P1 cerrado) + `Core::RosterImport` real para ambos kinds + `Core::Access::GuardianScope`/portales de persona sobre datos reales + **autoservicio de staff ("mis datos") sobre datos reales por identidad** (siguiente: visor de `audit_events` — ver `HISTORIA.md`). |
+| **Versión del documento** | `v1.11.0` |
+| **Fecha** | 2026-07-14 |
+| **Tests** | 368 runs / 0 fallos / 1 skip preexistente (suite completa, en serie — ver Guardrails) |
+| **Estado en una línea** | Identidad real (login+MFA, invitaciones, gestión de personas, alta batch de estudiantes Y acudientes por CSV) + plano de control con track de billing completo S0→S4 + RBAC del inquilino real (P1 cerrado) + `Core::RosterImport` real para ambos kinds + `Core::Access::GuardianScope`/portales de persona + autoservicio de staff sobre datos reales por identidad + **visor de `audit_events` + bandeja de discrepancias reales (RBAC-gated)** — con esto el track de onboarding queda cerrado salvo los disparadores opcionales de `Expirer`/`BounceHandler` (#1.5). Próximo candidato: CHECKPOINT E o vistas de negocio por dominio (#4) — a decidir. |
 
 ### Convención de versionado de ESTE documento
 
@@ -223,6 +223,14 @@ todas se gatean por identidad/relación, no por RBAC, y viven fuera de `Navigati
 (cuyas entradas SIEMPRE filtran por `can?`) — vista **403 amable** (RBAC) y página **"módulo no
 habilitado"** (entitlement, distinta del 403).
 
+**La INVERSIÓN respecto a lo anterior: el visor de `audit_events` + bandeja de discrepancias**
+(`/identity_access/audit_events`, v1.11.0) **SÍ es una superficie administrativa RBAC-gateada**
+(`authorize!("audit_events.read")`) y **SÍ vive en `Navigation::Registry`** — es la lectura de
+"quién hizo qué", no "mis propios datos", así que la puerta correcta es RBAC, no identidad. La
+bandeja de discrepancias es la MISMA query pre-filtrada al marcador de `DiscrepancyReporter`, nunca
+una tabla nueva. `audit_events` sigue append-only (`REVOKE UPDATE/DELETE` a nivel de rol de BD);
+esta vista solo lee.
+
 **Capa PRE-login:** layout separado (`layouts/auth`, sin nav de dominio ni selector de institución)
 para `sessions/`, `email_otps/`, `invitations/`, y como fallback cuando la página de entitlement
 dispara sin `Current.institution` resuelta — deliberadamente minimalista.
@@ -379,13 +387,17 @@ tabla pieza-por-pieza) en `HISTORIA.md`.
    `homeroom_teacher_id`). "Mi horario" queda como **vista previa** (reusa el stub de `schedules`,
    filtrado por identidad, nunca por RBAC) — ese dominio no tiene ninguna tabla real todavía, ni
    siquiera parcial. Ver `HISTORIA.md`.
-4. **Visor de `audit_events`** + **bandeja de discrepancias reportadas**. Los datos ya se escriben;
-   no existe ninguna vista que los liste. Pieza más barata de construir de las que faltan —
-   `shared/_audit_entry_row` ya existe. **Cabeza de fila ahora.**
+4. ~~Visor de `audit_events` + bandeja de discrepancias reportadas~~ — ✅ **cerrado (v1.11.0)**.
+   `IdentityAccess::AuditEventIndex` (tenant-scoped, filtros actor/acción/fecha sobre un conjunto
+   conocido, paginado) alimenta tanto el visor (`/identity_access/audit_events`) como la bandeja
+   (`/identity_access/audit_events/discrepancies`, misma query con `action` fijo al marcador de
+   `DiscrepancyReporter`). RBAC-gateado (`audit_events.read`, permiso nuevo), a diferencia de las
+   superficies self-service. Hallazgo del recon: faltaba un índice `(institution_id, created_at)`
+   real para paginar ordenado — única migración del slice. Ver `HISTORIA.md`.
 5. **`IdentityAccess::Expirer`/`BounceHandler` sin disparador real** — `Expirer` corre
    oportunísticamente desde `PeopleController#index` (no hay job recurrente en Solid Queue);
    `BounceHandler` no está conectado a ningún webhook real. (`Resender` no se construye — `Issuer`
-   ya invalida-y-recrea.)
+   ya invalida-y-recrea.) Único remanente (opcional) del track de onboarding.
 6. **`IdentityAccess::PermissionCheck` real** — ✅ **cerrado** (P1, v1.6.0) — ver `HISTORIA.md`. Nota
    operativa: cada persona nueva creada vía `PeopleController` necesita `RoleAssignment` reales para
    tener acceso (ya no hay persona stub que la cubra por defecto) — el punto de extensión para
@@ -438,9 +450,9 @@ firma del método (no acepta término de búsqueda) y con aserciones sobre la vi
       alguna vez hiciera falta (`Strategy.for` + una nueva `Strategies::*`, sin tocar orquestación).
    2. ~~`Core::Access::GuardianScope` + portales de estudiante/acudiente~~ — ✅ **cerrado (v1.9.0)**, ver `HISTORIA.md`.
    3. ~~Vistas de autoservicio reales para docente/coordinador/director~~ — ✅ **cerrado (v1.10.0)**, ver `HISTORIA.md`.
-   4. Visor de `audit_events` + bandeja de discrepancias (barato — los datos ya existen). **Cabeza de fila ahora.**
+   4. ~~Visor de `audit_events` + bandeja de discrepancias~~ — ✅ **cerrado (v1.11.0)**, ver `HISTORIA.md`. Con esto el track de onboarding queda cerrado salvo el punto 5 (opcional) abajo.
    5. Batch-invite tras el alta de acudientes, full-async de parse+validar, y purga de `roster_import_rows` post-commit — hardening documentado, no construido (ver `HISTORIA.md` v1.7.0).
-   5. Job recurrente para `Invitations::Expirer` y webhook real para `Invitations::BounceHandler` (opcional / según necesidad real de producción, no bloqueante).
+   5. Job recurrente para `Invitations::Expirer` y webhook real para `Invitations::BounceHandler` (opcional / según necesidad real de producción, no bloqueante — único remanente del track).
 2. **Cerrar CHECKPOINT E** (`staff_management` vs `human_resources`) y, si aplica, scaffold del dominio de personal no docente.
 3. ~~Cablear la puerta de auth real (gate #2, RBAC)~~ — ✅ **P1 cerrado (v1.6.0)**, ver `HISTORIA.md`.
 4. **Vistas de negocio por dominio** que aún estén en stub → conectarlas a modelos reales, dominio por dominio (empezando por `core` y `teacher_management` con el caso de aceptación de §6.4). El descriptor de scope de P1 solo se cableó de verdad en `teacher_management`; el resto de dominios (student_support, group_management, schedules, counseling, cafeteria, transportation) sigue con su catálogo de recursos en stub y se adopta aquí, incrementalmente, dominio por dominio.
@@ -499,13 +511,28 @@ firma del método (no acepta término de búsqueda) y con aserciones sobre la vi
 - **El filtro por término lectivo sigue diferido a B2 — `GuardianScope` (como el headcount de S3a) no filtra por `academic_term`** — `enrollments.term` sigue siendo un string libre sin FK a `academic_terms`; no inventar ese join para "que se vea más preciso". El término activo puede mostrarse como etiqueta descriptiva (mismo patrón que `Core::Headcount::Snapshotter`), nunca como condición de un scope de seguridad.
 - **El autoservicio de staff se gatea por identidad (self-scope en `services/access/`), nunca por `authorize!`** — muestra solo datos **propios** (perfil, roles vigentes, grupos/departamento derivados de las propias `role_assignments`). Mostrar a OTRA persona (mis colegas de departamento, mis estudiantes) es supervisión (backlog #4, RBAC con scope), no autoservicio — cruzar esa línea saca la vista de esta sección. Ninguna de estas superficies (student/guardian/staff) vive en `Navigation::Registry`, porque esa lista SIEMPRE filtra por `can?`; se enlazan aparte (header del shell / portal).
 - **El filtro de término activo es real solo donde el FK existe** — `role_assignments.effective_now` (P1) y cualquier futuro dato de `schedules` una vez tenga tabla real, **sí** filtran por término. Grupos/matrícula (`enrollments.term`, sin FK a `academic_terms`) **no** — término ahí es solo etiqueta descriptiva (salvedad B2 vigente). `schedules` en general no tiene ninguna tabla real todavía (ni parcial) — cualquier tile que lo use hoy es necesariamente vista previa sobre el stub existente, marcada como tal, nunca presentada como dato real.
+- **El visor de auditoría se gatea por RBAC (`authorize!`), a diferencia de las superficies self-service — y `audit_events` es append-only: ninguna vista lo muta.** Un futuro "marcar atendida" (si se construye) **es un evento nuevo append** (`Audit.log` de, p. ej., `discrepancy_acknowledged`) con estado **derivado** de su presencia — nunca un `UPDATE` sobre la fila original (la BD ya lo impediría: `REVOKE UPDATE, DELETE ON audit_events FROM edu_app_runtime`).
+- **Los filtros del visor de auditoría nunca son un directorio de estudiantes** — actor/acción/fecha sobre metadata, con acción tomada de un **conjunto conocido** (`IdentityAccess::AuditEventIndex::ACTIONS`), jamás texto libre ni autocompletado de personas (Habeas Data, mismo invariante que `GuardianScope`). El filtro de actor sí lista al STAFF de la propia institución (no son menores; es la misma superficie ya visible en "Personas").
 
 ---
 
 ## 13. Changelog
 
-El changelog completo (`v1.0.0` → `v1.10.0`) vive en **`HISTORIA.md`**. Entrada de esta versión:
+El changelog completo (`v1.0.0` → `v1.11.0`) vive en **`HISTORIA.md`**. Entrada de esta versión:
 
+- **`v1.11.0` — Onboarding: visor de `audit_events` + bandeja de discrepancias.**
+  `IdentityAccess::AuditEventIndex` — tenant-scoped, filtros actor/acción(conjunto conocido)/fecha,
+  paginado (`PER_PAGE = 25`), nunca `default_scope`. Alimenta el visor
+  (`/identity_access/audit_events`) y la bandeja de discrepancias
+  (`/identity_access/audit_events/discrepancies`, la MISMA query con `action` fijo al marcador de
+  `DiscrepancyReporter` — no una tabla nueva). Gateado por RBAC (`audit_events.read`, permiso nuevo en
+  el catálogo), **no** por identidad — la inversión deliberada respecto a los portales/autoservicio
+  de v1.9.0/v1.10.0. `shared/_audit_entry_row` (existía sin consumidor real) queda cableado.
+  Hallazgo del recon: ninguno de los dos índices existentes de `audit_events` soportaba una lectura
+  ordenada por `created_at` con `institution_id`-leading — única migración del slice
+  (`add_index`, sin tabla nueva). Caso de aceptación de seguridad verificado end-to-end: filtros
+  componen, aislamiento cross-tenant bajo RLS real, 403 sin el permiso, sin superficie de búsqueda
+  de personas, append-only intacto. Narrativa completa en `HISTORIA.md`.
 - **`v1.10.0` — Onboarding: autoservicio de staff ("mis datos").** `Core::Access::
   {StaffProfileScope,StaffRoleAssignmentsScope}` (mismo molde que `GuardianScope`/
   `StudentSelfScope`) resuelven perfil y roles vigentes de cualquier staff por identidad, sin

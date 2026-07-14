@@ -1858,6 +1858,13 @@ CREATE INDEX index_audit_events_on_institution_and_action ON public.audit_events
 
 
 --
+-- Name: index_audit_events_on_institution_and_created_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_audit_events_on_institution_and_created_at ON public.audit_events USING btree (institution_id, created_at DESC);
+
+
+--
 -- Name: index_audit_events_on_institution_and_target; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3987,6 +3994,7 @@ CREATE POLICY teaching_assignments_tenant_isolation ON public.teaching_assignmen
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260714000001'),
 ('20260710152925'),
 ('20260710144823'),
 ('20260710120002'),

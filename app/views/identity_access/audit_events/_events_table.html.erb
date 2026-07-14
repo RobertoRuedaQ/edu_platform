@@ -1,0 +1,16 @@
+<%# locals: (page:, empty_title:, empty_description:) -%>
+<% if page.events.any? -%>
+  <div class="audit-log">
+    <% page.events.each do |event| -%>
+      <%= render "shared/audit_entry_row",
+            actor: event.actor_label,
+            action: IdentityAccess::AuditEventIndex::ACTIONS.fetch(event.action, event.action),
+            target: event.target_label || "—",
+            occurred_at: event.created_at,
+            ip: event.ip %>
+    <% end -%>
+  </div>
+  <%= render "shared/pagination", current_page: page.page, total_pages: page.total_pages %>
+<% else -%>
+  <%= render "shared/empty_state", icon: "alert-circle", title: empty_title, description: empty_description %>
+<% end -%>

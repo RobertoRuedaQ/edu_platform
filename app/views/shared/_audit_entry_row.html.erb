@@ -2,9 +2,8 @@
 <%#
   One audit line: who / what / when. A flexible row (NOT a <tr>) so it works in
   a compact list and in a full log alike. Text carries the meaning (no color-only
-  signalling). Reusable app-wide — promoted here from the control plane.
-  # TODO: alimentar desde un modelo de auditoría real (p. ej. ControlPlane::AuditEntry
-  #       o el equivalente por dominio del inquilino).
+  signalling). Reusable app-wide — promoted here from the control plane. Fed by
+  IdentityAccess::AuditEvent (identity_access/audit_events) since v1.11.0.
 -%>
 <% attrs[:class] = class_names("audit-entry", attrs[:class]) -%>
 <%= tag.div(**attrs) do -%>

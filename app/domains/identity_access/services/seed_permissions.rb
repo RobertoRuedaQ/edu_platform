@@ -40,7 +40,12 @@ module IdentityAccess
       # Distinct from roles.manage: onboarding a human (crear/invitar/suspender
       # su cuenta) is not the same capability as granting institution_admin —
       # a registrar can do the former without the latter.
-      "people.manage"     => "Crear personas, invitar y suspender/reactivar cuentas"
+      "people.manage"     => "Crear personas, invitar y suspender/reactivar cuentas",
+      # Gates the audit_events viewer + discrepancy inbox (RBAC-gated admin
+      # surface — unlike self-service, which is identity-gated with no
+      # authorize! at all). Read-only: audit_events is append-only regardless
+      # of who holds this.
+      "audit_events.read" => "Ver el registro de auditoría y discrepancias reportadas"
     }.freeze
 
     def self.call
