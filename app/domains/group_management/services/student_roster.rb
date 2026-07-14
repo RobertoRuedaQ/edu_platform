@@ -1,11 +1,12 @@
 module GroupManagement
-  # STUB roster of students, grouped into GroupRoster's sections. Same
-  # rationale as GroupRoster: real Student rows exist and are seeded (with a
-  # real section_id!) but reading them needs a resolved tenant, which is out
-  # of scope for a views-only domain prompt.
-  #
-  # TODO: reemplazar por GroupManagement::Student real (ya tiene section_id
-  # real, a diferencia de teachers -> department) una vez haya tenant resuelto.
+  # STUB roster of students. group_management's OWN controllers no longer use
+  # this (#4 barrido, v1.14.0 — see StudentScope, which reads the real
+  # GroupManagement::Student now). This file STAYS ALIVE only because
+  # cafeteria/student_support (both Class C — no real business-object tables
+  # of their own yet) still look up "a student" through it
+  # (Cafeteria::CheckoutsController, StudentSupport::{Accommodations,
+  # DisciplinaryLogs}Controller). Retire it once those domains get their own
+  # real-data slice.
   module StudentRoster
     Enrollment = Data.define(:subject, :term, :status)
     Row = Data.define(:id, :name, :student_code, :status, :group_id, :group_name,

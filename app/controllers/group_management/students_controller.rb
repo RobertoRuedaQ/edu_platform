@@ -6,7 +6,9 @@ module GroupManagement
     end
 
     def show
-      @student = GroupManagement::StudentRoster.find(params[:id]) or raise ActiveRecord::RecordNotFound
+      @student = GroupManagement::Student.find_by(institution_id: Current.institution_id, id: params[:id])
+      raise ActiveRecord::RecordNotFound if @student.nil?
+
       authorize!("students.read", @student)
     end
   end

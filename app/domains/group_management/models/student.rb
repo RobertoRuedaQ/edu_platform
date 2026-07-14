@@ -29,5 +29,12 @@ module GroupManagement
              foreign_key: :student_id, inverse_of: :student, dependent: :destroy
 
     validates :first_name, :last_name, :gender, :birthdate, :student_code, presence: true
+
+    # Scope-covering descriptor (#4 barrido) — section_id already IS the real
+    # :group scope column; grade_level_id is likewise already real, so no
+    # descriptor is needed for a grade_level-scoped grant.
+    def group_id
+      section_id
+    end
   end
 end

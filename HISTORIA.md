@@ -11,11 +11,125 @@
 
 ---
 
-## Changelog completo (v1.0.0 → v1.13.0)
+## Changelog completo (v1.0.0 → v1.14.0)
 
 > Copiado verbatim de §14 de `PROJECT_STATE.md` v1.5.0, antes de que el split editorial (v1.5.1)
 > moviera el changelog fuera del doc magro. Las entradas v1.6.0+ se escribieron directamente aquí,
 > ya con el split vigente.
+
+### v1.14.0 — 2026-07-14 — #4 barrido: el molde de teacher_management aplicado a todos los dominios cableables
+
+**Barrido de cierre del backlog #4.** Con el molde canónico ya probado en `teacher_management`
+(v1.13.0), este slice lo aplicó, dominio por dominio, a todo lo que el disco realmente soportaba —
+con un STOP de triage obligatorio antes de tocar código, y una pausa adicional cuando el usuario
+decidió incluir dominios sensibles fuera del default del prompt.
+
+**Triage (STOP #1/#2) — la tabla real, no la asumida:**
+
+| Dominio | Clase | Por qué |
+|---|---|---|
+| `core` | N/A | Sin controllers propios — sus recursos de negocio ya viven en otros dominios. |
+| `group_management` | **A** | `Section`/`Student` reales, `grade_level_id`/`section_id` ya reales. |
+| `schedules` (calificaciones) | **A** | `Subject`/`Enrollment`/`Assessment` reales, `grade_level_id` real. |
+| `schedules` (horario/timetable) | **C** | Cero tabla real (`rooms`/`meeting_patterns` no existen) — mismo hallazgo que v1.10.0/v1.12.0. |
+| `cafeteria` | **C** | Solo `DietaryRestriction` es real; menú/checkout/saldo no tienen tabla propia. |
+| `transportation` | **C** | Cero modelos reales — ni un archivo en `models/`. |
+| `finance` | **A, pero distinto** | Modelos reales (`Charge`/`Payment`/`PaymentPlan`/`Installment`/`StudentAccount`), **cero controller/ruta/vista** — construir desde cero, no swapear un stub. Diferido. |
+| `student_support` | **C (corregido)** | Ver hallazgo abajo — el recon inicial lo marcó "S" por error. |
+| `counseling` | **S → incluido a pedido del usuario** | Real (`counseling_cases`/`session_notes`/`referrals`), con caso de seguridad dedicado. |
+
+**El hallazgo que corrigió el triage a mitad de slice:** el recon inicial (§1) asumió que
+`student_support` era Clase S (sensible pero cableable) porque tiene `queries/disciplinary_log_scope.rb`,
+`services/{accommodation,disciplinary_log,medical_history}_roster.rb` con nombres que sonaban a
+"casi reales". Un `grep create_table` exhaustivo contra **todas** las migraciones reveló que
+**ninguna de las tres tablas (`disciplinary_logs`, `medical_history`, `accommodations`) existe en
+absoluto** — ni siquiera parcialmente. Solo `guardian.rb`/`student_guardian.rb` (relación con
+acudientes, no las tres superficies sensibles) son reales en ese dominio. Esto se comunicó
+explícitamente al usuario a mitad de ejecución (tras haber preguntado si incluir "student_support Y
+counseling") y se corrigió el alcance: `student_support` pasó a Clase C (no cableable sin inventar
+esquema, mismo trato que `transportation`), `counseling` (que SÍ tiene tablas reales) se cableó como
+se había pedido. **Lección durable**: la señal de "tiene modelos reales" es `grep create_table` en
+`db/migrate/`, nunca la presencia de un archivo de query object — un dominio entero puede estar
+100% en stub con una fachada de nombres que sugiere lo contrario.
+
+**`group_management` (Clase A):**
+- `Section#group_id` (alias `id`) y `Student#group_id` (alias `section_id`, ya real) — mismo truco
+  que `StaffManagement::Department#department_id`. `grade_level_id` ya era real, cero código extra.
+- `GroupScope`/`StudentScope` reescritos sobre `Section`/`Student` reales, per-row `can?`, igual
+  patrón que `TeacherScope`.
+- **`MembershipsController#update` pasó a ser una escritura REAL** (`students.section_id`), no solo
+  el gate — a diferencia de `teacher.evaluate` (v1.13.0), acá el target SÍ existe. Estudiantes
+  marcados quedan en el grupo; los que estaban y se desmarcan vuelven a `section_id: nil` (nunca se
+  quedan "pegados" a un grupo del que se les removió).
+- Vistas: se retiraron "Director de grupo"/"Horario" (sin FK real — mismo hallazgo de siempre: no
+  hay vínculo profesor↔grupo en el esquema, y `schedules` no tiene timetable real) en favor de
+  "Grado"/"Año"/"Estudiantes" (reales).
+- `GroupManagement::GroupRoster` se **redujo a solo sus constantes** (`SECTION_9A_ID` etc.) — siguen
+  siendo load-bearing (`grant_role!` las usa para crear `Section`s reales; `cafeteria`/
+  `student_support`/el `schedules` stub de horario las siguen usando como valor fijo). `StudentRoster`
+  **se dejó 100% intacto** — `cafeteria`/`student_support` (ambos Clase C, no tocados) todavía la
+  consumen para su propia búsqueda de "un estudiante" vía `find`.
+
+**`schedules` — solo la mitad de calificaciones (Clase A):**
+- `SubjectScope` reescrito sobre `Subject` real. **Hallazgo que contradijo el stub**: el
+  `SubjectRoster` retirado escalaba por `group_id` (sección), pero el `Subject` real no tiene NINGÚN
+  vínculo a sección — solo a `grade_level`/`program`. El scope real es por `grade_level`, no por
+  grupo; se siguió el esquema real, no el supuesto de diseño del stub.
+- **`GradeEntriesController#create` pasó a crear un `Enrollment`+`Assessment` real** (el target ya
+  existía) — busca al estudiante por `student_code`, hace `find_or_create_by!` del `Enrollment`, crea
+  el `Assessment`. Error amable (422, no 500) si el código no corresponde a ningún estudiante real.
+- La mitad de horario/timetable (`RoomsController`/`TimetablesController`/`ScheduleEventRoster`) **no
+  se tocó** — Clase C confirmada, cero tabla real.
+- `SubjectRoster`/`GradeEntryRoster` retirados (cero otros consumidores, confirmado por grep).
+
+**`counseling` (Clase S, incluida a pedido explícito + caso de seguridad dedicado):**
+- `Case#group_id` delega a `student.group_id` (mismo dimensión que el stub `CaseRoster` ya asumía,
+  ahora real gracias al trabajo de `group_management` en este mismo slice — dependencia de orden
+  intencional). `Case#student_name` es un método de una línea.
+- `CaseScope`/`CasesController` reales; el show ahora también renderiza `Referral`s reales (el
+  partial `_referral_row` existía sin consumidor desde antes de este slice) además de
+  `SessionNote`s reales (vía el partial `_session_note`, también preexistente y sin usar).
+- **Caso de seguridad dedicado** (a pedido explícito del usuario, más allá del mini-caso estándar):
+  aislamiento cross-tenant verificado con una query real a nivel de MODELO (no solo HTTP) que pide
+  explícitamente `institution_id: J` bajo el GUC de I y confirma cero filas — probando que RLS
+  bloquea de verdad, no solo el filtro `institution_id` de la app. Se verificó lo mismo para
+  `session_notes` (no solo `counseling_cases`), ya que el README del dominio señalaba que la
+  auditoría de RLS de esta tabla específicamente era "planned, not yet implemented".
+- Los tests de counseling, que vivían dentro de `student_support_test.rb` desde antes de que
+  `counseling` se separara como dominio propio, se extrajeron a `test/integration/counseling_test.rb`.
+
+**Efectos secundarios encontrados y corregidos en la verificación (ningún cambio de producto, solo
+tests obsoletos apuntando a stubs retirados):**
+- `student_support_test.rb` tenía un test que navegaba a `/group_management/students/s-1` (el id
+  stub) para verificar que las pestañas Convivencia/Acomodaciones aparecen — con `students#show`
+  ahora leyendo un `GroupManagement::Student` real, "s-1" da 404. Se corrigió sembrando un estudiante
+  real en la sección correcta.
+- El mismo archivo tenía un test de `support_dashboard` que esperaba "1 caso abierto" contando sobre
+  el `CaseRoster` retirado — se corrigió sembrando un `Counseling::Case` real.
+
+**Resultado:** 387 runs / 1402 assertions / 0 failures / 0 errors / 1 skip preexistente (baseline
+377 tras v1.13.0). `bin/rails zeitwerk:check` verde. **Cero migraciones** — cada dominio cableado ya
+tenía su descriptor de scope real desde antes de este slice.
+
+**Archivos por dominio:**
+- `group_management`: modelos (`section.rb`, `student.rb`), queries (`group_scope.rb`,
+  `student_scope.rb`), controllers (`students_controller.rb`, `groups_controller.rb`,
+  `memberships_controller.rb`), vistas (students/groups index+show, memberships/edit), servicios
+  (`group_roster.rb` reducido, `student_roster.rb` con comentario actualizado). Tests:
+  `group_management_test.rb` reescrito.
+- `schedules`: query (`subject_scope.rb`), controllers (`subjects_controller.rb`,
+  `grade_entries_controller.rb`), vistas (subjects index+show, grade_entries/new). Retirados:
+  `subject_roster.rb`, `grade_entry_roster.rb`. Tests: `schedules_test.rb` reescrito (solo la parte
+  de calificaciones; horario/rooms/timetable sin cambios).
+- `counseling`: modelo (`case.rb`), query (`case_scope.rb`), controller (`cases_controller.rb`),
+  vista (`cases/show.html.erb`, referrals agregadas). Retirado: `case_roster.rb`. Tests: nuevo
+  `counseling_test.rb`; `student_support_test.rb` con la sección de counseling removida y dos tests
+  corregidos.
+
+Con esto, el backlog #4 queda cerrado para todo lo que el esquema real soporta hoy. Lo que resta —
+`cafeteria`, `transportation`, `student_support`, la mitad de horario de `schedules` — necesita un
+slice de MODELADO primero (no de vistas), y `finance` necesita su propio slice de construcción de
+vista/controller desde cero. Ninguno de los dos es "#4 de nuevo" en el mismo sentido que este slice.
 
 ### v1.13.0 — 2026-07-14 — #4 slice 1: `teacher_management` como referencia canónica + directorios de staff
 

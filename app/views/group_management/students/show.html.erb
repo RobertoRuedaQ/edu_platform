@@ -1,31 +1,32 @@
-<% content_for :title, @student.name %>
+<% student_name = "#{@student.first_name} #{@student.last_name}" -%>
+<% content_for :title, student_name %>
 
-<%= render "shared/page_header", title: @student.name, subtitle: @student.group_name %>
+<%= render "shared/page_header", title: student_name, subtitle: @student.section&.name %>
 
 <%#
-  Perfil y Matrícula son datos propios/cross-domain en stub (schedules).
-  Convivencia/Acomodaciones son cross-domain en stub (student_support) —
-  gateadas por su propio permiso, ausentes (no deshabilitadas) si el actor no
-  lo tiene, igual que el resto de la nav.
+  Perfil y Matrícula son datos reales (#4 barrido, v1.14.0). Convivencia/
+  Acomodaciones se quedan cross-domain en stub (student_support, Clase C —
+  sin tabla real, ver HISTORIA.md) — gateadas por su propio permiso,
+  ausentes (no deshabilitadas) si el actor no lo tiene, igual que el resto
+  de la nav.
 -%>
 <% panels = {} -%>
 
 <% panels["Perfil"] = capture do %>
   <%= render "shared/detail_list", items: {
         "Código"   => @student.student_code,
-        "Grupo"    => can?("groups.view") ? link_to(@student.group_name, group_management_group_path(@student.group_id)) : @student.group_name,
-        "Grado"    => @student.grade_level_name,
+        "Grupo"    => (can?("groups.view") && @student.section) ? link_to(@student.section.name, group_management_group_path(@student.group_id)) : @student.section&.name,
+        "Grado"    => @student.grade_level&.name,
         "Estado"   => student_status_badge(@student.status)
       } %>
 <% end -%>
 
 <% panels["Matrícula"] = capture do %>
-  <%# Cross-domain (schedules) — TODO: reemplazar por Schedules::Enrollment real. %>
   <% if @student.enrollments.any? -%>
     <%= render layout: "shared/table", locals: { headers: ["Materia", "Periodo", "Estado"] } do -%>
       <% @student.enrollments.each do |enrollment| -%>
         <tr>
-          <td><%= enrollment.subject %></td>
+          <td><%= enrollment.subject.name %></td>
           <td><%= enrollment.term %></td>
           <td><%= ui_badge enrollment.status == "enrolled" ? "Matriculado" : enrollment.status.humanize,
                     variant: enrollment.status == "enrolled" ? :success : :neutral %></td>

@@ -47,27 +47,10 @@ class StudentSupportTest < ActionDispatch::IntegrationTest
     )
   end
 
-  # --- counseling (absorbed into /counseling, the real domain) --------------
-
-  test "counseling cases index filters to the actor's own group" do
-    as_counselor_9a do
-      get "/counseling"
-      assert_response :success
-      assert_select "a", text: "Isabella Mendoza"   # case-1, stub-section-9a
-      assert_select "a", text: "Luciana Restrepo", count: 0 # case-2, stub-section-11b
-    end
-  end
-
-  test "authorize! denies a counseling case outside the actor's group" do
-    as_counselor_9a do
-      get "/counseling/case-2"
-      assert_response :forbidden
-    end
-  end
-
-  test "an actor with no grants is denied the counseling index (403)" do
-    with_grants { get "/counseling"; assert_response :forbidden }
-  end
+  # counseling's own tests (real Case/SessionNote/Referral data since #4
+  # barrido, v1.14.0) moved to test/integration/counseling_test.rb — this
+  # file used to hold them from before counseling was carved out as its own
+  # domain.
 
   # --- medical_history: two tiers of the same resource -----------------------
 
@@ -172,18 +155,53 @@ class StudentSupportTest < ActionDispatch::IntegrationTest
   end
 
   test "support_dashboard shows scoped counts for a role holding all three permissions" do
+    # Counseling::Case is real since #4 barrido (v1.14.0) — seed one open
+    # case in the actor's own group so the dashboard's stat has something
+    # real to count (student_support's own accommodations/disciplinary_logs
+    # stay stub, Class C, unaffected).
+    ActiveRecord::Base.transaction do
+      Tenant::Guc.set_local(@institution.id)
+      section = GroupManagement::Section.find_or_create_by!(id: GroupManagement::GroupRoster::SECTION_9A_ID) do |s|
+        s.institution = @institution
+        s.name = "9°A"
+        s.academic_year = 2026
+      end
+      student = GroupManagement::Student.create!(institution: @institution, first_name: "Isabella", last_name: "Mendoza",
+        gender: "female", birthdate: Date.new(2012, 5, 1), student_code: "COL-E-DASH", entry_year: 2023, section: section)
+      opener = @institution.memberships.find_by!(user: @user)
+      Counseling::Case.create!(institution: @institution, student: student, opened_by: opener,
+        category: "conducta", status: "open", opened_at: Time.current)
+    end
+
     as_counselor_9a do
       get "/student_support/dashboard"
       assert_response :success
-      assert_select ".stat__value", text: "1" # 1 open case in stub-section-9a (case-1)
+      assert_select ".stat__value", text: "1" # the one open case just seeded, in the actor's own group
     end
   end
 
   # --- retrofit: group_management students#show gains Convivencia/Acomodaciones --
 
   test "students#show exposes Convivencia and Acomodaciones only with the matching permission" do
+    # group_management#show reads a REAL GroupManagement::Student since the
+    # #4 barrido (v1.14.0) — student_support's own Convivencia/Acomodaciones
+    # panels stay on their pre-existing stub (student_support has no real
+    # disciplinary_logs/accommodations table at all, Class C), gated by can?
+    # against this real student's real group_id.
+    real_student = ActiveRecord::Base.transaction do
+      Tenant::Guc.set_local(@institution.id)
+      section = GroupManagement::Section.find_or_create_by!(id: GroupManagement::GroupRoster::SECTION_9A_ID) do |s|
+        s.institution = @institution
+        s.name = "9°A"
+        s.academic_year = 2026
+      end
+      GroupManagement::Student.create!(institution: @institution, first_name: "Isabella", last_name: "Mendoza",
+        gender: "female", birthdate: Date.new(2012, 5, 1), student_code: "COL-E-RETROFIT", entry_year: 2023,
+        section: section)
+    end
+
     as_counselor_9a do
-      get "/group_management/students/s-1"
+      get "/group_management/students/#{real_student.id}"
       assert_response :success
       assert_select ".tabs__tab", text: "Convivencia"
       assert_select ".tabs__tab", text: "Acomodaciones"

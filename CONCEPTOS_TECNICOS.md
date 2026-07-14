@@ -267,9 +267,42 @@ matchea un scope específico — solo un grant institución-wide lo cubre; es un
 error. (3) Una acción sin modelo destino real (p. ej. `teacher.evaluate` sin `Evaluation`) se cablea
 como GATE real primero — el workflow/CRUD es un slice aparte, nunca se bloquea el gate esperando el
 modelo.
+*Actualización (barrido v1.14.0): cuando el target de una acción SÍ existe, cablear la escritura
+real, no solo el gate.* `teacher.evaluate` (v1.13.0) se quedó gate-only porque no existe
+`TeacherManagement::Evaluation` — pero el barrido encontró DOS acciones cuyo modelo destino sí
+existía (`students.section_id` para la matrícula de `group_management`; `Schedules::Assessment` para
+el registro de nota de `schedules`) y en ambos casos se cableó la escritura completa. La regla no es
+"las acciones de este molde son siempre solo-gate" — es "cablear el gate siempre; el workflow
+completo si y solo si el modelo destino ya existe", verificado caso por caso.
 📍 `app/domains/teacher_management/queries/{teacher_scope,department_scope}.rb`,
 `app/domains/staff_management/queries/staff_scope.rb`,
+`app/domains/group_management/queries/{group_scope,student_scope}.rb`,
+`app/domains/schedules/queries/subject_scope.rb`, `app/domains/counseling/queries/case_scope.rb`,
 `app/controllers/teacher_management/*`, `config/navigation/{teacher_management,staff_management}.rb`.
+
+**Triage A/B/C/S — clasificar un dominio ANTES de aplicarle un molde existente.**
+*Qué es.* Una taxonomía de cuatro clases para decidir si (y cómo) portar un patrón ya probado
+(como el molde de arriba) a un dominio nuevo, usada por primera vez en el barrido de #4 (v1.14.0):
+- **A — cableable**: tiene modelos AR reales con tabla propia; se aplica el molde tal cual.
+- **B — cableable con descriptor de scope en stub**: modelos reales, pero sin ninguna columna de
+  alcance real todavía; se cablea índice/show igual, documentando el scope como pendiente (no se
+  inventa una columna de alcance para forzarlo).
+- **C — bloqueado en esquema**: SIN modelos reales — ninguna migración crea la tabla. No se cablea
+  bajo ninguna circunstancia sin antes hacer un slice de MODELADO aparte; forzarlo significaría
+  inventar esquema para "que se vea terminado", el anti-patrón más caro de un barrido apurado.
+- **S — sensible, carve-out**: modelos reales pero con necesidad de manejo de confidencialidad
+  reforzado (menores, salud, orientación) — se excluye por defecto de un barrido general; si se
+  incluye, lleva un caso de aceptación de seguridad dedicado además del mini-caso estándar
+  (scope+RBAC+cross-tenant), verificado con una query real a nivel de MODELO, no solo HTTP.
+*Por qué la señal real es `grep create_table`, nunca un nombre de archivo.* El barrido v1.14.0
+encontró que `student_support` TENÍA `queries/disciplinary_log_scope.rb` y tres `services/*_roster.rb`
+con nombres que sonaban a "casi reales" — pero CERO de esas tres tablas (`disciplinary_logs`,
+`medical_history`, `accommodations`) existe en ninguna migración. Un dominio completo puede estar
+100% en stub detrás de una fachada de nombres de query object/roster que parecen indicar lo
+contrario. La única señal confiable es reconciliar contra `db/migrate/` directamente.
+*Invariante.* Clase C nunca se "resuelve" agregando una migración dentro de un slice de #4 — eso
+es, por definición, un slice de modelado distinto, con sus propias decisiones de diseño de esquema.
+📍 Ver la tabla de triage completa (8 dominios candidatos) en `HISTORIA.md` v1.14.0.
 
 **Staff generalizado / docente como especialización (D1, no D2).**
 *Qué es.* Un solo hogar de datos para TODO el personal (`StaffManagement::StaffMember`: empleo,

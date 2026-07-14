@@ -9,9 +9,12 @@ module Schedules
     end
 
     def show
-      @subject = Schedules::SubjectRoster.find(params[:id]) or raise ActiveRecord::RecordNotFound
+      @subject = Schedules::Subject.find_by(institution_id: Current.institution_id, id: params[:id])
+      raise ActiveRecord::RecordNotFound if @subject.nil?
+
       authorize!("grades.read", @subject)
-      @grades = Schedules::GradeEntryRoster.for_subject(@subject.id)
+      @enrollments = @subject.enrollments.includes(:student, :assessments).to_a
+        .sort_by { |e| [ e.student.last_name, e.student.first_name ] }
     end
   end
 end

@@ -18,10 +18,10 @@
 
 | Campo | Valor |
 |---|---|
-| **Versión del documento** | `v1.13.0` |
+| **Versión del documento** | `v1.14.0` |
 | **Fecha** | 2026-07-14 |
-| **Tests** | 377 runs / 0 fallos / 1 skip preexistente (suite completa, en serie — ver Guardrails) |
-| **Estado en una línea** | Identidad real (login+MFA, invitaciones, gestión de personas, alta batch de estudiantes Y acudientes por CSV) + plano de control con track de billing completo S0→S4 + RBAC del inquilino real (P1 cerrado) + `Core::RosterImport` real para ambos kinds + `Core::Access::GuardianScope`/portales de persona + autoservicio de staff por identidad + visor de `audit_events` (RBAC-gated) — onboarding cerrado salvo #1.5 — + CHECKPOINT E cerrado (D1, staff generalizado) + **#4 (vistas de negocio) arranca: `teacher_management` es la implementación de referencia del molde de 5 esqueletos (§6.6), con los directorios `StaffRoster`/`TeacherRoster`/`DepartmentRoster` ya reales**. Próximo candidato: portar el molde a los seis dominios restantes de #4 (empezando por `core`), uno por slice. |
+| **Tests** | 387 runs / 0 fallos / 1 skip preexistente (suite completa, en serie — ver Guardrails) |
+| **Estado en una línea** | Identidad real (login+MFA, invitaciones, gestión de personas, alta batch de estudiantes Y acudientes por CSV) + plano de control con track de billing completo S0→S4 + RBAC del inquilino real (P1 cerrado) + `Core::RosterImport` real para ambos kinds + `Core::Access::GuardianScope`/portales de persona + autoservicio de staff por identidad + visor de `audit_events` (RBAC-gated) — onboarding cerrado salvo #1.5 — + CHECKPOINT E cerrado (D1, staff generalizado) + **#4 barrido: `teacher_management` (molde de referencia, v1.13.0) copiado a `group_management`, `schedules` (mitad de calificaciones) y `counseling` (sensible, con caso de seguridad dedicado) — los cuatro dominios cableables de #4 ya están reales**. Bloqueados-en-esquema (sin tabla real, no cableados): `cafeteria`, `transportation`, `finance` (real pero sin vista alguna), `schedules` (mitad de horario/timetable), `student_support` (disciplinary_logs/medical_history/accommodations — ninguno tiene tabla real). |
 
 ### Convención de versionado de ESTE documento
 
@@ -494,12 +494,28 @@ firma del método (no acepta término de búsqueda) y con aserciones sobre la vi
    5. Job recurrente para `Invitations::Expirer` y webhook real para `Invitations::BounceHandler` (opcional / según necesidad real de producción, no bloqueante — único remanente del track).
 2. ~~Cerrar CHECKPOINT E~~ (`staff_management` vs `human_resources`) — ✅ **cerrado (D1, v1.12.0)**, ver `HISTORIA.md`. Ya estaba resuelto en el esquema; este slice fue verificación + corrección de doc, sin migración.
 3. ~~Cablear la puerta de auth real (gate #2, RBAC)~~ — ✅ **P1 cerrado (v1.6.0)**, ver `HISTORIA.md`.
-4. **Vistas de negocio por dominio** — molde fijado (§6.6). ~~`teacher_management` (+ directorios
-   `StaffRoster`/`TeacherRoster`/`DepartmentRoster` de staff_management)~~ — ✅ **cerrado como
-   PRIMER dominio de #4 (slice 1, v1.13.0)**, la implementación de referencia. **Faltan, cada uno
-   copiando el molde de §6.6 (no reinventándolo), en un slice propio**: `core`, `student_support`,
-   `group_management`, `schedules`, `counseling`, `cafeteria`, `transportation` — todos siguen con su
-   catálogo de recursos en stub.
+4. **Vistas de negocio por dominio** — molde fijado (§6.6) en `teacher_management` (v1.13.0) y
+   **barrido a los dominios cableables (v1.14.0)**:
+   - ✅ **Cerrados (Clase A — modelos reales, molde aplicado)**: `teacher_management` +
+     `staff_management` (v1.13.0); `group_management` (`Section`/`Student`, con escritura real de
+     matrícula — `students.section_id` sí existe, a diferencia de `teacher.evaluate`); `schedules`
+     **mitad de calificaciones** (`Subject`/`Enrollment`/`Assessment`, con registro de nota real);
+     `counseling` (`Case`/`SessionNote`/`Referral`, carve-out sensible con caso de seguridad
+     dedicado — ver `HISTORIA.md`).
+   - 🔴 **Bloqueados-en-esquema (Clase C — sin tabla real, NO cablear sin un slice de modelado
+     aparte)**: `cafeteria` (solo `DietaryRestriction` es real; menú/checkout/saldo no tienen
+     ninguna tabla propia); `transportation` (cero modelos reales — ni siquiera parcial);
+     `schedules` **mitad de horario/timetable** (`rooms`/`meeting_patterns` no existen);
+     `student_support` — **corrección importante**: `disciplinary_logs`/`medical_history`/
+     `accommodations` NO tienen ninguna tabla real (a diferencia de lo que un recon superficial
+     asumiría por la presencia de query objects/rosters) — es Clase C igual que `transportation`,
+     no un carve-out "sensible pero cableable".
+   - **`finance`**: Clase A por modelos (`Charge`/`Payment`/`PaymentPlan`/`Installment`/
+     `StudentAccount` son reales), pero **sin ningún controller/ruta/vista** — a diferencia de los
+     demás, no hay stub que reemplazar, hay que construir desde cero. Diferido a su propio slice,
+     no por falta de esquema sino por alcance/forma distinta (ver `HISTORIA.md`).
+   - `core` no es candidato de #4 en sí — no tiene controllers propios; sus recursos de negocio
+     (`students`, etc.) ya viven en `group_management`.
 5. **Plano de control — pendientes del track de billing** (S0→S4 completo, ver §7):
    1. **S3b — emisión real por dominio**: cablear cada dominio medido para llamar `ControlPlane::Usage::Ingest` en su evento facturable real. **Requiere cerrar M1 primero** (unidad de metering por dominio). Slice transversal, tocará `app/domains/*` — mismo patrón de "una sola pieza" que S2b, no ramificar por dominio. Una vez cerrado, las líneas `usage_overage` del corte dejarán de dar cero — no hace falta tocar `PeriodCut` para eso, ya las suma correctamente.
    2. **Riel de pago** — fuera de alcance de v1. Finalizar una factura la congela; no la cobra ni la envía.
@@ -560,13 +576,30 @@ firma del método (no acepta término de búsqueda) y con aserciones sobre la vi
 - **El staff vive en UN SOLO hogar (`staff_management`), y el docente es una especialización, no un dominio aparte** (CHECKPOINT E, D1, v1.12.0) — `StaffManagement::StaffMember` es el empleo generalizado de TODO staff (`department_id` **nullable** para no-académicos); `TeacherManagement::Teacher` es su extensión docente vía `teachers.staff_member_id` (FK **nullable, aditiva** — el link puede faltar sin que el perfil base esté incompleto). `Core::Access::StaffProfileScope` ya resuelve a ambos por identidad, sin distinguir. Esto **ya estaba en el esquema desde el primer commit** — no inventar una migración de "generalizar staff" sin releer `HISTORIA.md` v1.12.0 primero. Los directorios `StaffRoster`/`TeacherRoster`/`DepartmentRoster` **ya son reales** desde v1.13.0 (ver abajo).
 - **El molde de vistas de negocio (#4) es `teacher_management` (los cinco esqueletos de §6.6, per-row `can?`); los demás dominios lo COPIAN, no lo reinventan** — un slice de #4 sobre `core`/`student_support`/`group_management`/`schedules`/`counseling`/`cafeteria`/`transportation` que introduce un query object de índice con una forma distinta a `TeacherScope`/`DepartmentScope`/`StaffScope` (institución explícita + per-row `can?` vía `.select`, nunca `default_scope`, nunca forzar `PermissionCheck#scope_for`) debe justificar por qué, no asumirlo por defecto.
 - **#4 es supervisión: RBAC + scope + `Navigation::Registry`; la contracara del autoservicio (identidad, `/mis_datos`) — no confundir las dos superficies para un mismo dominio.** Un índice que muestra a OTRAS personas dentro del alcance del actor SIEMPRE lleva `authorize!` y vive en el registry; uno que muestra "lo mío" nunca lleva `authorize!` y nunca vive ahí. `teacher_management`/`staff_management` ya tienen ambas superficies simultáneamente y son el ejemplo canónico de que no se pisan: `/mis_datos` (autoservicio) y `/teacher_management/*`+`/staff_management/staff` (supervisión) leen las MISMAS tablas por caminos de acceso completamente distintos.
+- **Triage A/B/C/S antes de cablear CUALQUIER dominio de #4** (barrido v1.14.0) — antes de aplicar el molde §6.6 a un dominio nuevo, verificar contra el disco (no contra la presencia de un query object/roster, que puede ser 100% stub) si sus tablas de negocio SON reales. `student_support` parecía cableable (tenía `queries/`/`services/` con nombres "reales") y resultó ser Clase C completo — cero migración para `disciplinary_logs`/`medical_history`/`accommodations` en todo el repo. **La señal real es `grep create_table` en `db/migrate/`, nunca la presencia de un archivo con nombre de query object.** Ver `CONCEPTOS_TECNICOS.md` para la taxonomía completa (A/B/C/S).
+- **Un dominio con modelos reales pero CERO vista/controller (`finance`) no es lo mismo que un stub a reemplazar** — cablearlo es construir desde cero (rutas, controller, nav), no swapear una fuente de datos. Tratarlo como su propio slice de alcance distinto, no como un ítem más del barrido de #4.
+- **`students.section_id`/`Schedules::Assessment` ya existían como target real** — a diferencia de `teacher.evaluate` (v1.13.0, sin modelo destino), la acción de matrícula de `group_management` y el registro de nota de `schedules` SÍ se cablearon como escritura real completa, no solo el gate. La regla general (BV6): cablear el gate siempre; el workflow completo SOLO si el modelo destino ya existe — verificarlo caso por caso, no asumir "gate-only" por defecto.
 
 ---
 
 ## 13. Changelog
 
-El changelog completo (`v1.0.0` → `v1.13.0`) vive en **`HISTORIA.md`**. Entrada de esta versión:
+El changelog completo (`v1.0.0` → `v1.14.0`) vive en **`HISTORIA.md`**. Entrada de esta versión:
 
+- **`v1.14.0` — #4 barrido: el molde aplicado a todos los dominios cableables.** Triage completo de
+  los 8 dominios candidatos (A/B/C/S). Cableados (Clase A, copiando el molde de `teacher_management`
+  literal): `group_management` (`Section`/`Student`, con escritura real de matrícula — el destino
+  `students.section_id` ya existía); `schedules` mitad de calificaciones (`Subject`/`Enrollment`/
+  `Assessment`, con registro de nota real); `counseling` (sensible, incluida a pedido explícito del
+  usuario con caso de seguridad dedicado: aislamiento cross-tenant verificado con query real bajo
+  RLS a nivel de MODELO, no solo HTTP). **Corrección de recon durante el barrido:** `student_support`
+  parecía candidato sensible cableable pero resultó Clase C completo — cero tabla real para
+  `disciplinary_logs`/`medical_history`/`accommodations` en todo `db/migrate/`, a pesar de tener
+  query objects/rosters con nombres "reales". `cafeteria`/`transportation` confirmados Clase C
+  (sin modelos reales de negocio). `finance` diferido (modelos reales pero cero vista/controller —
+  alcance distinto a un swap de stub). Ningún dominio Clase C recibió tabla/columna inventada; cero
+  migraciones en todo el slice. Narrativa completa, con el detalle de la corrección de
+  `student_support` y el caso de seguridad de `counseling`, en `HISTORIA.md`.
 - **`v1.13.0` — #4 slice 1: `teacher_management` como referencia canónica + directorios de staff
   reales.** Primer slice del backlog de vistas de negocio por dominio. Los cinco esqueletos de §6.5
   se probaron por primera vez contra datos reales (§6.6): `TeacherManagement::TeacherScope`/

@@ -2,7 +2,11 @@
 
 <%= render "shared/page_header",
       title: "Registrar calificación",
-      subtitle: "#{@subject.name} · #{@subject.group_name}" %>
+      subtitle: "#{@subject.name} · #{@subject.grade_level&.name || @subject.program&.name}" %>
+
+<% if @error -%>
+  <%= render "shared/alert", variant: :danger, message: @error %>
+<% end -%>
 
 <%= form_with url: schedules_subject_grade_entries_path(@subject), method: :post do %>
   <%= render "shared/field", label: "Estudiante", name: "student_id",

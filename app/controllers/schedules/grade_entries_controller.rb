@@ -5,19 +5,34 @@ module Schedules
       authorize!("grades.write", @subject)
     end
 
+    # #4 barrido: unlike teacher.evaluate (no Evaluation model exists),
+    # Schedules::Assessment already exists — so this persists for real
+    # instead of staying gate-only.
     def create
       @subject = find_subject
       authorize!("grades.write", @subject)
 
-      # STUB: no persistence yet. TODO: reemplazar por Schedules::Assessment real.
-      flash[:notice] = "Calificación registrada (stub) para #{@subject.name}."
-      redirect_to schedules_subject_path(@subject.id)
+      student = GroupManagement::Student.find_by(institution_id: Current.institution_id, student_code: params[:student_id])
+      if student.nil?
+        @error = "No se encontró un estudiante con ese código en tu institución."
+        return render :new, status: :unprocessable_entity
+      end
+
+      enrollment = Schedules::Enrollment.find_or_create_by!(institution: Current.institution, student: student,
+        subject: @subject) { |e| e.term = @subject.term }
+      enrollment.assessments.create!(institution: Current.institution, kind: "parcial",
+        title: params[:title], term: @subject.term, score: params[:score])
+
+      redirect_to schedules_subject_path(@subject.id), notice: "Calificación registrada."
     end
 
     private
 
     def find_subject
-      Schedules::SubjectRoster.find(params[:subject_id]) or raise ActiveRecord::RecordNotFound
+      subject = Schedules::Subject.find_by(institution_id: Current.institution_id, id: params[:subject_id])
+      raise ActiveRecord::RecordNotFound if subject.nil?
+
+      subject
     end
   end
 end
