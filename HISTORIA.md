@@ -11,11 +11,118 @@
 
 ---
 
-## Changelog completo (v1.0.0 → v1.12.0)
+## Changelog completo (v1.0.0 → v1.13.0)
 
 > Copiado verbatim de §14 de `PROJECT_STATE.md` v1.5.0, antes de que el split editorial (v1.5.1)
 > moviera el changelog fuera del doc magro. Las entradas v1.6.0+ se escribieron directamente aquí,
 > ya con el split vigente.
+
+### v1.13.0 — 2026-07-14 — #4 slice 1: `teacher_management` como referencia canónica + directorios de staff
+
+**Primer slice del backlog #4** (vistas de negocio por dominio, dominio por dominio). El objetivo no
+era "terminar `teacher_management`" — era **probar el molde de los cinco esqueletos (§6.5/§6.6) UNA
+vez**, sobre el único dominio donde el descriptor de scope ya era real (P1, el caso de María), para
+que los otros seis dominios lo copien después. De paso, cablea los directorios
+`StaffManagement::StaffRoster`/`TeacherManagement::TeacherRoster`/`DepartmentRoster` que CHECKPOINT
+E (v1.12.0) dejó model-ready pero con la vista en stub.
+
+**Recon: hallazgos reales:**
+- El caso de María (§6.4) ya era real a nivel de `authorize!`/`role_assignments` desde P1
+  (`test/integration/teacher_management_test.rb`), pero corría enteramente contra los rosters en
+  memoria (`TeacherManagement::TeacherRoster`/`DepartmentRoster`, ids fijos tipo `"t-1"` y UUIDs
+  hardcodeados) — nunca contra una fila real de `teachers`/`departments`.
+- `TeacherManagement::TeacherScope`/`DepartmentScope` ya tenían la FORMA correcta (per-row `can?`
+  vía `.select`, sin `default_scope`) — solo la fuente de datos era stub. No hubo que rediseñar el
+  patrón, solo cambiar qué relation resuelven.
+- **`teacher.evaluate` no tiene modelo destino** — `TeacherEvaluationsController#create` seguía
+  siendo un `flash` sin persistencia (confirmado, ningún `TeacherManagement::Evaluation` existe).
+  Por BV6, este slice solo cablea el GATE real (per-row, sobre un `Teacher` real) — construir el
+  CRUD de evaluación es follow-up explícito, no parte de #4 slice 1.
+- Todos los permisos necesarios (`teachers.view`, `teacher.evaluate`, `departments.view`,
+  `staff.read`) ya estaban en `IdentityAccess::SeedPermissions::CATALOG` desde antes — cero permisos
+  nuevos.
+- `StaffManagement::StaffController#index` corría con `authorize!("staff.read")` **sin ningún
+  Query object** — "nada especificado para scopear", según su propio comentario. Este slice le dio
+  el mismo tratamiento per-row que `teacher_management` (`StaffManagement::StaffScope`, nuevo).
+
+**El descriptor de scope real, cableado esta vez de punta a punta:**
+- `TeacherManagement::Teacher#department_id`/`#status` — `delegate ... to: :staff_member,
+  allow_nil: true`. Un `Teacher` sin `staff_member_id` poblado (la transición aditiva de D1) nunca
+  matchea un grant scoped a departamento — comportamiento correcto (no vinculado ⇒ fuera de
+  cualquier alcance de supervisión todavía), no un bug, y se dejó un test unitario que lo prueba
+  explícitamente.
+- `StaffManagement::Department#department_id` — método que aliasa `id` (mismo truco que el `Row`
+  del roster retirado usaba, ahora sobre el modelo real) — es lo que
+  `Authorization::Assignment::SCOPE_READERS` necesita para decidir si un departamento cae dentro
+  del alcance de un `area_lead`.
+- `StaffManagement::StaffMember#name` — un método de una línea (`institution_user.user.name`); el
+  nombre de la persona vive en `Core::User`, nunca duplicado en `staff_members`.
+- `TeacherManagement::Teacher#subjects` — real, vía `teaching_assignments -> Schedules::Subject`
+  (FK cross-dominio ya existente, no inventada).
+
+**Lo que NO se inventó (fiel a los datos reales, no a la forma del stub retirado):** el show de un
+docente tenía "Cualificaciones" (array) y un stat de "grupos asignados" en el stub — ninguno de los
+dos tiene columna/asociación real (no existe ningún vínculo docente↔grupo en el esquema, el mismo
+hallazgo ya documentado desde el autoservicio de staff en v1.10.0). Se **retiraron** ambos del show
+real en vez de fabricar un valor; el stat de "materias asignadas" (real, vía `subjects`) ocupa el
+lugar del de grupos.
+
+**Bug encontrado en la verificación (no en el código de este slice, en un test viejo):**
+`test/integration/transportation_test.rb` tenía dos tests que aserteaban contra el nombre
+hardcodeado del `StaffRoster` retirado (`"Rosa Elena Duarte"`), colgados ahí desde el commit
+original que cerró el nav huérfano de `staff_management` (`7de5891`, muy anterior a este slice y a
+CHECKPOINT E). Al volverse real el directorio, esos dos tests fallaron — correctamente, porque esa
+persona nunca existió en ninguna tabla real. Se retiraron (la cobertura real y mejor de
+`staff_management` ya vive en `test/integration/staff_directory_test.rb`, con datos sembrados de
+verdad e institución propia).
+
+**Caso de aceptación de María, ahora contra vistas reales:** índice de `teacher_management` para
+María (`area_lead` de Matemáticas) muestra a su colega de Matemáticas, nunca a la docente de
+Sociales; `evaluate` da 200 sobre el colega de Matemáticas y 403 sobre la de Sociales, con `can?`
+reflejando lo mismo en el botón "Nueva evaluación"; un `secretary` de solo lectura ve el estado sin
+el botón. Un docente SIN `area_lead` (solo `teachers.view` scoped a su propio grupo) llega al índice
+(la puerta de capacidad pasa) pero lo ve **vacío** — ningún `Teacher` responde a `:group_id`, así que
+el filtro per-row excluye a todos: ni 403 ni 500, la ausencia real del vínculo docente↔grupo se
+manifiesta como "no superviso a nadie", no como un error. `StaffManagement::StaffScope`: un
+`institution_admin` institución-wide ve TODO el staff (docente, cocina, y el que no tiene
+departamento asignado); un `area_lead` scoped a Matemáticas ve solo su propio departamento — nunca
+cafetería, nunca el staff sin asignar (`department_id` nulo nunca matchea un scope de departamento
+específico, solo uno institución-wide). Aislamiento cross-tenant verificado con datos reales
+sembrados en una segunda institución bajo su propio GUC, nunca visibles desde la primera.
+
+**Resultado:** 377 runs / 1350 assertions / 0 failures / 0 errors / 1 skip preexistente (baseline
+369; +8 netos: teacher_management_test.rb pasó de 8 a 12 casos, +4 nuevos en
+staff_directory_test.rb, +4 nuevos en teacher_scope_test.rb —unitario, la referencia limpia que los
+próximos seis dominios pueden copiar—, -2 retirados de transportation_test.rb). `bin/rails
+zeitwerk:check` verde. Sin migraciones.
+
+**Archivos retirados** (reemplazados por lo real, cero referencias remanentes verificadas antes de
+borrar): `app/domains/teacher_management/services/{teacher_roster,department_roster}.rb`,
+`app/domains/staff_management/services/staff_roster.rb`.
+
+**Archivos nuevos/editados por rol:**
+- Query objects: `teacher_management/queries/{teacher_scope,department_scope}.rb` (reescritos),
+  `staff_management/queries/staff_scope.rb` (nuevo).
+- Modelos: `teacher_management/models/teacher.rb` (+`department`/`department_id`/`status`
+  delegados, +`subjects`), `staff_management/models/department.rb` (+`department_id`),
+  `staff_management/models/staff_member.rb` (+`name`).
+- Controllers: `teachers_controller.rb`, `departments_controller.rb`,
+  `teacher_evaluations_controller.rb`, `staff_management/staff_controller.rb` — todos ahora contra
+  modelos reales.
+- Vistas: `teachers/{index,show}`, `departments/{index,show}`, `teacher_evaluations/new`,
+  `staff_management/staff/index` — todas ajustadas a la forma real de los modelos (sin
+  "cualificaciones"/"grupos asignados" fabricados).
+- Helper: `teacher_management_helper.rb` (`teacher_status_badge` nil-safe para un docente sin
+  vincular).
+- Tests: `test/integration/teacher_management_test.rb` (reescrito con datos reales, +4 casos),
+  `test/integration/staff_directory_test.rb` (nuevo), `test/models/teacher_management/
+  teacher_scope_test.rb` (nuevo, unitario), `test/integration/transportation_test.rb` (-2 tests
+  obsoletos).
+
+**Lección durable para los seis dominios que siguen en #4:** el molde de §6.6 no es "elegí un query
+object cualquiera" — es específicamente per-row `can?` sobre una relation real con `institution_id`
+explícito, sin `default_scope`, sin forzar `scope_for`. Copiarlo literalmente (cambiando el modelo y
+el permiso, no la forma) es el punto de este slice.
 
 ### v1.12.0 — 2026-07-14 — CHECKPOINT E cerrado (D1): staff generalizado, docente como especialización
 

@@ -12,5 +12,12 @@ module StaffManagement
             foreign_key: :staff_member_id, inverse_of: :staff_member, dependent: :nullify
 
     validates :employee_number, :staff_category, :employment_type, :status, presence: true
+
+    # The person's display name lives on Core::User (institution_users has no
+    # name column of its own) — one hop through the required institution_user
+    # association, never duplicated onto this row.
+    def name
+      institution_user.user.name
+    end
   end
 end

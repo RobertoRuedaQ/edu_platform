@@ -14,15 +14,22 @@ module TeacherManagement
       @teacher = find_teacher
       authorize!("teacher.evaluate", @teacher)
 
-      # STUB: no persistence yet. TODO: reemplazar por TeacherManagement::Evaluation real.
-      flash[:notice] = "Evaluación registrada (stub) para #{@teacher.name}."
+      # BV6 (#4 slice 1): no TeacherManagement::Evaluation model exists yet,
+      # so there is nothing real to persist here — this slice's job was the
+      # GATE (authorize! + can?, now over a real Teacher/department_id, not
+      # the stub), not a new evaluation workflow. Building the real model is
+      # follow-up, not invented here.
+      flash[:notice] = "Evaluación registrada (stub) para #{@teacher.first_name} #{@teacher.last_name}."
       redirect_to teacher_management_teacher_path(@teacher.id)
     end
 
     private
 
     def find_teacher
-      TeacherManagement::TeacherRoster.find(params[:teacher_id]) or raise ActiveRecord::RecordNotFound
+      teacher = TeacherManagement::Teacher.find_by(institution_id: Current.institution_id, id: params[:teacher_id])
+      raise ActiveRecord::RecordNotFound if teacher.nil?
+
+      teacher
     end
   end
 end

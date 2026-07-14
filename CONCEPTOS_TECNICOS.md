@@ -213,6 +213,64 @@ Claves tipo `teacher.evaluate`, `roles.manage`, `people.manage` en vez de roles 
 Permite separar capacidades que en la vida real son de personas distintas (un registrador puede
 invitar personas sin poder otorgar rol de admin).
 
+**Supervisión (RBAC + scope) vs. autoservicio (identidad) — la frontera que separa TODA vista de
+una persona.**
+*Qué es.* Dos superficies de lectura que pueden mostrar EXACTAMENTE las mismas tablas pero por
+caminos de acceso opuestos, y nunca se mezclan. **Autoservicio** ("mis datos", `/mis_datos`, los
+portales de estudiante/acudiente) muestra lo que el actor **posee o le pertenece** — se resuelve por
+identidad (un `Core::Access::*Scope` explícito ES la puerta; ver el concepto de scope de identidad,
+arriba), **nunca** pasa por `authorize!`, y **nunca** vive en `Navigation::Registry`. **Supervisión**
+(`teacher_management`, `staff_management`, y los seis dominios de negocio que vienen) muestra a
+**otras personas** dentro del alcance RBAC del actor — SIEMPRE pasa por `authorize!` + el scope del
+`role_assignment` vigente, y SIEMPRE vive en el registry (filtrado por `can?`).
+*Por qué son dos mecanismos, no uno con un parámetro.* Mezclarlos invierte el fail-closed: un
+autoservicio gateado por permiso dejaría a un staff con cero `RolePermission` (normal, ver
+`Core::Access::StaffProfileScope`) sin ver ni su propio perfil. Una supervisión gateada solo por
+identidad dejaría a cualquiera ver a cualquiera, porque "soy yo" no es una pregunta de alcance sobre
+terceros.
+*Ejemplo canónico de que conviven sin pisarse.* `teacher_management`/`staff_management` desde
+v1.13.0: `/mis_datos` lee `StaffManagement::StaffMember`/`Department` por identidad (self-scope, sin
+`authorize!`); `/teacher_management/teachers` y `/staff_management/staff` leen las MISMAS tablas por
+RBAC + scope (`TeacherScope`/`StaffScope`, con `authorize!` al inicio). Ningún dato nuevo, ningún
+modelo nuevo — solo dos query objects distintos sobre el mismo dato, cada uno con su propia puerta.
+*Invariante.* Si una vista de autoservicio muestra a alguien que no es el actor, se salió del
+autoservicio (es supervisión, backlog #4). Si una vista de supervisión no tiene `authorize!` al
+inicio de la acción, es un bug, no una superficie de identidad disfrazada.
+📍 `app/controllers/self_service_controller.rb` (autoservicio) vs.
+`app/controllers/teacher_management/teachers_controller.rb` +
+`app/controllers/staff_management/staff_controller.rb` (supervisión).
+
+**Molde de vista de negocio por dominio (#4, PROJECT_STATE.md §6.6): índice-con-scope → show →
+acción gateada per-row.**
+*Qué es.* La forma concreta y ya construida (no solo teórica) de los cinco esqueletos de §6.5,
+fijada la PRIMERA vez sobre `teacher_management` para que los otros seis dominios de #4 la copien
+sin reinventarla: (1) un query object de índice — relation real filtrada por `institution_id`
+explícito + `context.can?(permiso, fila)` fila por fila vía `.select`, nunca `default_scope`; (2)
+un controller con `authorize!(permiso[, recurso])` al inicio de CADA acción — la puerta dura; (3)
+`can?` solo cosmético en la vista (mostrar/ocultar un botón, nunca proteger); (4) pestañas de un
+`show` gateadas por permiso cuando aplica (la pestaña se muestra, la ACCIÓN dentro se oculta); (5)
+auto-registro de la entrada de nav en un archivo propio del dominio (`config/navigation/<dominio>.rb`),
+nunca editando un partial central.
+*Por qué per-row `can?` y no `PermissionCheck#scope_for`.* Ambos son equivalentes (§6.3) —
+`scope_for` existe como un seam para que un dominio lo adopte si quiere evitar cargar cada fila, pero
+ningún dominio lo consume todavía. Este molde fija per-row como el "aburrido" a copiar
+precisamente porque YA estaba probado (`TeacherScope` original, contra el stub) — cambiar de patrón
+Y de fuente de datos en el mismo slice habría sido dos riesgos a la vez.
+*Dónde se prueba primero y por qué.* `teacher_management` es el ÚNICO dominio con descriptor de
+scope real desde P1 (el caso de aceptación de María, §6.4) — probar el molde donde lo difícil
+(el scope real) ya funciona, antes de portarlo a dominios cuyo catálogo de recursos sigue en stub.
+*Invariantes.* (1) El resource pasado a `can?`/`authorize!` debe responder a los lectores de
+`Authorization::Assignment::SCOPE_READERS` (`department_id`/`group_id`/`grade_level_id`/`route_id`)
+— si el dato real no tiene esa columna, se expone vía `delegate ... allow_nil: true` a quien sí la
+tenga (nunca se inventa una columna nueva). (2) Un recurso "no vinculado" (nil en el delegate) nunca
+matchea un scope específico — solo un grant institución-wide lo cubre; es un estado normal, no un
+error. (3) Una acción sin modelo destino real (p. ej. `teacher.evaluate` sin `Evaluation`) se cablea
+como GATE real primero — el workflow/CRUD es un slice aparte, nunca se bloquea el gate esperando el
+modelo.
+📍 `app/domains/teacher_management/queries/{teacher_scope,department_scope}.rb`,
+`app/domains/staff_management/queries/staff_scope.rb`,
+`app/controllers/teacher_management/*`, `config/navigation/{teacher_management,staff_management}.rb`.
+
 **Staff generalizado / docente como especialización (D1, no D2).**
 *Qué es.* Un solo hogar de datos para TODO el personal (`StaffManagement::StaffMember`: empleo,
 número de empleado, categoría, departamento, tipo de vinculación), y el docente NO es un dominio

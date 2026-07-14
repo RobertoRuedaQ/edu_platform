@@ -1,8 +1,9 @@
-<% content_for :title, "Evaluar a #{@teacher.name}" %>
+<% teacher_name = "#{@teacher.first_name} #{@teacher.last_name}" -%>
+<% content_for :title, "Evaluar a #{teacher_name}" %>
 
 <%= render "shared/page_header",
-      title: "Evaluar a #{@teacher.name}",
-      subtitle: @teacher.department_name %>
+      title: "Evaluar a #{teacher_name}",
+      subtitle: @teacher.department&.name %>
 
 <%= render "shared/alert",
       variant: :info,

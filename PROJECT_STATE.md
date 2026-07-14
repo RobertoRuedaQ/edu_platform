@@ -18,10 +18,10 @@
 
 | Campo | Valor |
 |---|---|
-| **Versión del documento** | `v1.12.0` |
+| **Versión del documento** | `v1.13.0` |
 | **Fecha** | 2026-07-14 |
-| **Tests** | 369 runs / 0 fallos / 1 skip preexistente (suite completa, en serie — ver Guardrails) |
-| **Estado en una línea** | Identidad real (login+MFA, invitaciones, gestión de personas, alta batch de estudiantes Y acudientes por CSV) + plano de control con track de billing completo S0→S4 + RBAC del inquilino real (P1 cerrado) + `Core::RosterImport` real para ambos kinds + `Core::Access::GuardianScope`/portales de persona + autoservicio de staff sobre datos reales por identidad + visor de `audit_events` + bandeja de discrepancias (RBAC-gated) — onboarding cerrado salvo #1.5 — + **CHECKPOINT E cerrado (D1): el staff generalizado ya existía en el esquema desde el primer commit (`StaffManagement::StaffMember` + `TeacherManagement::Teacher` vía FK nullable), solo faltaba la verificación y la corrección de este documento**. Próximo candidato: vistas de negocio por dominio (#4) — a decidir. |
+| **Tests** | 377 runs / 0 fallos / 1 skip preexistente (suite completa, en serie — ver Guardrails) |
+| **Estado en una línea** | Identidad real (login+MFA, invitaciones, gestión de personas, alta batch de estudiantes Y acudientes por CSV) + plano de control con track de billing completo S0→S4 + RBAC del inquilino real (P1 cerrado) + `Core::RosterImport` real para ambos kinds + `Core::Access::GuardianScope`/portales de persona + autoservicio de staff por identidad + visor de `audit_events` (RBAC-gated) — onboarding cerrado salvo #1.5 — + CHECKPOINT E cerrado (D1, staff generalizado) + **#4 (vistas de negocio) arranca: `teacher_management` es la implementación de referencia del molde de 5 esqueletos (§6.6), con los directorios `StaffRoster`/`TeacherRoster`/`DepartmentRoster` ya reales**. Próximo candidato: portar el molde a los seis dominios restantes de #4 (empezando por `core`), uno por slice. |
 
 ### Convención de versionado de ESTE documento
 
@@ -256,19 +256,55 @@ la acción llegue a `authorize!`. Ver §7.1 para el detalle del mecanismo.
 
 La matriz completa rol×dominio vive en `HISTORIA.md` (referencia estable, no cambia seguido).
 Caso de aceptación que la valida end-to-end: `teacher_management`, **real desde P1** (antes probado
-solo contra la persona stub). María = `(teacher, group:10-A)`, `(teacher, group:11-B)`,
-`(area_lead, department:Matemáticas)`, sembrada como `role_assignments` reales.
-`authorize! teacher.evaluate` = **sí** sobre un docente de Matemáticas, **no** sobre uno de
-Sociales; y no ve al resto de la institución. El descriptor de scope (recurso expone
-`department_id`/`group_id`) solo se cableó de verdad en `teacher_management` — el resto de dominios
-sigue con su catálogo de recursos en stub (backlog #4), aunque ahora las ASIGNACIONES que los
-autorizan ya son reales en todos los dominios probados (ver `HISTORIA.md` v1.6.0).
+solo contra la persona stub) y **desde v1.13.0 real también contra las VISTAS** (índice/show/acción,
+no solo el `authorize!` unitario — ver §6.6). María = `(teacher, group:10-A)`, `(teacher,
+group:11-B)`, `(area_lead, department:Matemáticas)`, sembrada como `role_assignments` reales, contra
+un `TeacherManagement::Teacher`/`StaffManagement::Department` reales (ya no la ex-`TeacherRoster`/
+`DepartmentRoster` en memoria). `authorize! teacher.evaluate` = **sí** sobre un docente de
+Matemáticas, **no** sobre uno de Sociales; y no ve al resto de la institución. El descriptor de
+scope (recurso expone `department_id` vía `Teacher#department_id` delegado a
+`StaffManagement::StaffMember`, y `Department#department_id` aliasa `id`) solo se cableó de verdad
+en `teacher_management` — el resto de dominios sigue con su catálogo de recursos en stub (backlog
+#4), aunque ahora las ASIGNACIONES que los autorizan ya son reales en todos los dominios probados
+(ver `HISTORIA.md` v1.6.0).
 
 ### 6.5 Patrones canónicos (la "convención de la casa")
 
 Cinco esqueletos que hacen converger a todos los dominios: (1) Query object de índice con scope,
 (2) controlador con `authorize!` al inicio, (3) gating con `can?` en vista, (4) pestañas gateadas por
 permiso, (5) auto-registro de navegación en archivo propio del dominio (no editar un partial central).
+
+### 6.6 Molde de vista de negocio por dominio — implementación de referencia: `teacher_management`
+
+**#4 (vistas de negocio por dominio) arranca aquí (v1.13.0, slice 1).** Los cinco esqueletos de §6.5
+dejaron de ser solo un principio: `teacher_management` es ahora su **implementación real de
+referencia**, contra la que los seis dominios restantes (`core`, `student_support`,
+`group_management`, `schedules`, `counseling`, `cafeteria`, `transportation`) se copian en slices
+posteriores — no se reinventan.
+
+- **Esqueleto #1 (query object)**: `TeacherManagement::TeacherScope`/`DepartmentScope`,
+  `StaffManagement::StaffScope` — relation real + `institution_id` explícito + **per-row `can?`**
+  vía `.select`, nunca `default_scope`, nunca `PermissionCheck#scope_for` (§6.3: ambos son
+  equivalentes; per-row es el que este molde fija como el "aburrido" a copiar).
+- **Esqueleto #2/#3** (`authorize!`/`can?`): `TeachersController`/`DepartmentsController`/
+  `StaffController`/`TeacherEvaluationsController` — puerta dura al inicio de cada acción, `can?`
+  solo cosmético en la vista (botón "Nueva evaluación").
+- **Esqueleto #4** (pestañas gateadas): `teachers/show` — tabs "Perfil"/"Evaluaciones", la acción
+  dentro de una pestaña se oculta con `can?`, nunca la pestaña misma (un `secretary` de solo lectura
+  sigue viendo el estado de evaluaciones, solo no el botón de crear una).
+  **Esqueleto #5** (auto-registro de nav): `config/navigation/{teacher_management,
+  staff_management}.rb` — ya existía desde antes de #4, sin cambios.
+- **Es supervisión, NO autoservicio** (frontera dura — ver `CONCEPTOS_TECNICOS.md`): estas vistas
+  muestran a OTRAS personas dentro del alcance del actor; se gatean por RBAC + scope y viven en
+  `Navigation::Registry`. La contracara exacta de `/mis_datos` (v1.10.0, identity-gated, sin
+  `authorize!`, fuera del registry) — no confundir las dos superficies para un mismo dominio.
+- **`evaluate` sin modelo destino (BV6)**: no existe `TeacherManagement::Evaluation` — este slice
+  cableó el GATE real (per-row, sobre un `Teacher` real) y la afordancia en vista; el `create` sigue
+  siendo un stub sin persistencia (`flash` únicamente). Construir el modelo de evaluación real es
+  follow-up, no parte de #4 slice 1.
+- **Sin migraciones** — el descriptor de scope real (`staff_members.department_id`,
+  `teachers.staff_member_id`) ya existía desde CHECKPOINT E (v1.12.0); este slice solo leyó contra
+  él en vez de contra los rosters en memoria.
 
 ---
 
@@ -458,7 +494,12 @@ firma del método (no acepta término de búsqueda) y con aserciones sobre la vi
    5. Job recurrente para `Invitations::Expirer` y webhook real para `Invitations::BounceHandler` (opcional / según necesidad real de producción, no bloqueante — único remanente del track).
 2. ~~Cerrar CHECKPOINT E~~ (`staff_management` vs `human_resources`) — ✅ **cerrado (D1, v1.12.0)**, ver `HISTORIA.md`. Ya estaba resuelto en el esquema; este slice fue verificación + corrección de doc, sin migración.
 3. ~~Cablear la puerta de auth real (gate #2, RBAC)~~ — ✅ **P1 cerrado (v1.6.0)**, ver `HISTORIA.md`.
-4. **Vistas de negocio por dominio** que aún estén en stub → conectarlas a modelos reales, dominio por dominio (empezando por `core` y `teacher_management` con el caso de aceptación de §6.4). El descriptor de scope de P1 solo se cableó de verdad en `teacher_management`; el resto de dominios (student_support, group_management, schedules, counseling, cafeteria, transportation) sigue con su catálogo de recursos en stub y se adopta aquí, incrementalmente, dominio por dominio. Incluye `StaffManagement::StaffRoster`/`TeacherManagement::TeacherRoster`/`DepartmentRoster` (directorios "Personal"/"Docentes", CHECKPOINT E dejó el modelo real listo en v1.12.0 pero las vistas siguen en stub — deliberadamente fuera de ese slice).
+4. **Vistas de negocio por dominio** — molde fijado (§6.6). ~~`teacher_management` (+ directorios
+   `StaffRoster`/`TeacherRoster`/`DepartmentRoster` de staff_management)~~ — ✅ **cerrado como
+   PRIMER dominio de #4 (slice 1, v1.13.0)**, la implementación de referencia. **Faltan, cada uno
+   copiando el molde de §6.6 (no reinventándolo), en un slice propio**: `core`, `student_support`,
+   `group_management`, `schedules`, `counseling`, `cafeteria`, `transportation` — todos siguen con su
+   catálogo de recursos en stub.
 5. **Plano de control — pendientes del track de billing** (S0→S4 completo, ver §7):
    1. **S3b — emisión real por dominio**: cablear cada dominio medido para llamar `ControlPlane::Usage::Ingest` en su evento facturable real. **Requiere cerrar M1 primero** (unidad de metering por dominio). Slice transversal, tocará `app/domains/*` — mismo patrón de "una sola pieza" que S2b, no ramificar por dominio. Una vez cerrado, las líneas `usage_overage` del corte dejarán de dar cero — no hace falta tocar `PeriodCut` para eso, ya las suma correctamente.
    2. **Riel de pago** — fuera de alcance de v1. Finalizar una factura la congela; no la cobra ni la envía.
@@ -516,14 +557,30 @@ firma del método (no acepta término de búsqueda) y con aserciones sobre la vi
 - **El filtro de término activo es real solo donde el FK existe** — `role_assignments.effective_now` (P1) y cualquier futuro dato de `schedules` una vez tenga tabla real, **sí** filtran por término. Grupos/matrícula (`enrollments.term`, sin FK a `academic_terms`) **no** — término ahí es solo etiqueta descriptiva (salvedad B2 vigente). `schedules` en general no tiene ninguna tabla real todavía (ni parcial) — cualquier tile que lo use hoy es necesariamente vista previa sobre el stub existente, marcada como tal, nunca presentada como dato real.
 - **El visor de auditoría se gatea por RBAC (`authorize!`), a diferencia de las superficies self-service — y `audit_events` es append-only: ninguna vista lo muta.** Un futuro "marcar atendida" (si se construye) **es un evento nuevo append** (`Audit.log` de, p. ej., `discrepancy_acknowledged`) con estado **derivado** de su presencia — nunca un `UPDATE` sobre la fila original (la BD ya lo impediría: `REVOKE UPDATE, DELETE ON audit_events FROM edu_app_runtime`).
 - **Los filtros del visor de auditoría nunca son un directorio de estudiantes** — actor/acción/fecha sobre metadata, con acción tomada de un **conjunto conocido** (`IdentityAccess::AuditEventIndex::ACTIONS`), jamás texto libre ni autocompletado de personas (Habeas Data, mismo invariante que `GuardianScope`). El filtro de actor sí lista al STAFF de la propia institución (no son menores; es la misma superficie ya visible en "Personas").
-- **El staff vive en UN SOLO hogar (`staff_management`), y el docente es una especialización, no un dominio aparte** (CHECKPOINT E, D1, v1.12.0) — `StaffManagement::StaffMember` es el empleo generalizado de TODO staff (`department_id` **nullable** para no-académicos); `TeacherManagement::Teacher` es su extensión docente vía `teachers.staff_member_id` (FK **nullable, aditiva** — el link puede faltar sin que el perfil base esté incompleto). `Core::Access::StaffProfileScope` ya resuelve a ambos por identidad, sin distinguir. Esto **ya estaba en el esquema desde el primer commit** — no inventar una migración de "generalizar staff" sin releer `HISTORIA.md` v1.12.0 primero; lo que falta (directorios `StaffRoster`/`TeacherRoster` reales) es backlog #4, no un borde de arquitectura.
+- **El staff vive en UN SOLO hogar (`staff_management`), y el docente es una especialización, no un dominio aparte** (CHECKPOINT E, D1, v1.12.0) — `StaffManagement::StaffMember` es el empleo generalizado de TODO staff (`department_id` **nullable** para no-académicos); `TeacherManagement::Teacher` es su extensión docente vía `teachers.staff_member_id` (FK **nullable, aditiva** — el link puede faltar sin que el perfil base esté incompleto). `Core::Access::StaffProfileScope` ya resuelve a ambos por identidad, sin distinguir. Esto **ya estaba en el esquema desde el primer commit** — no inventar una migración de "generalizar staff" sin releer `HISTORIA.md` v1.12.0 primero. Los directorios `StaffRoster`/`TeacherRoster`/`DepartmentRoster` **ya son reales** desde v1.13.0 (ver abajo).
+- **El molde de vistas de negocio (#4) es `teacher_management` (los cinco esqueletos de §6.6, per-row `can?`); los demás dominios lo COPIAN, no lo reinventan** — un slice de #4 sobre `core`/`student_support`/`group_management`/`schedules`/`counseling`/`cafeteria`/`transportation` que introduce un query object de índice con una forma distinta a `TeacherScope`/`DepartmentScope`/`StaffScope` (institución explícita + per-row `can?` vía `.select`, nunca `default_scope`, nunca forzar `PermissionCheck#scope_for`) debe justificar por qué, no asumirlo por defecto.
+- **#4 es supervisión: RBAC + scope + `Navigation::Registry`; la contracara del autoservicio (identidad, `/mis_datos`) — no confundir las dos superficies para un mismo dominio.** Un índice que muestra a OTRAS personas dentro del alcance del actor SIEMPRE lleva `authorize!` y vive en el registry; uno que muestra "lo mío" nunca lleva `authorize!` y nunca vive ahí. `teacher_management`/`staff_management` ya tienen ambas superficies simultáneamente y son el ejemplo canónico de que no se pisan: `/mis_datos` (autoservicio) y `/teacher_management/*`+`/staff_management/staff` (supervisión) leen las MISMAS tablas por caminos de acceso completamente distintos.
 
 ---
 
 ## 13. Changelog
 
-El changelog completo (`v1.0.0` → `v1.12.0`) vive en **`HISTORIA.md`**. Entrada de esta versión:
+El changelog completo (`v1.0.0` → `v1.13.0`) vive en **`HISTORIA.md`**. Entrada de esta versión:
 
+- **`v1.13.0` — #4 slice 1: `teacher_management` como referencia canónica + directorios de staff
+  reales.** Primer slice del backlog de vistas de negocio por dominio. Los cinco esqueletos de §6.5
+  se probaron por primera vez contra datos reales (§6.6): `TeacherManagement::TeacherScope`/
+  `DepartmentScope` y la nueva `StaffManagement::StaffScope` leen `Teacher`/`Department`/
+  `StaffMember` reales con el mismo patrón per-row `can?` que ya tenían (nunca `default_scope`,
+  nunca forzar `PermissionCheck#scope_for`). `Teacher#department_id`/`#status` delegan a
+  `staff_member` (nil-safe — un docente sin vincular no es un error); `Department#department_id`
+  aliasa `id` para el descriptor de scope. Se retiraron los tres rosters en memoria
+  (`TeacherRoster`, `DepartmentRoster`, `StaffRoster`) que CHECKPOINT E (v1.12.0) había dejado
+  model-ready pero sin consumidor real. `teacher.evaluate` sigue sin modelo de evaluación real
+  (BV6) — el slice cableó el GATE per-row sobre un `Teacher` real, no un CRUD nuevo. El caso de
+  María (§6.4) se extendió contra las vistas reales (índice/show/acción), no solo el `authorize!`
+  unitario. Sin migraciones. Narrativa completa, con el hallazgo de un test de `transportation_test.rb`
+  que dependía de la fixture hardcodeada del stub retirado, en `HISTORIA.md`.
 - **`v1.12.0` — CHECKPOINT E cerrado (D1): staff generalizado, docente como especialización.**
   Recon reveló que la generalización pedida ya existía en el esquema desde el primer commit del
   repo (`637a998`, previo al track de onboarding): `StaffManagement::StaffMember` (empleo de TODO

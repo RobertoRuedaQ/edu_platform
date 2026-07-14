@@ -108,9 +108,9 @@ class ActionDispatch::IntegrationTest
   # FK at all"), so a scoped grant needs the referenced row to actually
   # exist. Each test runs inside its own rolled-back transaction (Rails'
   # transactional fixtures), so reusing the SAME fixed scope_id constant
-  # (e.g. TeacherManagement::DepartmentRoster::MATEMATICAS_ID) across many
-  # unrelated test institutions is safe — nothing persists between tests to
-  # collide on that id.
+  # (e.g. GroupManagement::GroupRoster::SECTION_10A_ID, still stub as of #4
+  # slice 1) across many unrelated test institutions is safe — nothing
+  # persists between tests to collide on that id.
   def grant_role!(user, institution:, role_key:, permission_keys:, scope_type: :institution, scope_id: nil)
     institution_user = institution.memberships.active.find_by!(user: user)
 

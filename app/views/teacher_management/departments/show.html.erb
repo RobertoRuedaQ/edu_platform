@@ -11,11 +11,12 @@
 <% if @teachers.any? -%>
   <%= render layout: "shared/table", locals: { headers: ["Docente", "Materias", "Estado"] } do -%>
     <% @teachers.each do |teacher| -%>
+      <% teacher_name = "#{teacher.first_name} #{teacher.last_name}" -%>
       <tr>
         <td>
           <%= link_to teacher_management_teacher_path(teacher.id), class: "teacher-row__person" do %>
-            <%= ui_avatar teacher.name, size: :sm %>
-            <span><%= teacher.name %></span>
+            <%= ui_avatar teacher_name, size: :sm %>
+            <span><%= teacher_name %></span>
           <% end %>
         </td>
         <td><%= teacher.subjects.join(", ") %></td>
@@ -24,5 +25,5 @@
     <% end -%>
   <% end -%>
 <% else -%>
-  <%= render "shared/empty_state", title: "Sin docentes asignados", description: "Este departamento aún no tiene docentes (stub)." %>
+  <%= render "shared/empty_state", title: "Sin docentes asignados", description: "Este departamento aún no tiene docentes vinculados." %>
 <% end -%>

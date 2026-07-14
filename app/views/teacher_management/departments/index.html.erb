@@ -2,7 +2,7 @@
 
 <%= render "shared/page_header",
       title: "Departamentos",
-      subtitle: "Áreas académicas dentro de tu alcance." %>
+      subtitle: "Departamentos dentro de tu alcance." %>
 
 <% if @departments.any? -%>
   <%= render layout: "shared/table",
@@ -11,7 +11,7 @@
       <tr>
         <td><%= link_to department.name, teacher_management_department_path(department.id) %></td>
         <td><%= department.kind.humanize %></td>
-        <td><%= TeacherManagement::TeacherRoster.for_department(department.id).size %></td>
+        <td><%= @teacher_counts.fetch(department.id.to_s, 0) %></td>
       </tr>
     <% end -%>
   <% end -%>

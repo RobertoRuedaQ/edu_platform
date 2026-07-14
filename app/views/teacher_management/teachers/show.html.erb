@@ -1,26 +1,24 @@
-<% content_for :title, @teacher.name %>
+<% teacher_name = "#{@teacher.first_name} #{@teacher.last_name}" -%>
+<% content_for :title, teacher_name %>
 
 <%= render "shared/page_header",
-      title: @teacher.name,
-      subtitle: @teacher.department_name %>
+      title: teacher_name,
+      subtitle: @teacher.department&.name %>
 
 <% panels = {} -%>
 
 <% panels["Perfil"] = capture do %>
   <%= render "shared/detail_list", items: {
         "Código"       => @teacher.teacher_code,
-        "Departamento" => can?("departments.view") ? link_to(@teacher.department_name, teacher_management_department_path(@teacher.department_id)) : @teacher.department_name,
+        "Departamento" => (can?("departments.view") && @teacher.department) ? link_to(@teacher.department.name, teacher_management_department_path(@teacher.department_id)) : @teacher.department&.name,
         "Estado"       => teacher_status_badge(@teacher.status)
       } %>
 
-  <%= render "shared/stat", value: @teacher.group_ids.size.to_s, label: "grupos asignados" %>
-
-  <h3>Cualificaciones</h3>
-  <ul class="teacher-qualifications">
-    <% @teacher.qualifications.each do |q| -%>
-      <li><%= q %></li>
-    <% end -%>
-  </ul>
+  <%# No real teacher<->group link exists anywhere in the schema (sections
+      has no homeroom_teacher_id — same gap documented since v1.10.0
+      self-service), so no "grupos asignados" stat is shown here; subjects
+      (via teaching_assignments) IS real. %>
+  <%= render "shared/stat", value: @teacher.subjects.size.to_s, label: "materias asignadas" %>
 <% end -%>
 
 <% panels["Evaluaciones"] = capture do %>

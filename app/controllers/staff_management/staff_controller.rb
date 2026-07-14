@@ -1,13 +1,13 @@
 module StaffManagement
-  # Closes the "Personal" nav Fase 0 pre-wired (permission staff.read) — not
-  # one of the 9 domains in this prompt's list, but the dangling link is the
-  # same class of orphan as "Calificaciones"/"Orientación" were. No role/scope
-  # spec exists for it anywhere, so this is a minimal directory: blanket
-  # authorize!, no per-row Query object (nothing specified to scope by).
+  # "Personal" — the staff directory, scope-filtered same as teacher_management
+  # (#4 slice 1's canonical pattern; see StaffScope). institution_admin's
+  # institution-wide grant sees everyone incl. non-academic staff
+  # (department_id nil); a department-scoped grant (e.g. area_lead) sees only
+  # their own department's roster.
   class StaffController < ApplicationController
     def index
       authorize!("staff.read")
-      @staff = StaffManagement::StaffRoster.all
+      @staff = StaffManagement::StaffScope.new(context: authorization_context).resolve
     end
   end
 end

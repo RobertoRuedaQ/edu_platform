@@ -6,7 +6,9 @@ module TeacherManagement
     end
 
     def show
-      @teacher = TeacherManagement::TeacherRoster.find(params[:id]) or raise ActiveRecord::RecordNotFound
+      @teacher = TeacherManagement::Teacher.find_by(institution_id: Current.institution_id, id: params[:id])
+      raise ActiveRecord::RecordNotFound if @teacher.nil?
+
       authorize!("teachers.view", @teacher)
     end
   end

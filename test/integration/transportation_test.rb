@@ -87,15 +87,9 @@ class TransportationTest < ActionDispatch::IntegrationTest
     end
   end
 
-  # --- staff_management: closes the Fase 0 orphaned nav ----------------------
-
-  test "staff directory works for the default demo persona (already holds staff.read)" do
-    get "/staff_management/staff"
-    assert_response :success
-    assert_select ".staff-row__person", text: /Rosa Elena Duarte/
-  end
-
-  test "staff directory denies an actor without staff.read" do
-    with_grants { get "/staff_management/staff"; assert_response :forbidden }
-  end
+  # staff_management's own directory coverage (scope-filtered, real data)
+  # lives in test/integration/staff_directory_test.rb since #4 slice 1
+  # (v1.13.0) — these two tests used to assert against StaffRoster's
+  # hardcoded stub fixture ("Rosa Elena Duarte"), which no longer exists now
+  # that the directory reads real StaffManagement::StaffMember rows.
 end
