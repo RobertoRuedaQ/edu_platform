@@ -11,11 +11,128 @@
 
 ---
 
-## Changelog completo (v1.0.0 → v1.16.0)
+## Changelog completo (v1.0.0 → v1.17.0)
 
 > Copiado verbatim de §14 de `PROJECT_STATE.md` v1.5.0, antes de que el split editorial (v1.5.1)
 > moviera el changelog fuera del doc magro. Las entradas v1.6.0+ se escribieron directamente aquí,
 > ya con el split vigente.
+
+### v1.17.0 — 2026-07-15 — `report_cards`: boletines (ítem #3 del MVP)
+
+**Ítem #3 del camino crítico de `LINEAMIENTOS_MVP.md`**, sobre la mitad de calificaciones ya real de
+`schedules` (v1.14.0/v1.15.0). Tres decisiones de diseño llegaron YA aprobadas en el prompt (no
+checkpoint de diseño abierto esta vez, a diferencia de `attendance` v1.16.0): dominio `report_cards`
+propio addon-gated; snapshot congelado al publicar; dos superficies (supervisión + portal).
+
+**Recon (STOP #1):** confirmado `grep -riE "boletin|report_card" db/migrate/ app/domains/`
+sin resultados — dominio net-new real, sin stub previo de ninguna fase. `Schedules::Assessment`
+(desde v1.14.0) ya trae `weight` (default 1.0) y `max_score` (default 5.0) — ninguna lógica de
+promedio/GPA existía todavía en `schedules`, así que el prompt tenía razón en pedir que este slice
+la introdujera, y en `report_cards`, nunca en `schedules`. `Schedules::Enrollment.academic_term_id`
+(v1.15.0) es el join real que hace posible filtrar notas por término sin re-derivar nada.
+`Schedules::ActiveTermEnrollmentScope.resolve(institution:)` confirmado idéntico a como lo consumió
+`attendance` — mismo resolver, sin cambios. Plantilla de addon-gating de `attendance` (v1.16.0)
+copiada literal: `config/entitlements/*.rb` de una línea, entrada en
+`ControlPlane::AddonCatalog::DOMAIN_KEYS`, `test/models/entitlement/registry_consistency_test.rb`
+(genérico, sin tocar). **Hallazgo que ajustó el plan**: `IdentityAccess::RoleRoster` es un catálogo
+STUB (documentado como tal en su propio archivo) — `attendance.record` tampoco está ahí, así que
+sembrar `report_card.view`/`report_card.publish` a roles reales no tiene un ancla de seed real en
+este repo; se agregaron solo a `IdentityAccess::SeedPermissions::CATALOG` (el catálogo global real),
+mismo alcance que `attendance` tomó.
+
+**Lo construido:**
+- Migración `20260715142947_create_report_cards.rb`: tabla + 2 índices (unicidad
+  `(institution_id, student_id, academic_term_id)` + `(institution_id, academic_term_id)`) + CHECK
+  de `status` (`draft`/`published` — hoy toda fila persistida es `published`, ver más abajo) +
+  `enable_rls`. Corrida en dev y test.
+- Modelo `ReportCards::ReportCard` — `readonly? = persisted?`, mismo patrón que
+  `ControlPlane::InvoiceLineItem`: una vez publicada, una fila nunca se `update`/`destroy` individual.
+- `ReportCards::Computation` — agregación EN VIVO por `(estudiante, término)`: cada
+  `Schedules::Assessment` con nota se normaliza a la escala 0.0–5.0 (`score/max_score*5.0`) antes de
+  ponderar por `weight`; una materia sin notas cargadas no aporta línea (nunca un cero, el boletín a
+  mitad de término es parcial por diseño); `overall_average` es el promedio simple de las líneas por
+  materia. Consumida tanto por el preview de supervisión como por `Publisher` — es LA única fuente
+  de verdad del cómputo, nunca duplicada.
+- `ReportCards::Publisher` — publicación síncrona idempotente: por estudiante, computa, congela el
+  snapshot, y regenera la fila con `ReportCard.where(...).delete_all` + `create!` (nunca
+  `destroy_all`/`update` — `delete_all` bypassea `readonly?` a propósito, mismo balance que
+  `ControlPlane::Billing::PeriodCut` ya documenta para `InvoiceLineItem`; de hecho el primer intento
+  usó `destroy_all` y disparó `ActiveRecord::ReadOnlyRecord` en desarrollo, confirmando por qué el
+  patrón de `PeriodCut` existe).
+- Dos permisos nuevos, split (a diferencia del único `attendance.record`): `report_card.view`
+  (previsualizar + ver publicados) y `report_card.publish` (publicar/regenerar) — publicar es una
+  acción más sensible que previsualizar, mismo criterio que separó `accommodations.view`/`.manage`.
+- `config/entitlements/report_cards.rb` + `report_cards` agregado a
+  `ControlPlane::AddonCatalog::DOMAIN_KEYS` + a `ControlPlane::SeedCatalog::ADDONS` (fee plano, sin
+  medición — `metered` queda en su default `false`).
+- `ReportCards::GroupScope` — query object nuevo (NO reutiliza `Attendance::GroupScope`, filtra por
+  `report_card.view`, un permiso distinto).
+- Supervisión: `ReportCards::GroupsController#index` (mis grupos) →
+  `ReportCards::PublicationsController#new` (preview: roster tomable + promedio en vivo por
+  estudiante, sin persistir nada) → `#create` (publica los estudiantes seleccionados vía
+  `Publisher`). Nav: `config/navigation/report_cards.rb` ("Boletines", permiso `report_card.view`).
+- Portal: `Portals::GuardianReportCardsController#index` (nested bajo el hijo específico, vía
+  `GuardianScope.for(user).find(params[:student_id])` — nunca `Student.find` directo) y
+  `Portals::StudentReportCardsController#index` (vía `StudentSelfScope`). Ambos: sin `authorize!`,
+  fuera de `Navigation::Registry`, consultan solo `status: "published"` — nunca ven un preview. Se
+  enlazan desde `guardian_students/show` y `student_portal/show` (botón "Boletines"/"Mis boletines"),
+  no desde ningún registry.
+- **Decisión explícita, no un olvido**: `db/seeds.rb` NO se tocó — mismo alcance que `attendance`
+  (v1.16.0) tampoco lo tocó; el catálogo de addons demo se siembra por el rake task
+  `control_plane:seed_catalog` (ya actualizado), no por `db/seeds.rb`, y el prompt dejaba la fila de
+  demo condicionada a "si el seed de demo lo amerita" — no lo amerita todavía sin una necesidad real
+  de demo end-to-end.
+
+**Modelo de datos — el fork del "draft":** el prompt proponía dos formas posibles (fila desde
+draft, estilo `invoices`, vs. cómputo vivo sin fila) y dejaba el default explícito: **cómputo vivo
+sin fila**. Se tomó ese default — una fila `report_cards` existe SOLO al publicar, así que hoy el
+`status` de cualquier fila persistida es siempre `"published"`; el CHECK sigue permitiendo `"draft"`
+por si esa decisión se revierte más adelante, pero no hay código que lo produzca hoy.
+
+**Caso de aceptación, verificado end-to-end:** un docente con `role_assignment` scoped a
+`group:9°A` ve solo 9°A en el índice; el preview de 9°A muestra el promedio calculado en vivo de un
+estudiante matriculado en el término activo y excluye a uno del grupo que no lo está; publicar
+persiste un `ReportCard` congelado por estudiante seleccionado; **editar la nota viva DESPUÉS de
+publicar no cambia el boletín ya publicado** (test estrella, verificado con `update_columns` directo
+sobre el `Assessment` para evitar cualquier duda de que el read-path esté cacheando en memoria);
+re-publicar el mismo (estudiante, término) regenera la fila (mismo `id` no sobrevive — prueba de que
+fue `delete_all`+`create!`, no un `update`) sin duplicar; el mismo docente recibe 403 en `group:9°B`
+(fuera de su scope); un actor con `report_card.view` pero sin `report_card.publish` no ve el botón
+de publicar en la vista Y recibe 403 real si intenta el POST igual (cosmético vs. gate duro, nunca
+confundidos); sin entitlement de `report_cards`, la petición da 403 con "no está habilitado" (gate
+#1 antes que gate #2); aislamiento cross-tenant verificado con query real bajo RLS; sin
+`input[type=search]`/`input[name=q]` en la vista de publicación; el portal del acudiente ve el
+boletín publicado de SU hijo y recibe 404 (nunca 200) al adivinar el id del hijo de otra familia; el
+portal nunca muestra nada si no se publicó todavía (ni preview, ni draft). Test de regresión
+adicional: el headcount de `Core::Headcount::Snapshotter` no se ve afectado por la existencia de
+`report_cards` — no se tocó su fuente ni se re-derivó el join de término.
+
+**Resultado:** 428 runs / 0 failures / 0 errors / 1 skip preexistente (baseline 407; 21 tests
+nuevos: 17 en `test/integration/report_cards_test.rb`, 4 en
+`test/models/report_cards/computation_test.rb`). `bin/rails zeitwerk:check` verde. Una migración,
+aplicada en dev y test.
+
+**Archivos nuevos/editados:**
+- Migración: `db/migrate/20260715142947_create_report_cards.rb`.
+- Modelo: `app/domains/report_cards/models/report_card.rb`.
+- Servicios: `app/domains/report_cards/services/computation.rb`,
+  `app/domains/report_cards/services/publisher.rb`.
+- Query object: `app/domains/report_cards/queries/group_scope.rb`.
+- Controllers: `app/controllers/report_cards/groups_controller.rb`,
+  `app/controllers/report_cards/publications_controller.rb`,
+  `app/controllers/portals/guardian_report_cards_controller.rb`,
+  `app/controllers/portals/student_report_cards_controller.rb`.
+- Vistas: `app/views/report_cards/groups/index.html.erb`,
+  `app/views/report_cards/publications/new.html.erb`,
+  `app/views/portals/guardian_report_cards/index.html.erb`,
+  `app/views/portals/student_report_cards/index.html.erb` (+ botones de entrada nuevos en
+  `app/views/portals/guardian_students/show.html.erb` y `app/views/portals/student_portal/show.html.erb`).
+- Config: `config/entitlements/report_cards.rb`, `config/navigation/report_cards.rb`,
+  `config/routes.rb` (namespace `report_cards` + nested resources de portal).
+- Catálogo/permisos: `app/control_plane/control_plane/addon_catalog.rb`,
+  `app/control_plane/control_plane/seed_catalog.rb`,
+  `app/domains/identity_access/services/seed_permissions.rb`.
+- Tests: `test/integration/report_cards_test.rb`, `test/models/report_cards/computation_test.rb`.
 
 ### v1.16.0 — 2026-07-14 — `attendance`: asistencia diaria por homeroom (ítem #2 del MVP)
 

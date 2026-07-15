@@ -18,10 +18,10 @@
 
 | Campo | Valor |
 |---|---|
-| **Versión del documento** | `v1.16.0` |
-| **Fecha** | 2026-07-14 |
-| **Tests** | 407 runs / 0 fallos / 1 skip preexistente (suite completa, en serie — ver Guardrails) |
-| **Estado en una línea** | Identidad real + RBAC/entitlement reales + portales de persona + autoservicio de staff + auditoría + CHECKPOINT E + #4 barrido (`teacher_management`/`group_management`/`schedules`-calificaciones/`counseling`) + matrícula por término real (`Schedules::ActiveTermEnrollmentScope`, v1.15.0) + **`attendance` (asistencia diaria por homeroom, ítem #2 del MVP): dominio NET-NEW addon-gated, real desde el día uno, molde #4 completo, consume `ActiveTermEnrollmentScope` ∩ grupo ∩ scope RBAC del docente — headcount y el resolver de término intactos**. `LINEAMIENTOS_MVP.md` ordena lo que sigue: boletines sobre `schedules` es el próximo ítem. |
+| **Versión del documento** | `v1.17.0` |
+| **Fecha** | 2026-07-15 |
+| **Tests** | 428 runs / 0 fallos / 1 skip preexistente (suite completa, en serie — ver Guardrails) |
+| **Estado en una línea** | Identidad real + RBAC/entitlement reales + portales de persona + autoservicio de staff + auditoría + CHECKPOINT E + #4 barrido (`teacher_management`/`group_management`/`schedules`-calificaciones/`counseling`) + matrícula por término real (`Schedules::ActiveTermEnrollmentScope`, v1.15.0) + `attendance` (asistencia diaria por homeroom, ítem #2 del MVP, v1.16.0) + **`report_cards` (boletines, ítem #3 del MVP): dominio NET-NEW addon-gated, lee `schedules` por FK, snapshot congelado al publicar (nunca re-lee la nota viva), dos superficies (supervisión RBAC+scope / portal por relación, solo publicados) — headcount y `ActiveTermEnrollmentScope` intactos**. `LINEAMIENTOS_MVP.md` ordena lo que sigue: UI de tesorería (`finance`) es el próximo ítem. |
 
 ### Convención de versionado de ESTE documento
 
@@ -144,6 +144,7 @@ El **plano de control vive FUERA de `app/domains/*`** — namespace propio `app/
 | `finance` | Tesorería/cartera **dentro** del tenant (el colegio cobra pensiones a acudientes). Cargos, pagos, estados de cuenta, planes de pago. **≠ billing de plataforma.** Tenant-scoped. |
 | `communication` | Hub de comunicación. Ver §8 (anexo). Sigue en fase stub. |
 | `attendance` | **Asistencia diaria por homeroom (v1.16.0, item #2 del MVP)** — dominio NET-NEW, real desde el día uno (sin fase stub). `AttendanceRecord` (`student_id`+`group_id`+`date`, único `(institution_id, student_id, date)`). Consume `Schedules::ActiveTermEnrollmentScope` (nunca re-deriva el join a término); molde #4 completo (per-row `can?`, `authorize!`, nav). Addon-gated. Por-materia diferido. |
+| `report_cards` | **Boletines (v1.17.0, item #3 del MVP)** — dominio NET-NEW, addon-gated, lee `schedules` por FK (nunca posee `Subject`/`Enrollment`/`Assessment`). `ReportCard` (`student_id`+`academic_term_id`, único `(institution_id, student_id, academic_term_id)`) — snapshot **congelado al publicar** (`lines_snapshot` jsonb + `overall_average`, nunca recomputado al leer un publicado). "Draft" es cómputo vivo sin fila (`ReportCards::Computation`, consumido tanto por el preview de supervisión como por `ReportCards::Publisher`). Dos superficies: supervisión (molde #4, `report_card.view`/`report_card.publish`) y portal (por relación, solo publicados, sin `authorize!`, fuera de `Navigation::Registry`). Consume `Schedules::ActiveTermEnrollmentScope` igual que `attendance`. Asistencia en el boletín y escala Decreto 1290 diferidos. |
 
 ### Tier C — candidatos (crear SOLO bajo confirmación explícita)
 
@@ -489,10 +490,10 @@ firma del método (no acepta término de búsqueda) y con aserciones sobre la vi
 > calendario del cuidador) y **reordena/reprioriza** los ítems de este backlog para ese perfil de
 > cliente — léelo antes de elegir el próximo slice si el trabajo apunta a ese MVP. Camino crítico
 > propuesto ahí (§7): ~~cerrar matrícula/término (B2/Cav.)~~ **✅ mitad de modelo cerrada (v1.15.0)**
-> → ~~`attendance` (net-new)~~ **✅ cerrado (v1.16.0)** → **boletines sobre `schedules`
-> (siguiente)** → UI de tesorería (`finance`) → `communication` → `assignments` (net-new) →
-> `calendar` (net-new) → `extracurriculars` (net-new) → portal del cuidador ampliado →
-> provisioning + correo real. Dominios
+> → ~~`attendance` (net-new)~~ **✅ cerrado (v1.16.0)** → ~~`report_cards` (boletines, net-new)~~
+> **✅ cerrado (v1.17.0)** → **UI de tesorería (`finance`, siguiente)** → `communication` →
+> `assignments` (net-new) → `calendar` (net-new) → `extracurriculars` (net-new) → portal del
+> cuidador ampliado → provisioning + correo real. Dominios
 > `student_support`/`counseling`/`cafeteria`/`transportation` reales no aplican
 > a este perfil (no se piden) — no confundir con "backlog general cerrado".
 
@@ -595,13 +596,37 @@ firma del método (no acepta término de búsqueda) y con aserciones sobre la vi
 - **`Schedules::ActiveTermEnrollmentScope` es EL resolver canónico de "estudiante matriculado en el término activo"** (v1.15.0, cierra la mitad de modelo de Cav./B2) — todo slice académico futuro (asistencia, notas-por-término, actividades, asignaciones, ver `LINEAMIENTOS_MVP.md`) lo CONSUME, no re-deriva su propio join a `academic_terms`. No es identity-gated (a diferencia de `GuardianScope`/`StudentSelfScope`) ni RBAC-scoped por sí mismo — resuelve el hecho académico crudo; cada consumidor aplica su propio scope de RBAC encima (mismo layering que `TeacherManagement::TeacherScope`). Solo un término activo por institución (invariante de BD ya existente) — el query NUNCA reimplementa esa resolución, solo lee `Core::AcademicTerm.active`.
 - **"Roster tomable" = resolver académico ∩ scope de negocio ∩ scope RBAC — tres capas, nunca colapsadas en una** (`attendance`, v1.16.0, primer consumidor real de `ActiveTermEnrollmentScope`): (1) `ActiveTermEnrollmentScope.resolve(institution:)` — el hecho crudo, institución completa; (2) `.where(section_id: group.id)` — el scope de NEGOCIO (este grupo/homeroom); (3) `authorize!("attendance.record", group)` + el query object per-row (`Attendance::GroupScope`) — el scope de RBAC del actor (sus propios grupos). El mismo layering aplica a todo slice académico futuro que "actúe sobre los alumnos de un grupo en el término activo" (notas-por-término, actividades, asignaciones) — no reinventar el orden ni colapsar las tres capas en una sola query ad hoc.
 - **Un dominio net-new addon-gated real desde el día uno (sin fase stub) es un patrón válido** (`attendance`, v1.16.0) — a diferencia de los dominios de la Fase 0 (que nacieron 100% stub y se cablearon después, backlog #4), un dominio construido HOY con recon-first + checkpoint de diseño no necesita pasar por una fase de roster en memoria: el modelo real, el query object y las vistas se construyen en el mismo slice.
+- **Un snapshot congelado al publicar NUNCA se recomputa al leer** (`report_cards`, v1.17.0) — `ReportCards::Publisher` llama a `ReportCards::Computation` UNA sola vez, en el momento de publicar, y persiste el resultado en `lines_snapshot`/`overall_average`. Ningún controller/vista de un `ReportCard` ya publicado vuelve a tocar `Schedules::Assessment`; editar una nota viva después de publicar nunca cambia lo ya publicado (verificado con un test de regresión dedicado, el análogo del test de headcount). El "draft" es la única superficie que lee en vivo (`ReportCards::Computation`, consumido también por el preview de supervisión) — nunca hay una fila con `status: "draft"` hoy (ver el modelo de datos: la fila solo existe al publicar).
+- **`ReportCard#readonly?` (= `persisted?`, mismo patrón que `ControlPlane::InvoiceLineItem`) bloquea `update`/`destroy` de una fila individual — la regeneración va SIEMPRE por `delete_all` + `create!` desde `ReportCards::Publisher`, nunca por un `destroy_all`/`update` sobre el AR object.** `destroy_all` instancia cada registro y llama a `#destroy`, que Rails bloquea si `readonly?` es true (a diferencia de `delete_all`, que emite el DELETE en bulk sin pasar por el guard) — el mismo error que atrapó a este slice en desarrollo (`ActiveRecord::ReadOnlyRecord` al intentar `destroy_all`). Mismo balance que `ControlPlane::Billing::PeriodCut` ya documenta para `InvoiceLineItem`: "una línea no se edita nunca" ≠ "un snapshot no se regenera nunca".
+- **El portal de una persona (§ guardrail de arriba, `GuardianScope`/`StudentSelfScope`) sigue sin chequear `Entitlement::Registry`** (`report_cards`, v1.17.0, mismo patrón ya implícito en `cafeteria`/`transportation`'s portal stubs) — `Entitlement::Controller` infiere el `addon_key` del namespace del controller (`Portals::*`, nunca registrado), así que ningún controller de portal queda gateado por addon hoy. Es una superficie ya aceptada, no un gap nuevo de este slice — si algún día se decide gatear el portal también, es una decisión de diseño explícita (probablemente `gated_by_addon`), no un efecto colateral de cablear un dominio addon-gated más.
+- **`report_cards` es el segundo consumidor real (tras `attendance`) del layering de tres capas de §"Roster tomable" — y confirma que la RBAC puede partirse en dos permisos (`report_card.view`/`report_card.publish`) sobre las MISMAS tres capas**, a diferencia de `attendance.record` (un solo permiso). Publicar es una acción más sensible que previsualizar (mismo espíritu que el split `accommodations.view`/`accommodations.manage`) — un dominio futuro con esa misma asimetría debe partir el permiso, no forzar uno solo por "seguir el molde de attendance" literalmente.
 
 ---
 
 ## 13. Changelog
 
-El changelog completo (`v1.0.0` → `v1.16.0`) vive en **`HISTORIA.md`**. Entrada de esta versión:
+El changelog completo (`v1.0.0` → `v1.17.0`) vive en **`HISTORIA.md`**. Entrada de esta versión:
 
+- **`v1.17.0` — `report_cards`: boletines (ítem #3 del MVP, dominio net-new).** Checkpoint de diseño
+  (aprobado): dominio propio, addon-gated, lee `schedules` por FK (nunca posee `Subject`/
+  `Enrollment`/`Assessment`). `report_cards` (`student_id`+`academic_term_id`, único
+  `(institution_id, student_id, academic_term_id)`, `lines_snapshot` jsonb + `overall_average`
+  congelados al publicar, `published_by_staff_member_id` nullable). Recon: `Schedules::Assessment`
+  ya traía `weight`/`max_score` — no existía lógica de promedio/GPA en `schedules`, así que
+  `ReportCards::Computation` la introduce (normaliza cada nota a la escala 0.0–5.0 antes de
+  ponderar; una materia sin notas cargadas no aporta línea, nunca un cero). El roster tomable es la
+  MISMA intersección de tres capas que `attendance` (v1.16.0): `Schedules::ActiveTermEnrollmentScope`
+  ∩ el grupo ∩ el scope RBAC del actor — pero con permisos split (`report_card.view`/
+  `report_card.publish`) en vez de uno solo. Publicación real, síncrona, idempotente
+  (`ReportCards::Publisher`): regenera vía `delete_all`+`create!`, nunca `update`/`destroy_all` sobre
+  el AR object (`ReportCard#readonly? = persisted?` lo bloquea — mismo patrón que
+  `ControlPlane::InvoiceLineItem`/`PeriodCut`). Invariante estrella verificado con test dedicado: un
+  boletín publicado nunca re-lee una nota editada después. Dos superficies: supervisión (molde #4)
+  y portal (por relación, solo publicados, sin `authorize!`, fuera de `Navigation::Registry`) — el
+  portal de persona sigue sin chequear entitlement (mismo gap ya aceptado en `cafeteria`/
+  `transportation`, no nuevo de este slice). Headcount y `ActiveTermEnrollmentScope` verificados
+  intactos. Una migración, aplicada en dev y test. 21 tests nuevos (428 runs totales, 0 fallos).
+  Narrativa completa en `HISTORIA.md`.
 - **`v1.16.0` — `attendance`: asistencia diaria por homeroom (ítem #2 del MVP, dominio net-new).**
   Checkpoint de diseño (aprobado): dominio propio, addon-gated, diaria por homeroom — no `schedules`
   (grano equivocado, por materia) ni `group_management` (fundacional, y asistencia es addon-able).

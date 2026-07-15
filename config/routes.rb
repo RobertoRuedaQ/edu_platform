@@ -46,6 +46,9 @@ Rails.application.routes.draw do
     resource :student, only: :show, controller: "student_portal" do
       resource :cafeteria, only: :show, controller: "student_cafeteria"
       resource :transport, only: :show, controller: "student_transport"
+      # report_cards (v1.17.0): published-only, by self-scope — no
+      # authorize!, outside Navigation::Registry (§7). Plural: many terms.
+      resources :report_cards, only: :index, controller: "student_report_cards"
     end
     resource :guardian, only: :show, controller: "guardian_portal" do
       # Per-child read-only summary (v1.9.0) — resolved through
@@ -54,7 +57,13 @@ Rails.application.routes.draw do
       # renders. Plural on purpose: a guardian has many children; the
       # student/cafeteria/transport sub-resources above stay singular
       # (a student only ever has ONE of each, resolved via self-scope).
-      resources :students, only: :show, controller: "guardian_students"
+      resources :students, only: :show, controller: "guardian_students" do
+        # report_cards (v1.17.0): published-only, by relation — nested under
+        # the SPECIFIC child (unlike cafeteria/transport, which summarize
+        # ALL children on one page) since a term's boletín is inherently
+        # per-child. No authorize!, outside Navigation::Registry (§7).
+        resources :report_cards, only: :index, controller: "guardian_report_cards"
+      end
       resource :cafeteria, only: :show, controller: "guardian_cafeteria"
       resource :transport, only: :show, controller: "guardian_transport"
     end
@@ -144,6 +153,17 @@ Rails.application.routes.draw do
   namespace :attendance do
     resources :groups, only: :index do
       resources :records, only: %i[new create]
+    end
+  end
+
+  # --- report_cards (net-new domain, v1.17.0, MVP critical path item #3) ---
+  # Boletines sobre la mitad de calificaciones ya real de `schedules`.
+  # groups#index lists the actor's OWN groups (report_card.view scope);
+  # publications#new/#create preview + publish a group's roster for the
+  # active term — no groups#show, same rationale as attendance's groups#index.
+  namespace :report_cards do
+    resources :groups, only: :index do
+      resources :publications, only: %i[new create]
     end
   end
 

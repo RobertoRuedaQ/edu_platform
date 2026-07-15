@@ -17,6 +17,7 @@ module ControlPlane
       communication
       analytics_bi
       attendance
+      report_cards
     ].freeze
   end
 end

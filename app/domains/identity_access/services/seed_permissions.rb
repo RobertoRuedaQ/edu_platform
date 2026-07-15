@@ -51,7 +51,13 @@ module IdentityAccess
       # unified-permission call as disciplinary_logs.manage (no read/write
       # split like accommodations/medical_history, since there's no
       # confidentiality tier here).
-      "attendance.record" => "Registrar y ver la asistencia de un grupo"
+      "attendance.record" => "Registrar y ver la asistencia de un grupo",
+      # report_cards (v1.17.0): split view/publish, unlike attendance's single
+      # permission — publicar un boletín es una acción distinta y más
+      # sensible que solo previsualizarlo (más cerca del split de
+      # accommodations.view/manage que de attendance.record).
+      "report_card.view"    => "Ver boletines (previsualización y publicados)",
+      "report_card.publish" => "Publicar boletines"
     }.freeze
 
     def self.call

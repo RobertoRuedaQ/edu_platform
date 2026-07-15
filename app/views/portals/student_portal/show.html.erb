@@ -2,7 +2,8 @@
 
 <%= render "shared/page_header",
       title: "Hola, #{@portal_person_name}",
-      subtitle: "Tu resumen." %>
+      subtitle: "Tu resumen.",
+      actions: (ui_button("Mis boletines", href: portal_student_report_cards_path, variant: :secondary) if @student) %>
 
 <% if @student -%>
   <%# Read-only (GS8): no forms here. national_id is never shown (privacy). %>

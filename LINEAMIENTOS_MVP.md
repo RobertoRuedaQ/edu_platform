@@ -223,14 +223,15 @@ v1.14.0: modelos reales (`Charge`/`Payment`/`PaymentPlan`/`Installment`/`Student
 > Reordenado con v1.14.0 (notas medio hecha, matrícula parcial, finance model-ready) y las decisiones
 > de asistencia/notas/pago manual/Campfire.
 
-1. **Matrícula / término**: cerrar el join `enrollments`↔`academic_terms` (B2/Cav.), reconciliando
-   `students.section_id` + `Schedules::Enrollment` ya reales. Desbloquea asistencia, notas-por-término,
-   actividades y targeting de asignaciones. Más chico de lo pensado.
-2. **Asistencia** (`attendance`, net-new + checkpoint de diseño) — el loop diario, ahora requisito.
-3. **Notas → boletines + portal**: agregación sobre `Schedules::Assessment` (ya real) + mostrar al
-   cuidador. Barato porque la libreta ya existe.
+1. ~~**Matrícula / término**~~ — ✅ **cerrado (v1.15.0)**: cerró el join `enrollments`↔`academic_terms`
+   (B2/Cav., mitad de modelo) vía `Schedules::ActiveTermEnrollmentScope`. Ver `PROJECT_STATE.md`/`HISTORIA.md`.
+2. ~~**Asistencia**~~ (`attendance`, net-new + checkpoint de diseño) — ✅ **cerrado (v1.16.0)**: el
+   loop diario, dominio propio addon-gated. Ver `PROJECT_STATE.md`/`HISTORIA.md`.
+3. ~~**Notas → boletines + portal**~~ (`report_cards`, net-new) — ✅ **cerrado (v1.17.0)**: dominio
+   propio addon-gated que lee `schedules` por FK; snapshot congelado al publicar; portal solo
+   publicados. Ver `PROJECT_STATE.md`/`HISTORIA.md`.
 4. **Pago manual en tesorería** (`finance`): UI sobre modelos ya reales. Independiente — puede ir en
-   paralelo; necesario antes de cobrar actividades pagas.
+   paralelo; necesario antes de cobrar actividades pagas. **Siguiente ítem del camino crítico.**
 5. **`communication`** (Campfire interno: rooms + DM; externo: anuncios + "correos" al acudiente).
    Columna vertebral de las notificaciones (asistencia/asignaciones derivan avisos de aquí).
 6. **`assignments`** (tareas/trabajos/salidas) — depende de matrícula y `group_management` (targeting

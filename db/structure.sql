@@ -830,6 +830,28 @@ ALTER TABLE ONLY public.referrals FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: report_cards; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.report_cards (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    student_id uuid NOT NULL,
+    academic_term_id uuid NOT NULL,
+    status character varying DEFAULT 'published'::character varying NOT NULL,
+    lines_snapshot jsonb DEFAULT '[]'::jsonb NOT NULL,
+    overall_average numeric(3,1),
+    published_at timestamp(6) without time zone NOT NULL,
+    published_by_staff_member_id uuid,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT report_cards_status_check CHECK (((status)::text = ANY ((ARRAY['draft'::character varying, 'published'::character varying])::text[])))
+);
+
+ALTER TABLE ONLY public.report_cards FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: role_assignments; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1563,6 +1585,14 @@ ALTER TABLE ONLY public.programs
 
 ALTER TABLE ONLY public.referrals
     ADD CONSTRAINT referrals_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: report_cards report_cards_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.report_cards
+    ADD CONSTRAINT report_cards_pkey PRIMARY KEY (id);
 
 
 --
@@ -2343,6 +2373,34 @@ CREATE INDEX index_referrals_on_institution_id_and_counseling_case_id ON public.
 
 
 --
+-- Name: index_report_cards_on_academic_term_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_report_cards_on_academic_term_id ON public.report_cards USING btree (academic_term_id);
+
+
+--
+-- Name: index_report_cards_on_institution_student_term; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_report_cards_on_institution_student_term ON public.report_cards USING btree (institution_id, student_id, academic_term_id);
+
+
+--
+-- Name: index_report_cards_on_institution_term; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_report_cards_on_institution_term ON public.report_cards USING btree (institution_id, academic_term_id);
+
+
+--
+-- Name: index_report_cards_on_student_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_report_cards_on_student_id ON public.report_cards USING btree (student_id);
+
+
+--
 -- Name: index_role_assignments_on_institution_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2745,6 +2803,14 @@ ALTER TABLE ONLY public.student_guardians
 
 
 --
+-- Name: report_cards fk_rails_0eed72e3b0; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.report_cards
+    ADD CONSTRAINT fk_rails_0eed72e3b0 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: enrollments fk_rails_107f77c451; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3038,6 +3104,14 @@ ALTER TABLE ONLY public.institution_entitlements
 
 ALTER TABLE ONLY public.email_otps
     ADD CONSTRAINT fk_rails_57d2c47354 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: report_cards fk_rails_5c455c708b; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.report_cards
+    ADD CONSTRAINT fk_rails_5c455c708b FOREIGN KEY (academic_term_id) REFERENCES public.academic_terms(id) ON DELETE CASCADE;
 
 
 --
@@ -3361,6 +3435,14 @@ ALTER TABLE ONLY public.roster_import_batches
 
 
 --
+-- Name: report_cards fk_rails_bbed8eb10a; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.report_cards
+    ADD CONSTRAINT fk_rails_bbed8eb10a FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE CASCADE;
+
+
+--
 -- Name: usage_events fk_rails_bc377e8add; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3598,6 +3680,14 @@ ALTER TABLE ONLY public.enrollments
 
 ALTER TABLE ONLY public.teachers
     ADD CONSTRAINT fk_rails_f0edb92a45 FOREIGN KEY (staff_member_id) REFERENCES public.staff_members(id) ON DELETE SET NULL;
+
+
+--
+-- Name: report_cards fk_rails_f2bae774b9; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.report_cards
+    ADD CONSTRAINT fk_rails_f2bae774b9 FOREIGN KEY (published_by_staff_member_id) REFERENCES public.staff_members(id) ON DELETE SET NULL;
 
 
 --
@@ -3924,6 +4014,19 @@ CREATE POLICY referrals_tenant_isolation ON public.referrals USING ((institution
 
 
 --
+-- Name: report_cards; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.report_cards ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: report_cards report_cards_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY report_cards_tenant_isolation ON public.report_cards USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
 -- Name: role_assignments; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -4112,6 +4215,7 @@ CREATE POLICY teaching_assignments_tenant_isolation ON public.teaching_assignmen
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260715142947'),
 ('20260714205355'),
 ('20260714201234'),
 ('20260714000001'),
