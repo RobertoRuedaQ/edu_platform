@@ -11,11 +11,112 @@
 
 ---
 
-## Changelog completo (v1.0.0 → v1.17.0)
+## Changelog completo (v1.0.0 → v1.18.0)
 
 > Copiado verbatim de §14 de `PROJECT_STATE.md` v1.5.0, antes de que el split editorial (v1.5.1)
 > moviera el changelog fuera del doc magro. Las entradas v1.6.0+ se escribieron directamente aquí,
 > ya con el split vigente.
+
+### v1.18.0 — 2026-07-15 — `finance`: UI de tesorería (ítem #4 del MVP)
+
+**Ítem #4 del camino crítico de `LINEAMIENTOS_MVP.md`.** `finance` es Clase A por modelos
+(`Charge`/`Payment`/`PaymentPlan`/`Installment`/`StudentAccount`, reales desde el primer commit)
+pero sin ningún controller/ruta/vista — se construye desde cero, no se reemplaza un stub. Tres
+decisiones llegaron ya aprobadas: dos superficies (supervisión + estado de cuenta del acudiente);
+escritura = registrar pagos/cargos, planes de pago diferidos; y "este slice decide el addon-gating".
+
+**Recon (STOP #1) — tres hallazgos materiales que corrigieron el plan:**
+
+1. **El dinero es `decimal(12,2)`, no `*_cents bigint`** — las cinco tablas usan `t.decimal
+   precision: 12, scale: 2` desde `027ec44` (primer commit), anterior a que F6 (cents-bigint) se
+   adoptara para el billing del control plane (`ControlPlane::Addon` etc., commits posteriores).
+   `decimal`/`BigDecimal` es aritmética exacta en Postgres y en Ruby — no tiene el problema de drift
+   de float que F6 existe para prevenir, es solo una representación distinta. El helper `money()` ya
+   espera un decimal directo (`number_to_currency(amount, ...)`), confirmando que decimal es la
+   forma nativa que el resto del código ya asume. **Decisión: mantener `decimal`, sin migración** —
+   el invariante equivalente es "nunca castear a Float, toda la aritmética en `BigDecimal`".
+2. **`finance` YA estaba addon-gated, en el nav, y con permisos sembrados — todo desde ANTES de que
+   existiera un controller real.** `config/entitlements/finance.rb` (registrado en v1.3.0/S2b, con
+   un comentario explícito: "No `Finance::*Controller` exists yet... this declaration pre-registers
+   the gate"), `finance` ya en `ControlPlane::AddonCatalog::DOMAIN_KEYS` y en
+   `ControlPlane::SeedCatalog::ADDONS` (700.000 cop/mes), `config/navigation/finance.rb` ya apuntando
+   a `/finance` con permiso `finance.read`. Y los permisos `finance.read`/`finance.write` YA estaban
+   en `IdentityAccess::SeedPermissions::CATALOG`, YA sembrados a `institution_admin` (vía el stub
+   `RoleRoster`), y **YA reusados por `Cafeteria::BalancesController`** para su propia función de
+   "Saldos" (comentario explícito ahí: "Reuses finance.read... rather than..."). El §2 del prompt
+   ("este slice decide el addon-gating") era un no-op — no se agregó ni cambió nada de eso. El §7
+   ("agregar `finance.view`/`finance.manage`") tampoco se siguió literal: se reusaron
+   `finance.read`/`finance.write` para no crear una segunda superficie de permiso solapada ni romper
+   el consumidor cruzado de cafetería.
+3. **Ya existían 5 partials de vista pre-construidos** en `app/views/finance/`
+   (`_balance_summary`, `_charge_row`, `_payment_status_badge`, `_statement_line`,
+   `_payment_plan_card`) con locals planos (no objetos AR) — se ensamblaron en las vistas nuevas en
+   vez de duplicar su lógica. `_payment_plan_card` quedó sin usar (tiene su propio TODO, planes
+   diferidos). `Payment`/`Charge` ya traían una columna `idempotency_key` con índice único por
+   institución, sin usar hasta este slice — se activó como la guarda real de doble-submit en vez de
+   inventar una nueva.
+
+**Checkpoint de rol de tesorería:** no existe un rol formal en el catálogo (`IdentityAccess::
+RoleRoster` es un stub, igual que confirmó `attendance`/`report_cards`), pero
+`test/integration/cafeteria_test.rb` ya usa el `role_key` `"treasury"` como convención de facto para
+un actor con `finance.read`. Se siguió esa misma convención en los tests de este slice (con
+`finance.write` agregado) — no se agregó ninguna fila nueva a `RoleRoster`.
+
+**Lo construido:**
+- Sin migración — los cinco modelos ya existían; RLS `FORCE` ya estaba en las cinco tablas
+  (verificado, sin hallazgo material ahí).
+- `Finance::AccountScope` — query object nuevo (molde #4), institución-wide por diseño (tesorería es
+  función central, no por grupo/homeroom como los dominios académicos).
+- `Finance::AccountStatement` — el único camino de lectura del estado de cuenta (saldo, cargos
+  pendientes, historial fusionado cronológico), consumido por AMBAS superficies (mismo patrón que
+  `ReportCards::Computation`, v1.17.0). Puentea `StudentAccount`→`student_id`→`Charge` porque
+  `Charge` no tiene FK a `StudentAccount` (solo a `student` directo).
+- `Finance::PaymentRecorder`/`Finance::ChargeCreator` — transaccionales, `account.lock!` (pessimista)
+  + guarda de `idempotency_key` (chequeada antes Y después del lock, para cerrar la ventana de
+  carrera). `PaymentRecorder` marca un `Charge` como `paid` si los pagos completados contra él ya
+  cubren su monto.
+- `Finance::AccountsController#index/show`, `Finance::PaymentsController#new/create`,
+  `Finance::ChargesController#new/create` — rutas bajo `namespace :finance` con `resources
+  :accounts, path: ""` para que `index` caiga exactamente en `/finance` (el path que el nav
+  pre-existente ya esperaba).
+- Portal: `Portals::GuardianFinanceController#show`, nested bajo `guardian/students/:id/finance`
+  (mismo criterio de anidado por-hijo que `report_cards`, v1.17.0, por volumen de contenido) — solo
+  lectura, mismo `AccountStatement`, sin `authorize!`, fuera de `Navigation::Registry`, ninguna
+  acción de escritura expuesta. Botón "Estado de cuenta" agregado a `guardian_students/show`.
+
+**Caso de aceptación, verificado end-to-end:** registrar un pago de $50.000 baja el saldo a
+exactamente `-50000.00` (BigDecimal, sin drift); crear un cargo de $120.000 sube el saldo a
+`120000.00`; pagar un cargo por su monto completo lo marca `paid`; una escritura que viola un
+`CHECK` de la BD (`method` inválido) revierte TODO — ni el `Payment` ni el cambio de saldo quedan
+persistidos (atomicidad real, no solo aserta que "debería"); resubmitir el mismo
+`idempotency_key` nunca duplica un pago ni un cargo; un docente sin `finance.read` recibe 403; sin
+entitlement de `finance`, 403 con "no está habilitado" antes que cualquier chequeo de RBAC; el
+acudiente ve el estado de cuenta de SU hijo (nunca otra familia, 404 al adivinar), sin ninguna
+acción de escritura ni formulario en la página, y ve el empty state (no un error) si no tiene hijos
+resueltos; supervisión y portal leen la MISMA cifra de saldo para la misma cuenta (mismo
+`Finance::AccountStatement`); aislamiento cross-tenant verificado con query real bajo RLS.
+
+**Resultado:** 442 runs / 0 failures / 0 errors / 1 skip preexistente (baseline 428; 14 tests
+nuevos, todos en `test/integration/finance_test.rb`). `bin/rails zeitwerk:check` verde. Cero
+migraciones — dominio ya real en esquema, solo se construyó UI+servicios+gating (gating ya existía).
+
+**Archivos nuevos/editados:**
+- Servicios: `app/domains/finance/services/account_statement.rb`,
+  `app/domains/finance/services/payment_recorder.rb`, `app/domains/finance/services/charge_creator.rb`.
+- Query object: `app/domains/finance/queries/account_scope.rb`.
+- Controllers: `app/controllers/finance/accounts_controller.rb`,
+  `app/controllers/finance/payments_controller.rb`, `app/controllers/finance/charges_controller.rb`,
+  `app/controllers/portals/guardian_finance_controller.rb`.
+- Vistas: `app/views/finance/accounts/{index,show}.html.erb`,
+  `app/views/finance/payments/new.html.erb`, `app/views/finance/charges/new.html.erb`,
+  `app/views/portals/guardian_finance/show.html.erb` (+ botón nuevo en
+  `app/views/portals/guardian_students/show.html.erb`). Reusa los 5 partials pre-existentes de
+  `app/views/finance/_*` sin modificarlos.
+- Rutas: `config/routes.rb` (`namespace :finance` + nested resource de portal). Sin cambios a
+  `config/entitlements/finance.rb`, `config/navigation/finance.rb`,
+  `ControlPlane::AddonCatalog::DOMAIN_KEYS`, `ControlPlane::SeedCatalog::ADDONS`, ni
+  `IdentityAccess::SeedPermissions::CATALOG` — los cinco ya estaban correctos.
+- Tests: `test/integration/finance_test.rb`.
 
 ### v1.17.0 — 2026-07-15 — `report_cards`: boletines (ítem #3 del MVP)
 

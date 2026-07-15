@@ -18,10 +18,10 @@
 
 | Campo | Valor |
 |---|---|
-| **Versión del documento** | `v1.17.0` |
+| **Versión del documento** | `v1.18.0` |
 | **Fecha** | 2026-07-15 |
-| **Tests** | 428 runs / 0 fallos / 1 skip preexistente (suite completa, en serie — ver Guardrails) |
-| **Estado en una línea** | Identidad real + RBAC/entitlement reales + portales de persona + autoservicio de staff + auditoría + CHECKPOINT E + #4 barrido (`teacher_management`/`group_management`/`schedules`-calificaciones/`counseling`) + matrícula por término real (`Schedules::ActiveTermEnrollmentScope`, v1.15.0) + `attendance` (asistencia diaria por homeroom, ítem #2 del MVP, v1.16.0) + **`report_cards` (boletines, ítem #3 del MVP): dominio NET-NEW addon-gated, lee `schedules` por FK, snapshot congelado al publicar (nunca re-lee la nota viva), dos superficies (supervisión RBAC+scope / portal por relación, solo publicados) — headcount y `ActiveTermEnrollmentScope` intactos**. `LINEAMIENTOS_MVP.md` ordena lo que sigue: UI de tesorería (`finance`) es el próximo ítem. |
+| **Tests** | 442 runs / 0 fallos / 1 skip preexistente (suite completa, en serie — ver Guardrails) |
+| **Estado en una línea** | Identidad real + RBAC/entitlement reales + portales de persona + autoservicio de staff + auditoría + CHECKPOINT E + #4 barrido (`teacher_management`/`group_management`/`schedules`-calificaciones/`counseling`) + matrícula por término real (`Schedules::ActiveTermEnrollmentScope`, v1.15.0) + `attendance` (v1.16.0) + `report_cards` (v1.17.0) + **`finance` (UI de tesorería, ítem #4 del MVP): primera superficie real sobre los 5 modelos ya existentes desde el primer commit (gating/nav/permisos ya estaban pre-registrados desde S2b/v1.3.0) — lectura+escritura de cargos/pagos transaccional, un solo camino de lectura compartido (supervisión + portal del acudiente), planes de pago diferidos**. `LINEAMIENTOS_MVP.md` ordena lo que sigue: `communication` es el próximo ítem. |
 
 ### Convención de versionado de ESTE documento
 
@@ -141,7 +141,7 @@ El **plano de control vive FUERA de `app/domains/*`** — namespace propio `app/
 | Dominio | Propósito |
 |---|---|
 | `counseling` | Psicoorientación. **Carve-out de `student_support`.** Casos/expedientes, sesiones/notas, remisiones, planes de intervención. Puede *leer* (no poseer) la historia médica de `student_support`. **Frontera de confidencialidad más estricta** que convivencia. |
-| `finance` | Tesorería/cartera **dentro** del tenant (el colegio cobra pensiones a acudientes). Cargos, pagos, estados de cuenta, planes de pago. **≠ billing de plataforma.** Tenant-scoped. |
+| `finance` | Tesorería/cartera **dentro** del tenant (el colegio cobra pensiones a acudientes). Cargos, pagos, estados de cuenta, planes de pago. **≠ billing de plataforma.** Tenant-scoped. **UI real desde v1.18.0**: `StudentAccount`/`Charge`/`Payment` (existían desde el primer commit) ahora tienen superficie de supervisión (molde #4, `finance.read`/`finance.write` — permisos que YA existían y ya reusaba `Cafeteria::BalancesController`) y portal del acudiente (solo lectura, mismo camino de lectura — `Finance::AccountStatement`). Dinero en `decimal(12,2)`, NO `*_cents bigint` (ver Guardrails). `PaymentPlan`/`Installment` (planes de pago/cuotas) siguen **sin UI**, diferidos a su propio slice — no alimentan el saldo hoy. |
 | `communication` | Hub de comunicación. Ver §8 (anexo). Sigue en fase stub. |
 | `attendance` | **Asistencia diaria por homeroom (v1.16.0, item #2 del MVP)** — dominio NET-NEW, real desde el día uno (sin fase stub). `AttendanceRecord` (`student_id`+`group_id`+`date`, único `(institution_id, student_id, date)`). Consume `Schedules::ActiveTermEnrollmentScope` (nunca re-deriva el join a término); molde #4 completo (per-row `can?`, `authorize!`, nav). Addon-gated. Por-materia diferido. |
 | `report_cards` | **Boletines (v1.17.0, item #3 del MVP)** — dominio NET-NEW, addon-gated, lee `schedules` por FK (nunca posee `Subject`/`Enrollment`/`Assessment`). `ReportCard` (`student_id`+`academic_term_id`, único `(institution_id, student_id, academic_term_id)`) — snapshot **congelado al publicar** (`lines_snapshot` jsonb + `overall_average`, nunca recomputado al leer un publicado). "Draft" es cómputo vivo sin fila (`ReportCards::Computation`, consumido tanto por el preview de supervisión como por `ReportCards::Publisher`). Dos superficies: supervisión (molde #4, `report_card.view`/`report_card.publish`) y portal (por relación, solo publicados, sin `authorize!`, fuera de `Navigation::Registry`). Consume `Schedules::ActiveTermEnrollmentScope` igual que `attendance`. Asistencia en el boletín y escala Decreto 1290 diferidos. |
@@ -491,9 +491,9 @@ firma del método (no acepta término de búsqueda) y con aserciones sobre la vi
 > cliente — léelo antes de elegir el próximo slice si el trabajo apunta a ese MVP. Camino crítico
 > propuesto ahí (§7): ~~cerrar matrícula/término (B2/Cav.)~~ **✅ mitad de modelo cerrada (v1.15.0)**
 > → ~~`attendance` (net-new)~~ **✅ cerrado (v1.16.0)** → ~~`report_cards` (boletines, net-new)~~
-> **✅ cerrado (v1.17.0)** → **UI de tesorería (`finance`, siguiente)** → `communication` →
-> `assignments` (net-new) → `calendar` (net-new) → `extracurriculars` (net-new) → portal del
-> cuidador ampliado → provisioning + correo real. Dominios
+> **✅ cerrado (v1.17.0)** → ~~UI de tesorería (`finance`)~~ **✅ cerrado (v1.18.0)** →
+> **`communication` (siguiente)** → `assignments` (net-new) → `calendar` (net-new) →
+> `extracurriculars` (net-new) → portal del cuidador ampliado → provisioning + correo real. Dominios
 > `student_support`/`counseling`/`cafeteria`/`transportation` reales no aplican
 > a este perfil (no se piden) — no confundir con "backlog general cerrado".
 
@@ -524,10 +524,9 @@ firma del método (no acepta término de búsqueda) y con aserciones sobre la vi
      `accommodations` NO tienen ninguna tabla real (a diferencia de lo que un recon superficial
      asumiría por la presencia de query objects/rosters) — es Clase C igual que `transportation`,
      no un carve-out "sensible pero cableable".
-   - **`finance`**: Clase A por modelos (`Charge`/`Payment`/`PaymentPlan`/`Installment`/
-     `StudentAccount` son reales), pero **sin ningún controller/ruta/vista** — a diferencia de los
-     demás, no hay stub que reemplazar, hay que construir desde cero. Diferido a su propio slice,
-     no por falta de esquema sino por alcance/forma distinta (ver `HISTORIA.md`).
+   - ~~**`finance`**: Clase A por modelos, sin controller/ruta/vista~~ — ✅ **cerrado (v1.18.0)**:
+     lectura+registro real de cargos/pagos (supervisión + portal del acudiente). `PaymentPlan`/
+     `Installment` siguen sin UI (diferido a su propio slice — no alimentan el saldo).
    - `core` no es candidato de #4 en sí — no tiene controllers propios; sus recursos de negocio
      (`students`, etc.) ya viven en `group_management`.
 5. **Plano de control — pendientes del track de billing** (S0→S4 completo, ver §7):
@@ -600,13 +599,37 @@ firma del método (no acepta término de búsqueda) y con aserciones sobre la vi
 - **`ReportCard#readonly?` (= `persisted?`, mismo patrón que `ControlPlane::InvoiceLineItem`) bloquea `update`/`destroy` de una fila individual — la regeneración va SIEMPRE por `delete_all` + `create!` desde `ReportCards::Publisher`, nunca por un `destroy_all`/`update` sobre el AR object.** `destroy_all` instancia cada registro y llama a `#destroy`, que Rails bloquea si `readonly?` es true (a diferencia de `delete_all`, que emite el DELETE en bulk sin pasar por el guard) — el mismo error que atrapó a este slice en desarrollo (`ActiveRecord::ReadOnlyRecord` al intentar `destroy_all`). Mismo balance que `ControlPlane::Billing::PeriodCut` ya documenta para `InvoiceLineItem`: "una línea no se edita nunca" ≠ "un snapshot no se regenera nunca".
 - **El portal de una persona (§ guardrail de arriba, `GuardianScope`/`StudentSelfScope`) sigue sin chequear `Entitlement::Registry`** (`report_cards`, v1.17.0, mismo patrón ya implícito en `cafeteria`/`transportation`'s portal stubs) — `Entitlement::Controller` infiere el `addon_key` del namespace del controller (`Portals::*`, nunca registrado), así que ningún controller de portal queda gateado por addon hoy. Es una superficie ya aceptada, no un gap nuevo de este slice — si algún día se decide gatear el portal también, es una decisión de diseño explícita (probablemente `gated_by_addon`), no un efecto colateral de cablear un dominio addon-gated más.
 - **`report_cards` es el segundo consumidor real (tras `attendance`) del layering de tres capas de §"Roster tomable" — y confirma que la RBAC puede partirse en dos permisos (`report_card.view`/`report_card.publish`) sobre las MISMAS tres capas**, a diferencia de `attendance.record` (un solo permiso). Publicar es una acción más sensible que previsualizar (mismo espíritu que el split `accommodations.view`/`accommodations.manage`) — un dominio futuro con esa misma asimetría debe partir el permiso, no forzar uno solo por "seguir el molde de attendance" literalmente.
+- **El dinero de `finance` (`student_accounts.balance`, `charges.amount`, `payments.amount`, `payment_plans.total_amount`, `installments.amount`) es `decimal(12,2)`, NO `*_cents bigint`** (`finance`, v1.18.0) — comiteado en el primer commit del repo, antes de que F6 (cents-bigint) se adoptara para el billing del control plane. `decimal`/`BigDecimal` es aritmética exacta en Postgres/Ruby, no tiene el problema de drift que F6 previene — es una representación DISTINTA, igualmente segura, no una violación de F6 disfrazada. **No migrar estas columnas a bigint-cents "para unificar" sin una razón de negocio explícita** — el invariante real y no negociable aquí es "nunca castear a Float, toda la aritmética de saldo en `BigDecimal`", verificado con tests que comparan `BigDecimal` exacto, nunca `Float`. F6 (cents-bigint) sigue vigente para todo lo que nace en el control plane (`ControlPlane::Addon`/`Invoice*`/`Subscription`) — los dos esquemas de dinero coexisten a propósito, por historia, no por descuido.
+- **Toda escritura de dinero pasa por un servicio, nunca por el controller directo, y es transaccional con row lock (`account.lock!`) sobre `StudentAccount`** (`Finance::PaymentRecorder`/`Finance::ChargeCreator`, v1.18.0) — el `Payment`/`Charge` y el update del saldo ocurren en la MISMA transacción; si cualquier paso falla (p. ej. un `method`/`status` que viola el `CHECK` de la BD), la transacción entera revierte y no queda ni el registro de dinero ni el saldo tocado (verificado con un test de atomicidad dedicado). El lock es pessimista (`.lock!`, serializa) sobre el `lock_version` optimista que la tabla YA tenía desde el primer commit — ambos coexisten sin conflicto porque el lock pessimista impide que la condición de carrera que el optimista detectaría llegue a ocurrir.
+- **Idempotencia de pago/cargo: el controller genera un `idempotency_key` una sola vez en `#new` (campo oculto), y el servicio lo usa como guarda — un re-submit del MISMO formulario nunca duplica** (`finance`, v1.18.0) — `Finance::Payment`/`Finance::Charge` YA tenían una columna `idempotency_key` con índice único por institución desde el primer commit (sin usar hasta este slice); el servicio chequea esa clave ANTES y DESPUÉS de tomar el lock (para cerrar la ventana de carrera entre el pre-check y adquirir el lock), y el índice único de la BD es el backstop final si dos requests corrieran verdaderamente en paralelo.
+- **Un solo camino de lectura del estado de cuenta (`Finance::AccountStatement`), consumido por supervisión Y portal** (`finance`, v1.18.0) — mismo patrón que `ReportCards::Computation` (v1.17.0): una sola computación, dos superficies, así que las cifras nunca pueden discrepar entre sí. `Finance::Charge` no tiene FK a `Finance::StudentAccount` (solo a `student_id` directo) — este servicio es el único lugar que puentea cuenta→estudiante→cargos, no reinventar ese puente en otro lugar.
+- **`finance` ya estaba addon-gated, en `Navigation::Registry` y con sus permisos (`finance.read`/`finance.write`) sembrados desde ANTES de que existiera un controller real** (`config/entitlements/finance.rb`/`ControlPlane::AddonCatalog::DOMAIN_KEYS`/`config/navigation/finance.rb`, todos desde v1.3.0/S2b) — un recon que asuma "dominio sin gating porque no tiene UI todavía" puede estar equivocado; verificar siempre contra `Entitlement::Registry.domains`/`ControlPlane::AddonCatalog::DOMAIN_KEYS`, nunca contra la presencia de un controller. **`finance.read` también lo reusa `Cafeteria::BalancesController`** (su propia función de "Saldos", sin relación con este slice) — cualquier cambio futuro al significado de `finance.read` debe revisar ese consumidor cruzado.
+- **El portal de una persona sigue sin chequear `Entitlement::Registry`, ahora confirmado también para `finance`** (mismo gap ya aceptado de `cafeteria`/`transportation`/`report_cards`, v1.17.0) — un acudiente podría ver el estado de cuenta de su hijo aunque la institución no tenga el addon `finance` contratado. Es el caso que más motivaría cerrar ese gap (dinero, no solo notas/asistencia) — pero sigue siendo una decisión de diseño separada (`gated_by_addon` explícito en los controllers de `Portals::*`), no algo que este slice decidiera resolver.
+- **Planes de pago/cuotas (`PaymentPlan`/`Installment`) siguen sin ninguna UI y NO alimentan el saldo** (`finance`, v1.18.0, confirmado por recon de modelo: `Installment` no tiene ningún callback/servicio que lo conecte a `StudentAccount.balance`) — el estado de cuenta de este slice es completo y correcto SIN ellos, no una vista parcial. Cablearlos es su propio slice futuro (gestión de cuotas + su propio efecto sobre el saldo, a decidir ahí).
 
 ---
 
 ## 13. Changelog
 
-El changelog completo (`v1.0.0` → `v1.17.0`) vive en **`HISTORIA.md`**. Entrada de esta versión:
+El changelog completo (`v1.0.0` → `v1.18.0`) vive en **`HISTORIA.md`**. Entrada de esta versión:
 
+- **`v1.18.0` — `finance`: UI de tesorería (ítem #4 del MVP, primera superficie sobre modelos ya
+  reales).** Recon reveló que `finance` ya estaba addon-gated (`config/entitlements/finance.rb`,
+  `AddonCatalog::DOMAIN_KEYS`, `SeedCatalog::ADDONS`), ya tenía entrada en `Navigation::Registry`, y
+  ya tenía permisos `finance.read`/`finance.write` sembrados a `institution_admin` y reusados por
+  `Cafeteria::BalancesController` — todo desde v1.3.0/S2b. Cero de eso se reconstruyó; se reusó tal
+  cual (no se inventaron `finance.view`/`finance.manage`). Segundo hallazgo material: el dinero es
+  `decimal(12,2)`, no `*_cents bigint` (comiteado antes de que F6 existiera) — se mantuvo la
+  representación (exacta, sin drift de float) en vez de migrar el esquema. `idempotency_key` (con
+  índice único por institución) ya existía sin usar en `charges`/`payments` desde el primer commit —
+  este slice lo activó como guarda real de doble-submit. `Finance::PaymentRecorder`/
+  `Finance::ChargeCreator`: transaccionales, con `account.lock!` (pessimista, coexiste sin conflicto
+  con el `lock_version` optimista ya presente). `Finance::AccountStatement`: un solo camino de
+  lectura (mismo patrón que `ReportCards::Computation`, v1.17.0) consumido por supervisión (molde #4,
+  scope institución-wide — tesorería es función central, no por grupo) y portal del acudiente (solo
+  lectura, sin riel de pago, sin gating por entitlement — mismo gap ya aceptado de `report_cards`).
+  `PaymentPlan`/`Installment` confirmados sin ninguna conexión al saldo — quedan sin UI, diferidos.
+  428→442 tests totales (14 nuevos). Narrativa completa en `HISTORIA.md`.
 - **`v1.17.0` — `report_cards`: boletines (ítem #3 del MVP, dominio net-new).** Checkpoint de diseño
   (aprobado): dominio propio, addon-gated, lee `schedules` por FK (nunca posee `Subject`/
   `Enrollment`/`Assessment`). `report_cards` (`student_id`+`academic_term_id`, único

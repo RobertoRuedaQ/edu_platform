@@ -63,6 +63,10 @@ Rails.application.routes.draw do
         # ALL children on one page) since a term's boletín is inherently
         # per-child. No authorize!, outside Navigation::Registry (§7).
         resources :report_cards, only: :index, controller: "guardian_report_cards"
+        # finance (v1.18.0): read-only account statement, by relation — same
+        # per-child nesting as report_cards (substantial content per child).
+        # No authorize!, outside Navigation::Registry, no write action.
+        resource :finance, only: :show, controller: "guardian_finance"
       end
       resource :cafeteria, only: :show, controller: "guardian_cafeteria"
       resource :transport, only: :show, controller: "guardian_transport"
@@ -164,6 +168,21 @@ Rails.application.routes.draw do
   namespace :report_cards do
     resources :groups, only: :index do
       resources :publications, only: %i[new create]
+    end
+  end
+
+  # --- finance (UI de tesorería, v1.18.0, MVP critical path item #4) --------
+  # Models (Charge/Payment/PaymentPlan/Installment/StudentAccount) and the
+  # entitlement/nav registration all predate this slice (v1.3.0/S2b) — this
+  # wires the first real controller. `path: ""` keeps accounts#index at the
+  # bare `/finance` the pre-existing nav entry already points to.
+  # payments/charges only ever nest under an account — no accounts#new
+  # (accounts aren't created via UI this slice) and no plan/installment
+  # management (deferred, see HISTORIA.md v1.18.0).
+  namespace :finance do
+    resources :accounts, path: "", only: %i[index show] do
+      resources :payments, only: %i[new create]
+      resources :charges, only: %i[new create]
     end
   end
 

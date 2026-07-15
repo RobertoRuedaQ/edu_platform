@@ -1,0 +1,39 @@
+<% content_for :title, "Cartera · #{@account.student.first_name} #{@account.student.last_name}" %>
+
+<%= render "shared/page_header",
+      title: "#{@account.student.first_name} #{@account.student.last_name}",
+      subtitle: "Estado de cuenta.",
+      actions: (safe_join([
+        ui_button("Registrar pago", href: new_finance_account_payment_path(@account), variant: :primary),
+        ui_button("Crear cargo", href: new_finance_account_charge_path(@account), variant: :secondary)
+      ], " ") if can?("finance.write", @account)) %>
+
+<div class="tile-grid">
+  <%= render "finance/balance_summary", balance: @statement.balance, currency: @statement.currency,
+        overdue_total: @statement.overdue_total %>
+</div>
+
+<%= render "shared/page_header", title: "Cargos pendientes" %>
+<% if @statement.pending_charges.any? -%>
+  <%= render layout: "shared/table",
+        locals: { headers: [ "Factura", "Descripción", "Vence", "Monto", "Estado" ] } do -%>
+    <% @statement.pending_charges.each do |charge| -%>
+      <%= render "finance/charge_row", invoice_number: charge.invoice_number, description: charge.description,
+            due_on: charge.due_on, amount: charge.amount, status: charge.status, currency: @statement.currency %>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state", icon: "check-circle", title: "Sin cargos pendientes" %>
+<% end -%>
+
+<%= render "shared/page_header", title: "Historial" %>
+<% if @statement.ledger_lines.any? -%>
+  <%= render layout: "shared/table", locals: { headers: [ "Fecha", "Concepto", "Monto" ] } do -%>
+    <% @statement.ledger_lines.each do |line| -%>
+      <%= render "finance/statement_line", date: line.date, concept: line.concept, amount: line.amount,
+            kind: line.kind, currency: @statement.currency %>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state", icon: "file-text", title: "Sin movimientos todavía" %>
+<% end -%>

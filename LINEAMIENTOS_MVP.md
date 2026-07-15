@@ -230,10 +230,12 @@ v1.14.0: modelos reales (`Charge`/`Payment`/`PaymentPlan`/`Installment`/`Student
 3. ~~**Notas → boletines + portal**~~ (`report_cards`, net-new) — ✅ **cerrado (v1.17.0)**: dominio
    propio addon-gated que lee `schedules` por FK; snapshot congelado al publicar; portal solo
    publicados. Ver `PROJECT_STATE.md`/`HISTORIA.md`.
-4. **Pago manual en tesorería** (`finance`): UI sobre modelos ya reales. Independiente — puede ir en
-   paralelo; necesario antes de cobrar actividades pagas. **Siguiente ítem del camino crítico.**
+4. ~~**Pago manual en tesorería**~~ (`finance`) — ✅ **cerrado (v1.18.0)**: UI real sobre los 5
+   modelos ya existentes (lectura + registrar pago/cargo, dos superficies); planes de pago diferidos.
+   Ver `PROJECT_STATE.md`/`HISTORIA.md`.
 5. **`communication`** (Campfire interno: rooms + DM; externo: anuncios + "correos" al acudiente).
    Columna vertebral de las notificaciones (asistencia/asignaciones derivan avisos de aquí).
+   **Siguiente ítem del camino crítico.**
 6. **`assignments`** (tareas/trabajos/salidas) — depende de matrícula y `group_management` (targeting
    por grupo); molde #4 para el scope del docente. Fechas se derivan al calendario.
 7. **`calendar`** + scope de visibilidad del cuidador (consume fechas de `assignments`, `attendance`,
