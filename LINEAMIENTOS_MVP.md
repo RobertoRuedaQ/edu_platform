@@ -239,13 +239,14 @@ v1.14.0: modelos reales (`Charge`/`Payment`/`PaymentPlan`/`Installment`/`Student
    acceso (compose RBAC / bandeja-participación / responder-participación / auditoría RBAC).
    Diferidos anotados (fan-out 1:1 a todos los cuidadores, threading, tags, acudiente-inicia) — ver
    `PROJECT_STATE.md` §8.2/`HISTORIA.md`.
-6. **`assignments`** (tareas académicas) — **slice 1/4 iniciado.** ~~Publicar + ver + calificar
+6. **`assignments`** (tareas académicas) — **slices 1–2/4 hechos.** ~~Publicar + ver + calificar
    directo~~ ✅ **cerrado (v1.21.0)**: cuelga del gradebook de `schedules` por FK (fan-out a
-   `Assessment` al publicar, calificar reusa esa misma fila). **Slices 2–4 pendientes** (entrega de
-   texto → adjuntos, con checkpoint propio de Active Storage/serving/docx → rúbricas) — roadmap
-   completo en `HISTORIA.md` v1.21.0. Molde #4 para el scope del docente ya aplicado (vía
-   `grade_level_id` de `Subject`). **Siguiente ítem del camino crítico** (slice 2, o `calendar` —
-   ver `OPEN_PROCESS.md`).
+   `Assessment` al publicar, calificar reusa esa misma fila). ~~Entrega de texto~~ ✅ **cerrado
+   (v1.22.0)**: llave en-dominio `(assignment_id, student_id)`, ingresable por el estudiante o su
+   acudiente (B1) — primer write de portal, gateado por relación (`StudentView.for`), nunca RBAC.
+   **Slices 3–4 pendientes** (adjuntos, con checkpoint propio de Active Storage/serving/docx →
+   rúbricas) — roadmap completo en `HISTORIA.md` v1.21.0/v1.22.0. **Siguiente ítem del camino
+   crítico** (slice 3, o `calendar` — ver `OPEN_PROCESS.md`).
 7. **`calendar`** + scope de visibilidad del cuidador (consume fechas de `assignments`, `attendance`,
    `extracurriculars`).
 8. **`extracurriculars`** (depende de matrícula/término; actividad paga = `Charge` en `finance`, de #4).

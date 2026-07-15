@@ -56,14 +56,12 @@ module Assignments
       @subject = find_subject
       @assignment = find_assignment
       authorize!("assignment.manage", @subject)
+      # Assignments::GradingView pairs roster + grade + submission in ONE
+      # place (v1.22.0) — before publish there's nothing fanned-out yet, so
+      # the preview roster has no grades/submissions to pair (grading and
+      # submitting only make sense against a published assignment).
+      @rows = @assignment.published? ? Assignments::GradingView.for(@assignment) : []
       @roster = Assignments::Roster.for_subject(@subject).order(:last_name, :first_name)
-      @scores = if @assignment.published?
-        Schedules::Assessment.joins(:enrollment)
-          .where(assignment_id: @assignment.id)
-          .index_by { |assessment| assessment.enrollment.student_id }
-      else
-        {}
-      end
     end
 
     def publish

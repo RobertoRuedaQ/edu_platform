@@ -11,11 +11,109 @@
 
 ---
 
-## Changelog completo (v1.0.0 → v1.21.0)
+## Changelog completo (v1.0.0 → v1.22.0)
 
 > Copiado verbatim de §14 de `PROJECT_STATE.md` v1.5.0, antes de que el split editorial (v1.5.1)
 > moviera el changelog fuera del doc magro. Las entradas v1.6.0+ se escribieron directamente aquí,
 > ya con el split vigente.
+
+### v1.22.0 — 2026-07-15 — `assignments`: entrega de texto, slice 2/4 (ítem #6 del MVP)
+
+**Slice 2 de 4 de `assignments`.** Sobre la base de v1.21.0 (publicar + ver + calificar directo):
+el estudiante entrega una respuesta de texto a una tarea publicada; el docente la ve junto a la
+nota. Entrega también por el acudiente en nombre del hijo (B1: un menor de K-12 sin login no podría
+entregar de otro modo). Solo texto — sin adjuntos (slice 3) ni rúbrica (slice 4).
+
+**Recon (STOP #1):** confirmó el modelo real de v1.21.0 sin ninguna sorpresa material —
+`assignments.status` ∈ draft/published/archived; el fan-out (`assessments.assignment_id`, una fila
+por matrícula con `score: nil` al publicar); el roster de tres capas
+(`Roster.for_subject`); el camino estudiante→matrícula→assessment→assignment ya resuelto por
+`Assignments::StudentView.for(student)` (exactamente "las tareas publicadas de las materias en las
+que el estudiante está matriculado en el término activo"); la superficie de portal (`Portals::
+Student/GuardianAssignmentsController`, solo lectura hasta ahora); la superficie de calificación del
+docente (`AssignmentsController#show`, con `@roster`/`@scores` separados — se refactorizó a un
+único `Assignments::GradingView`).
+
+**Decisión de la llave de la entrega — el prompt dejaba la puerta abierta a anclarla al
+`assessment_id` fanned-out; se confirmó el default (llave en-dominio).** Anclar a `assessment_id`
+habría acoplado `submissions`→`schedules` en un eje que no hace falta: la fila `Assessment` de un
+estudiante para una tarea es un detalle de implementación del gradebook (existe SOLO porque
+`Assignments::Publisher` la fanned-out), no algo que `submissions` debería conocer o depender de.
+La llave en-dominio `(assignment_id, student_id)` es más limpia y sigue el mismo principio que ya
+guio a `report_cards`/`finance`: un servicio de lectura (`Assignments::GradingView`, mismo espíritu
+que `Finance::AccountStatement`) empareja roster+nota+entrega en un solo lugar, nunca un FK cruzado
+en el esquema.
+
+**Lo construido:**
+- Migración `20260715203148_create_submissions.rb`: `assignment_id`/`student_id` (único compuesto
+  `institution_id`-leading — una entrega por estudiante por tarea, last-write-wins, sin historial),
+  `body` (text), `submitted_by_user_id` (nullable+nullify, atribución — nunca la identidad
+  propietaria, que es siempre `student_id`), `submitted_at`. RLS `ENABLE+FORCE`+policy. Corrida en
+  dev y test.
+- Modelo `Assignments::Submission` (`#late?`, flag calculado comparando `submitted_at` contra
+  `assignment.due_date` — nunca un bloqueo).
+- `Assignments::SubmissionRecorder` (upsert `find_or_initialize_by` sobre el único compuesto —
+  confía en que el caller ya resolvió `assignment` a través del scope correcto, misma división de
+  responsabilidad que `Communication::MessageSender`/`ConversationComposer`).
+- `Assignments::StudentView` gana `submission_for` (junto al `score_for` ya existente).
+- `Assignments::GradingView` nuevo — el servicio de lectura que pareó roster+assessment+submission
+  para la vista del docente, reemplazando los `@roster`/`@scores` sueltos que `AssignmentsController
+  #show` armaba antes.
+- **El PRIMER write desde un portal en todo el proyecto**: `Portals::StudentSubmissionsController`/
+  `GuardianSubmissionsController#create`. El gate es exactamente el mismo query object que ya
+  acotaba la LECTURA (`Assignments::StudentView.for(student)`) — nunca `authorize!`, nunca un
+  permiso nuevo. Un acudiente resuelve primero al hijo por `GuardianScope` (nunca confía en
+  `params[:student_id]` crudo) y LUEGO resuelve la tarea por `StudentView.for(ese hijo)` — dos
+  scopes encadenados, la tarea de otro hijo o de otro estudiante 404 en ambos pasos.
+- Vistas de portal (`#show` nuevo en ambos `Portals::*AssignmentsController`, formulario de entrega
+  compartido `assignments/_submission_form`) y la vista del docente actualizada para mostrar la
+  entrega (truncada) + badge "tardía" junto al input de nota.
+
+**Caso de aceptación, verificado end-to-end:** un estudiante entrega texto en su tarea publicada y
+el docente la ve en la MISMA vista de calificar; un acudiente entrega en nombre de su hijo —
+`submitted_by_user_id` registra al acudiente, `student_id` sigue siendo el hijo; un estudiante NO
+puede entregar en una tarea de una materia en la que no está matriculado (404, no 403 — la tarea
+simplemente no existe en su scope); un acudiente NO puede entregar por un no-hijo (404); reenviar
+actualiza la MISMA fila (verificado por conteo, nunca 2); entregar en un `draft` o un `archived` da
+404 (ninguno de los dos aparece en `StudentView.for`); una entrega después de `due_date` se acepta
+y se marca tardía, nunca se bloquea; calificar sin entrega funciona igual que siempre, y entregar
+nunca mueve la nota ya registrada (los dos ejes verificados independientes en el mismo test); sin
+campo de adjunto en el formulario; sin entitlement de `assignments`, el portal SIGUE aceptando la
+entrega (mismo gap ya aceptado — `Portals::*` nunca chequea entitlement); aislamiento cross-tenant
+verificado con query real bajo RLS.
+
+**Hallazgo de proceso, no de producto:** el primer intento de dos tests fallaba porque, tras hacer
+`sign_in_as(student_user, ...)` para probar el portal, el test seguía usando `as_teacher` (que solo
+edita los `RoleAssignment` de `@user`) asumiendo que la sesión HTTP también volvía a ser la del
+docente — no es así; `with_grants` nunca re-autentica. Corregido re-logueando explícitamente como
+`@user` antes de la verificación del lado del docente. Vale como recordatorio para los próximos
+slices con superficies staff+portal en el mismo test.
+
+**Decisión explícita, no un olvido:** `db/seeds.rb` NO se tocó — mismo alcance que las cinco slices
+anteriores (el archivo es puramente demográfico/académico, sin ningún concepto de
+`institution_users`/`Assignments::Assignment`/RBAC).
+
+**Resultado:** 499 runs / 0 failures / 0 errors / 1 skip preexistente (baseline 487; 12 tests
+nuevos, todos en `test/integration/submissions_test.rb`). `bin/rails zeitwerk:check` verde. Una
+migración, aplicada en dev y test.
+
+**Archivos nuevos/editados:**
+- Migración: `db/migrate/20260715203148_create_submissions.rb`.
+- Modelo: `app/domains/assignments/models/submission.rb`.
+- Servicios: `app/domains/assignments/services/submission_recorder.rb`,
+  `app/domains/assignments/services/grading_view.rb` (+ edit a
+  `app/domains/assignments/services/student_view.rb`).
+- Controllers: `app/controllers/portals/student_submissions_controller.rb`,
+  `app/controllers/portals/guardian_submissions_controller.rb` (+ edits a
+  `app/controllers/portals/{student,guardian}_assignments_controller.rb` para `#show` +
+  `app/controllers/assignments/assignments_controller.rb` para usar `GradingView`).
+- Vistas: `app/views/assignments/_submission_form.html.erb` (compartido),
+  `app/views/portals/{student,guardian}_assignments/show.html.erb` (+ edits a
+  `app/views/assignments/_assignment_list.html.erb` y
+  `app/views/assignments/assignments/show.html.erb`).
+- Config: `config/routes.rb`.
+- Tests: `test/integration/submissions_test.rb`.
+- Proceso: `OPEN_PROCESS.md` (backlog + guardrails nuevos).
 
 ### v1.21.0 — 2026-07-15 — `assignments`: tareas académicas, slice 1/4 (ítem #6 del MVP)
 

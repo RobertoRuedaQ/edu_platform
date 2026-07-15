@@ -52,10 +52,15 @@ Rails.application.routes.draw do
       # communication (v1.19.0): org-wide, NOT per-self-scope — membership
       # read surface, same shared feed the staff/guardian surfaces use.
       resources :announcements, only: :index, controller: "student_announcements"
-      # assignments (v1.21.0, slice 1/4): published-only, by self-scope, own
-      # grade read from the same schedules::Assessment row report_cards
-      # reads. No authorize!, outside Navigation::Registry.
-      resources :assignments, only: :index, controller: "student_assignments"
+      # assignments (v1.21.0, slice 1/4; #show + #submission v1.22.0):
+      # published-only, by self-scope, own grade read from the same
+      # schedules::Assessment row report_cards reads. No authorize!, outside
+      # Navigation::Registry. #submission is the FIRST portal write —
+      # StudentSubmissionsController re-derives the same self-scope, never
+      # trusts params directly (see that controller's docstring).
+      resources :assignments, only: %i[index show], controller: "student_assignments" do
+        resource :submission, only: :create, controller: "student_submissions"
+      end
     end
     resource :guardian, only: :show, controller: "guardian_portal" do
       # Per-child read-only summary (v1.9.0) — resolved through
@@ -74,10 +79,14 @@ Rails.application.routes.draw do
         # per-child nesting as report_cards (substantial content per child).
         # No authorize!, outside Navigation::Registry, no write action.
         resource :finance, only: :show, controller: "guardian_finance"
-        # assignments (v1.21.0, slice 1/4): published-only, per-child (a
-        # subject's assignments are inherently per-child, unlike org-wide
-        # announcements). No authorize!, outside Navigation::Registry.
-        resources :assignments, only: :index, controller: "guardian_assignments"
+        # assignments (v1.21.0, slice 1/4; #show + #submission v1.22.0):
+        # published-only, per-child (a subject's assignments are inherently
+        # per-child, unlike org-wide announcements). No authorize!, outside
+        # Navigation::Registry. #submission lets a guardian submit ON
+        # BEHALF of this specific already-scoped child (B1).
+        resources :assignments, only: %i[index show], controller: "guardian_assignments" do
+          resource :submission, only: :create, controller: "guardian_submissions"
+        end
       end
       # communication (v1.19.0): org-wide, NOT per-child — a sibling of
       # :students, not nested under it.

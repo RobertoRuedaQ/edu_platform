@@ -28,5 +28,14 @@ module Assignments
         .find_by(assignment_id: assignment.id, enrollments: { student_id: student.id })
         &.score
     end
+
+    # The student's own submission (v1.22.0), if any — nil means "not
+    # submitted yet", never an error. `for` above is THE security gate for
+    # writing one (see Assignments::SubmissionRecorder's docstring): a
+    # controller must resolve the assignment through `for(student)` before
+    # ever calling the recorder.
+    def submission_for(assignment, student)
+      Assignments::Submission.find_by(assignment_id: assignment.id, student_id: student.id)
+    end
   end
 end

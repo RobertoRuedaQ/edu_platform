@@ -18,17 +18,24 @@
 
 <%= render "shared/page_header", title: (@assignment.published? ? "Calificar" : "Roster (previsualización)") %>
 
-<% if @roster.any? -%>
-  <% if @assignment.published? -%>
+<% if @assignment.published? -%>
+  <% if @rows.any? -%>
     <%= form_with url: grade_assignments_subject_assignment_path(@subject, @assignment), method: :post do -%>
-      <%= render layout: "shared/table", locals: { headers: [ "Estudiante", "Nota" ] } do -%>
-        <% @roster.each do |student| -%>
-          <% existing = @scores[student.id] -%>
+      <%= render layout: "shared/table", locals: { headers: [ "Estudiante", "Entrega", "Nota" ] } do -%>
+        <% @rows.each do |row| -%>
           <tr>
-            <td><%= "#{student.first_name} #{student.last_name}" %></td>
+            <td><%= "#{row.student.first_name} #{row.student.last_name}" %></td>
+            <td>
+              <% if row.submission -%>
+                <%= truncate(row.submission.body, length: 80) %>
+                <% if row.submission.late? -%><strong>(tardía)</strong><% end -%>
+              <% else -%>
+                <span class="text-muted">Sin entregar</span>
+              <% end -%>
+            </td>
             <td>
               <input class="field__input" type="number" step="0.1" min="0" max="5"
-                     name="scores[<%= student.id %>]" value="<%= existing&.score %>" placeholder="Pendiente">
+                     name="scores[<%= row.student.id %>]" value="<%= row.assessment&.score %>" placeholder="Pendiente">
             </td>
           </tr>
         <% end -%>
@@ -36,14 +43,20 @@
       <%= ui_button "Guardar notas", type: "submit", variant: :primary %>
     <% end -%>
   <% else -%>
+    <%= render "shared/empty_state",
+          icon: "users",
+          title: "Sin estudiantes matriculados en el término activo para esta materia" %>
+  <% end -%>
+<% else -%>
+  <% if @roster.any? -%>
     <%= render layout: "shared/table", locals: { headers: [ "Estudiante" ] } do -%>
       <% @roster.each do |student| -%>
         <tr><td><%= "#{student.first_name} #{student.last_name}" %></td></tr>
       <% end -%>
     <% end -%>
+  <% else -%>
+    <%= render "shared/empty_state",
+          icon: "users",
+          title: "Sin estudiantes matriculados en el término activo para esta materia" %>
   <% end -%>
-<% else -%>
-  <%= render "shared/empty_state",
-        icon: "users",
-        title: "Sin estudiantes matriculados en el término activo para esta materia" %>
 <% end -%>

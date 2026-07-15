@@ -1240,6 +1240,25 @@ ALTER TABLE ONLY public.subjects FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: submissions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.submissions (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    assignment_id uuid NOT NULL,
+    student_id uuid NOT NULL,
+    body text NOT NULL,
+    submitted_by_user_id uuid,
+    submitted_at timestamp(6) without time zone NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+ALTER TABLE ONLY public.submissions FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: subscriptions; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1858,6 +1877,14 @@ ALTER TABLE ONLY public.subjects
 
 
 --
+-- Name: submissions submissions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.submissions
+    ADD CONSTRAINT submissions_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: subscriptions subscriptions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2029,6 +2056,13 @@ CREATE INDEX idx_rp_inst_permission ON public.role_permissions USING btree (inst
 --
 
 CREATE UNIQUE INDEX idx_rp_unique ON public.role_permissions USING btree (institution_id, role_id, permission_id);
+
+
+--
+-- Name: idx_submissions_unique_assignment_student; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_submissions_unique_assignment_student ON public.submissions USING btree (institution_id, assignment_id, student_id);
 
 
 --
@@ -3072,6 +3106,14 @@ ALTER TABLE ONLY public.roster_import_rows
 
 
 --
+-- Name: submissions fk_rails_19447e9b4d; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.submissions
+    ADD CONSTRAINT fk_rails_19447e9b4d FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE CASCADE;
+
+
+--
 -- Name: subjects fk_rails_1b26c6deb0; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3197,6 +3239,14 @@ ALTER TABLE ONLY public.messages
 
 ALTER TABLE ONLY public.departments
     ADD CONSTRAINT fk_rails_33e5ee827a FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: submissions fk_rails_3474dffb40; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.submissions
+    ADD CONSTRAINT fk_rails_3474dffb40 FOREIGN KEY (submitted_by_user_id) REFERENCES public.users(id) ON DELETE SET NULL;
 
 
 --
@@ -3381,6 +3431,14 @@ ALTER TABLE ONLY public.assignments
 
 ALTER TABLE ONLY public.role_permissions
     ADD CONSTRAINT fk_rails_60126080bd FOREIGN KEY (role_id) REFERENCES public.roles(id) ON DELETE CASCADE;
+
+
+--
+-- Name: submissions fk_rails_61cac0823d; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.submissions
+    ADD CONSTRAINT fk_rails_61cac0823d FOREIGN KEY (assignment_id) REFERENCES public.assignments(id) ON DELETE CASCADE;
 
 
 --
@@ -3573,6 +3631,14 @@ ALTER TABLE ONLY public.conversations
 
 ALTER TABLE ONLY public.attendance_records
     ADD CONSTRAINT fk_rails_828d16c97c FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE CASCADE;
+
+
+--
+-- Name: submissions fk_rails_8432d864a2; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.submissions
+    ADD CONSTRAINT fk_rails_8432d864a2 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
 
 
 --
@@ -4589,6 +4655,19 @@ CREATE POLICY subjects_tenant_isolation ON public.subjects USING ((institution_i
 
 
 --
+-- Name: submissions; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.submissions ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: submissions submissions_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY submissions_tenant_isolation ON public.submissions USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
 -- Name: teachers; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -4621,6 +4700,7 @@ CREATE POLICY teaching_assignments_tenant_isolation ON public.teaching_assignmen
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260715203148'),
 ('20260715195639'),
 ('20260715190531'),
 ('20260715155950'),
