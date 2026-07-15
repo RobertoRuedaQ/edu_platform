@@ -18,10 +18,10 @@
 
 | Campo | Valor |
 |---|---|
-| **Versión del documento** | `v1.18.0` |
+| **Versión del documento** | `v1.20.0` |
 | **Fecha** | 2026-07-15 |
-| **Tests** | 442 runs / 0 fallos / 1 skip preexistente (suite completa, en serie — ver Guardrails) |
-| **Estado en una línea** | Identidad real + RBAC/entitlement reales + portales de persona + autoservicio de staff + auditoría + CHECKPOINT E + #4 barrido (`teacher_management`/`group_management`/`schedules`-calificaciones/`counseling`) + matrícula por término real (`Schedules::ActiveTermEnrollmentScope`, v1.15.0) + `attendance` (v1.16.0) + `report_cards` (v1.17.0) + **`finance` (UI de tesorería, ítem #4 del MVP): primera superficie real sobre los 5 modelos ya existentes desde el primer commit (gating/nav/permisos ya estaban pre-registrados desde S2b/v1.3.0) — lectura+escritura de cargos/pagos transaccional, un solo camino de lectura compartido (supervisión + portal del acudiente), planes de pago diferidos**. `LINEAMIENTOS_MVP.md` ordena lo que sigue: `communication` es el próximo ítem. |
+| **Tests** | 472 runs / 0 fallos / 1 skip preexistente (suite completa, en serie — ver Guardrails) |
+| **Estado en una línea** | Identidad real + RBAC/entitlement reales + portales de persona + autoservicio de staff + auditoría + CHECKPOINT E + #4 barrido (`teacher_management`/`group_management`/`schedules`-calificaciones/`counseling`) + matrícula por término real (`Schedules::ActiveTermEnrollmentScope`, v1.15.0) + `attendance` (v1.16.0) + `report_cards` (v1.17.0) + `finance` (v1.18.0) + `communication` subsistema (A) anuncios (v1.19.0) + **`communication` subsistema (B) mensajería (ítem #5b del MVP): conversaciones multiparte, participante `institution_user` o `guardian_user` (CHECK exactamente-uno), CUATRO caminos de acceso nunca colapsados (compose RBAC / bandeja-participación / responder-participación / auditoría RBAC con log condicional append-only) — `communication` queda completo salvo diferidos anotados (fan-out 1:1, threading, tags, acudiente-inicia)**. `LINEAMIENTOS_MVP.md` ordena lo que sigue: `assignments` es el próximo ítem. |
 
 ### Convención de versionado de ESTE documento
 
@@ -142,7 +142,7 @@ El **plano de control vive FUERA de `app/domains/*`** — namespace propio `app/
 |---|---|
 | `counseling` | Psicoorientación. **Carve-out de `student_support`.** Casos/expedientes, sesiones/notas, remisiones, planes de intervención. Puede *leer* (no poseer) la historia médica de `student_support`. **Frontera de confidencialidad más estricta** que convivencia. |
 | `finance` | Tesorería/cartera **dentro** del tenant (el colegio cobra pensiones a acudientes). Cargos, pagos, estados de cuenta, planes de pago. **≠ billing de plataforma.** Tenant-scoped. **UI real desde v1.18.0**: `StudentAccount`/`Charge`/`Payment` (existían desde el primer commit) ahora tienen superficie de supervisión (molde #4, `finance.read`/`finance.write` — permisos que YA existían y ya reusaba `Cafeteria::BalancesController`) y portal del acudiente (solo lectura, mismo camino de lectura — `Finance::AccountStatement`). Dinero en `decimal(12,2)`, NO `*_cents bigint` (ver Guardrails). `PaymentPlan`/`Installment` (planes de pago/cuotas) siguen **sin UI**, diferidos a su propio slice — no alimentan el saldo hoy. |
-| `communication` | Hub de comunicación. Ver §8 (anexo). Sigue en fase stub. |
+| `communication` | Hub de comunicación. Ver §8 (anexo). **Ambos subsistemas reales**: (A) anuncios (v1.19.0, `Communication::Announcement`, difusión org-wide, RBAC para publicar + lectura por membresía); (B) mensajería (v1.20.0, `Conversation`/`ConversationParticipant`/`Message`, multiparte, participante `institution_user` **o** `guardian_user` — CHECK exactamente-uno, cuatro caminos de acceso RBAC/participación/auditoría). Diferidos anotados en §8.2 (fan-out 1:1, threading, tags, acudiente-inicia). |
 | `attendance` | **Asistencia diaria por homeroom (v1.16.0, item #2 del MVP)** — dominio NET-NEW, real desde el día uno (sin fase stub). `AttendanceRecord` (`student_id`+`group_id`+`date`, único `(institution_id, student_id, date)`). Consume `Schedules::ActiveTermEnrollmentScope` (nunca re-deriva el join a término); molde #4 completo (per-row `can?`, `authorize!`, nav). Addon-gated. Por-materia diferido. |
 | `report_cards` | **Boletines (v1.17.0, item #3 del MVP)** — dominio NET-NEW, addon-gated, lee `schedules` por FK (nunca posee `Subject`/`Enrollment`/`Assessment`). `ReportCard` (`student_id`+`academic_term_id`, único `(institution_id, student_id, academic_term_id)`) — snapshot **congelado al publicar** (`lines_snapshot` jsonb + `overall_average`, nunca recomputado al leer un publicado). "Draft" es cómputo vivo sin fila (`ReportCards::Computation`, consumido tanto por el preview de supervisión como por `ReportCards::Publisher`). Dos superficies: supervisión (molde #4, `report_card.view`/`report_card.publish`) y portal (por relación, solo publicados, sin `authorize!`, fuera de `Navigation::Registry`). Consume `Schedules::ActiveTermEnrollmentScope` igual que `attendance`. Asistencia en el boletín y escala Decreto 1290 diferidos. |
 
@@ -373,19 +373,77 @@ sintéticos.
 
 ---
 
-## 8. Dominio `communication` (anexo de diseño — stub)
+## 8. Dominio `communication` (anexo de diseño)
 
-Dos facetas que no se aplanan: **comunicación humana** (persona↔persona) y **notificaciones del
-sistema** (sistema→persona). Borrador de tablas (tenant-scoped, RLS): `conversations` (`kind` ∈
-direct/channel/parent_thread/announcement), `conversation_participants` (institution_user **o**
-guardian, patrón exactamente-uno), `messages` (con hilos), `tags`/`taggings`, `mentions`, y la
-faceta de notificaciones (`notifications`, `notification_preferences`, plantillas).
+Dos subsistemas que NO se aplanan en un solo modelo — decisión cerrada en v1.19.0, supersede el
+borrador anterior de este anexo (que proponía una tabla `conversations` unificada con `kind`
+incluyendo `announcement`; recon de v1.19.0 confirmó que no existía nada real todavía y el owner
+decidió separarlos por ser estructuralmente distintos):
 
-**Colisión de nombres a evitar:** *canales de discusión* (Slack-like) vs. *canales de entrega* de
-notificaciones (in-app/email/push) — nombrar distinto (`_channel_*` vs `_delivery_channel_badge`).
-**Tiempo real (Turbo Streams/Solid Cable) diferido.** Los correos de OTP e invitación **no** pasan
-por este dominio — van directo por `ApplicationMailer`/Active Job; centralizar todo envío saliente
-aquí sería una decisión de arquitectura nueva, no asumida hoy.
+### 8.1 Subsistema (A) — Anuncios — ✅ real desde v1.19.0
+
+Difusión de una vía, org-wide dentro del tenant (staff + acudientes + estudiantes con cuenta, sin
+segmentar por grado/grupo). Tabla dedicada `announcements` (`title`/`body`/`status` ∈
+published/retracted/`author_institution_user_id`/`published_at`/`retracted_at`) — **no** reutiliza
+ningún modelo de mensajería. Publicar/editar/retractar es RBAC (`announcement.publish` +
+`Navigation::Registry`); leer es **membresía** (cualquier miembro activo, sin `authorize!`, fuera
+del Registry, enlazado aparte — ver Guardrails, "tercer tipo de gate"). Retract es SIEMPRE soft
+(`status`), nunca `destroy`. Camino de lectura único (`Communication::AnnouncementFeed`) compartido
+por staff y ambos portales. Ver `HISTORIA.md` v1.19.0 para la narrativa completa.
+
+### 8.2 Subsistema (B) — Mensajería — ✅ núcleo real desde v1.20.0
+
+Las tres preguntas de diseño quedaron resueltas en el checkpoint (no re-abrir sin razón de negocio
+explícita — mismo tratamiento que ⚠-1/⚠-2):
+
+1. **Modelo de hilo = multiparte** (no hub-and-spoke): 2+ participantes, todos ven todos los
+   mensajes en una misma conversación. El fan-out 1:1 "director → cada cuidador en privado" queda
+   como **fast-follow** — un helper de composición que crea N conversaciones de 2, sin cambiar el
+   modelo base.
+2. **Auditor = rol de institución** (`conversation.audit`), nunca el super-admin de plataforma.
+3. **El auditor ve contenido completo**; el rastro **no** se surfacea a los participantes (solo
+   vive en `audit_events`, RBAC-gated).
+
+**Modelo real:** `conversations` (`subject`, `status` ∈ active/closed, `created_by_institution_
+user_id`/`closed_by_institution_user_id` — atribución, nullable+nullify), `conversation_
+participants` (`institution_user_id` **XOR** `guardian_user_id` — CHECK `num_nonnulls(...) = 1`,
+CASCADE en ambas identidades porque son la identidad del registro, no atribución opcional;
+`last_read_at` para no-leídos), `messages` (mismo XOR para el emisor, sin `parent_message_id` —
+threading diferido, se agrega aditivo cuando se construya). Sin tabla de tags (diferido).
+
+**Cuatro caminos de acceso, nunca colapsados** (ver Guardrails): iniciar (RBAC,
+`conversation.compose`, destinatarios acotados — staff de la institución ∪ acudientes de
+estudiantes en el scope RBAC del actor, **nunca** un directorio) → bandeja/responder (participación,
+sin `authorize!`, camino de lectura único `Communication::Inbox` compartido por staff y el portal
+del acudiente) → auditar (RBAC, `conversation.audit`, permiso **distinto** de compose, loguea
+`conversation_audited` en `audit_events` solo si el accesor NO es participante).
+
+**Diferidos, anotados, no construidos:** difusión 1:1 a todos los cuidadores (fast-follow sobre la
+base multiparte); threading (`parent_message_id`); tags/clasificación por temática; mensajería
+iniciada por el acudiente (bloqueada por Habeas Data — "quién puede contactar a quién libremente"
+necesita su propio diseño de directorio acotado); videollamada + acta (futuro lejano). Ver
+`HISTORIA.md` v1.20.0 para la narrativa completa y los hallazgos de recon.
+
+<details>
+<summary>Preguntas originales del checkpoint (resueltas arriba — histórico)</summary>
+
+1. ~~"Director ↔ todos los cuidadores": ¿hilo grupal o hub-and-spoke?~~ → multiparte, ver arriba.
+2. ~~¿Quién audita?~~ → rol de institución, ver arriba.
+3. ~~Frontera de confidencialidad: ¿contenido completo o solo metadata? ¿rastro visible a los
+   participantes?~~ → contenido completo para el auditor; rastro nunca visible a participantes, ver
+   arriba.
+
+</details>
+
+**Colisión de nombres a evitar** (seguía aplicando del borrador anterior): *canales de discusión*
+(Slack-like, si mensajería termina adoptando el concepto) vs. *canales de entrega* de notificaciones
+(in-app/email/push) — nombrar distinto (`_channel_*` vs `_delivery_channel_badge`) si ambos
+terminan existiendo. **Tiempo real (Turbo Streams/Solid Cable) diferido** para ambos subsistemas.
+Los correos de OTP e invitación **no** pasan por este dominio — van directo por
+`ApplicationMailer`/Active Job; centralizar todo envío saliente aquí sería una decisión de
+arquitectura nueva, no asumida hoy. La faceta de **notificaciones del sistema** (sistema→persona,
+`notifications`/`notification_preferences`/plantillas) tampoco se ha diseñado — queda fuera de
+ambos subsistemas descritos arriba, un tercer subsistema (C) a definir si hace falta.
 
 ---
 
@@ -492,7 +550,8 @@ firma del método (no acepta término de búsqueda) y con aserciones sobre la vi
 > propuesto ahí (§7): ~~cerrar matrícula/término (B2/Cav.)~~ **✅ mitad de modelo cerrada (v1.15.0)**
 > → ~~`attendance` (net-new)~~ **✅ cerrado (v1.16.0)** → ~~`report_cards` (boletines, net-new)~~
 > **✅ cerrado (v1.17.0)** → ~~UI de tesorería (`finance`)~~ **✅ cerrado (v1.18.0)** →
-> **`communication` (siguiente)** → `assignments` (net-new) → `calendar` (net-new) →
+> ~~`communication` anuncios~~ **✅ cerrado (v1.19.0)** → ~~`communication` mensajería~~ **✅ núcleo
+> cerrado (v1.20.0)** → **`assignments` (net-new, siguiente)** → `calendar` (net-new) →
 > `extracurriculars` (net-new) → portal del cuidador ampliado → provisioning + correo real. Dominios
 > `student_support`/`counseling`/`cafeteria`/`transportation` reales no aplican
 > a este perfil (no se piden) — no confundir con "backlog general cerrado".
@@ -606,12 +665,66 @@ firma del método (no acepta término de búsqueda) y con aserciones sobre la vi
 - **`finance` ya estaba addon-gated, en `Navigation::Registry` y con sus permisos (`finance.read`/`finance.write`) sembrados desde ANTES de que existiera un controller real** (`config/entitlements/finance.rb`/`ControlPlane::AddonCatalog::DOMAIN_KEYS`/`config/navigation/finance.rb`, todos desde v1.3.0/S2b) — un recon que asuma "dominio sin gating porque no tiene UI todavía" puede estar equivocado; verificar siempre contra `Entitlement::Registry.domains`/`ControlPlane::AddonCatalog::DOMAIN_KEYS`, nunca contra la presencia de un controller. **`finance.read` también lo reusa `Cafeteria::BalancesController`** (su propia función de "Saldos", sin relación con este slice) — cualquier cambio futuro al significado de `finance.read` debe revisar ese consumidor cruzado.
 - **El portal de una persona sigue sin chequear `Entitlement::Registry`, ahora confirmado también para `finance`** (mismo gap ya aceptado de `cafeteria`/`transportation`/`report_cards`, v1.17.0) — un acudiente podría ver el estado de cuenta de su hijo aunque la institución no tenga el addon `finance` contratado. Es el caso que más motivaría cerrar ese gap (dinero, no solo notas/asistencia) — pero sigue siendo una decisión de diseño separada (`gated_by_addon` explícito en los controllers de `Portals::*`), no algo que este slice decidiera resolver.
 - **Planes de pago/cuotas (`PaymentPlan`/`Installment`) siguen sin ninguna UI y NO alimentan el saldo** (`finance`, v1.18.0, confirmado por recon de modelo: `Installment` no tiene ningún callback/servicio que lo conecte a `StudentAccount.balance`) — el estado de cuenta de este slice es completo y correcto SIN ellos, no una vista parcial. Cablearlos es su propio slice futuro (gestión de cuotas + su propio efecto sobre el saldo, a decidir ahí).
+- **"Membresía" es un TERCER tipo de gate, distinto de RBAC y de self-service/relación** (`communication` anuncios, v1.19.0) — RBAC (`authorize!` + scope + `Navigation::Registry`) protege una acción/recurso específico; self-service/relación (`GuardianScope`/`StudentSelfScope`) protege "lo mío"; membresía protege "cualquier miembro activo de esta institución, sin distinción de rol" — más amplio que ambos, pero todavía tenant-scoped (nunca cross-tenant). Su forma: sin `authorize!`, sin permiso, fuera de `Navigation::Registry`, enlazado aparte (mismo `shared/_self_service_link.html.erb`-style partial, ver `shared/_announcements_link.html.erb`), gateado por `Current.entitled_addon_keys.include?(domain)` en vez de por `can?`. El controller sigue viviendo bajo el namespace del dominio (`Communication::FeedController`), así que `Entitlement::Controller` lo sigue gateando por inferencia de namespace igual que cualquier otro — "membresía" cambia el gate #2 (RBAC → ninguno), nunca el gate #1 (entitlement).
+- **Publicar (RBAC) y leer (membresía) son DOS superficies con gates distintos sobre el MISMO dominio, y NUNCA se colapsan en una** (`communication` anuncios, v1.19.0) — mismo espíritu que supervisión vs. autoservicio en `teacher_management`, pero con membresía en vez de self-service del lado de lectura. `Communication::AnnouncementsController` (gestión, `announcement.publish`) y `Communication::FeedController` (lectura, membresía) son controllers DISTINTOS aunque lean la misma tabla — un slice futuro que necesite "publicar Y leer" en el mismo dominio debe replicar este split, no fusionar ambos gates en un controller.
+- **Retract es SIEMPRE soft (`status` + `retracted_at`), nunca `destroy`** (`Communication::Announcement#retract!`, v1.19.0) — mismo principio que `audit_events` (append-only) y el soft-delete de otros dominios: un anuncio retractado sobrevive como fila, solo desaparece de `Communication::AnnouncementFeed` (que filtra `status: "published"`). Verificado con un test dedicado que confirma la fila sigue existiendo tras retractar.
+- **Un solo camino de lectura (`Communication::AnnouncementFeed`), compartido por staff Y ambos portales** (`communication` anuncios, v1.19.0) — mismo patrón que `Finance::AccountStatement`/`ReportCards::Computation`: una sola query, N superficies, nunca pueden discrepar. A diferencia de `finance`/`report_cards` (per-hijo/per-cuenta), este feed es institución-wide — ninguna superficie de lectura pasa por `GuardianScope`/`StudentSelfScope`, el scope es `Current.institution` a secas.
+- **`communication` ya estaba addon-gated desde S2b/v1.3.0 (como `finance`) — pero, a diferencia de `finance`, NO tenía entrada en `Navigation::Registry` todavía** — un recon que asuma "si está gateado, también tiene nav" puede estar equivocado; cada pieza (`Entitlement::Registry`, `AddonCatalog::DOMAIN_KEYS`, `Navigation::Registry`, `SeedPermissions::CATALOG`) se verifica por separado, nunca se infiere una de la presencia de otra.
+- **Cuatro caminos de acceso sobre el MISMO conjunto de tablas, nunca colapsados** (mensajería, v1.20.0, la versión más elaborada del principio ya establecido por anuncios v1.19.0): iniciar (RBAC, `conversation.compose`, controller `Communication::ConversationsController`) / bandeja+responder (participación, sin `authorize!`, `Communication::InboxController` + `Communication::MessagesController`, mismo query compartido `Communication::Inbox` que usa el portal del acudiente) / auditar (RBAC, `conversation.audit` — permiso **distinto** de compose a propósito — `Communication::ConversationAuditsController`). Cuatro controllers, no uno con ifs por acción.
+- **Identidad de un participante/emisor de mensajería: `institution_user_id` (staff) XOR `guardian_user_id` (acudiente, FK directa a `users` — el MISMO handle que `guardian_students.guardian_user_id`, nunca `institution_user_id` aunque el acudiente también tenga esa fila)** — un `CHECK (num_nonnulls(institution_user_id, guardian_user_id) = 1)` real en la BD lo garantiza, no solo la validación de modelo (verificado con un test que inserta SQL crudo bypaseando ActiveRecord). Las columnas de identidad usan `on_delete: :cascade` (no `nullify`) — a diferencia de columnas de atribución pura como `conversations.created_by_institution_user_id` — porque una fila sin ninguna identidad violaría el CHECK; mismo criterio que `guardian_students.guardian_user_id` ya usa.
+- **"Staff" para el selector de destinatarios de mensajería significa específicamente un `institution_user` respaldado por una fila `StaffManagement::StaffMember`, NUNCA "cualquier `institution_user` activo"** — un acudiente TAMBIÉN tiene una fila `institution_users` (así puede loguearse; `Core::People::Resolver` la crea siempre), así que "todo membership activo" incluiría acudientes en la lista de "personal" por error. La señal correcta es la fila `StaffMember`, nunca "tiene cero `role_assignments`" (una persona de staff recién invitada, sin rol asignado todavía, se vería como acudiente bajo esa señal).
+- **El selector de destinatarios acotado para iniciar una conversación NO reusa `Schedules::ActiveTermEnrollmentScope`** (mensajería, v1.20.0) — ese resolver es de elegibilidad académica (matrícula por materia en el término activo), semánticamente ajeno a "de qué estudiantes es responsable este staff para efectos de contactar a sus acudientes". El layering de tres capas se preserva (scope RBAC del actor sobre grupos ∩ estudiantes del grupo ∩ acudientes vía `GuardianStudent`) pero la capa "hecho crudo" es `GroupManagement::Section#students`, no el resolver de `schedules`. Un futuro slice que necesite acotar por estudiantes debe evaluar cuál resolver es semánticamente correcto, no copiar el molde de `attendance`/`report_cards` por inercia.
+- **El log de auditoría de una conversación (`conversation_audited`) se escribe si y solo si el accesor tiene `conversation.audit` Y NO es participante** — un participante que también audita leyendo SU PROPIA conversación (por cualquiera de los dos caminos: bandeja o ruta de auditoría) nunca genera el evento; la comprobación es siempre "¿existe una fila `conversation_participants` para este actor en esta conversación?", nunca "¿qué ruta usó para llegar aquí?". El rastro nunca se muestra a los participantes — solo existe en el visor RBAC-gated de `audit_events` (`IdentityAccess::AuditEventIndex::ACTIONS`, ahora también escrito desde fuera de `identity_access`, ver esa constante).
+- **Cerrar una conversación es SIEMPRE soft** (`status`+`closed_at`+`closed_by_institution_user_id`) — los mensajes y participantes de una conversación cerrada nunca se borran, y una conversación cerrada simplemente rechaza nuevas respuestas (`Communication::MessageSender` chequea `conversation.active?`) hasta que un participante-staff la reabre. Un acudiente participante nunca tiene la acción de cerrar/reabrir expuesta — no por una verificación extra en el controller, sino porque su fila de participante usa `guardian_user_id`, nunca `institution_user_id`, así que su identidad simplemente no calza con la búsqueda de participante que usa `Communication::InboxController` (staff-only por construcción, no por chequeo).
 
 ---
 
 ## 13. Changelog
 
-El changelog completo (`v1.0.0` → `v1.18.0`) vive en **`HISTORIA.md`**. Entrada de esta versión:
+El changelog completo (`v1.0.0` → `v1.20.0`) vive en **`HISTORIA.md`**. Entrada de esta versión:
+
+- **`v1.20.0` — `communication`: mensajería (ítem #5b del MVP, subsistema (B), núcleo).** Tres
+  tablas net-new (`conversations`/`conversation_participants`/`messages`) — confirmado por recon
+  que no existía nada real, solo el borrador del anexo. Gating de `communication` reusado tal cual
+  (ya estaba desde v1.19.0); nav nueva para compose y auditoría (`Navigation::Registry`, dos
+  entradas RBAC, la bandeja se queda fuera del registry, mismo criterio que el feed de anuncios).
+  Identidad de participante/emisor: `institution_user_id` XOR `guardian_user_id` (CHECK real
+  `num_nonnulls(...) = 1`, cascade en ambas identidades — mismo handle que
+  `guardian_students.guardian_user_id`, nunca `institution_user_id` para un acudiente aunque
+  también tenga esa fila). Cuatro caminos de acceso sobre las mismas tres tablas, cuatro
+  controllers distintos: `ConversationsController` (compose, RBAC, destinatarios acotados —
+  staff ∪ acudientes de estudiantes en el scope RBAC del actor, nunca un directorio) →
+  `InboxController`/`Portals::GuardianInboxController` (bandeja+responder, participación, sin
+  `authorize!`, `Communication::Inbox` compartido) → `ConversationAuditsController` (auditoría,
+  RBAC, permiso `conversation.audit` distinto de compose, log condicional `conversation_audited`
+  en `audit_events` solo si el accesor no es participante). **Ajuste de diseño reportado**: el
+  selector de destinatarios NO reusa `Schedules::ActiveTermEnrollmentScope` (semánticamente ajeno a
+  "de quién es responsable este staff para mensajería") — usa `GroupManagement::Section#students`
+  como hecho de negocio crudo en su lugar. Cerrar es soft; sin threading; sin tags; acudiente
+  responde pero nunca inicia. 455→472 tests totales (17 nuevos). Narrativa completa en `HISTORIA.md`.
+- **`v1.19.0` — `communication`: anuncios (ítem #5 del MVP, subsistema (A) only).** Recon confirmó
+  que `communication` ya estaba addon-gated (`config/entitlements/communication.rb`,
+  `AddonCatalog::DOMAIN_KEYS`, `SeedCatalog::ADDONS` — metered "mensajes", provisional para la
+  mensajería futura) pero SIN entrada en `Navigation::Registry` ni permisos `communication.*`/
+  `announcement.*` — a diferencia de `finance`, el gating estaba pero el nav no; se creó
+  `config/navigation/communication.rb` y el permiso `announcement.publish` desde cero. Tabla
+  `announcements` dedicada (NO el modelo unificado `conversations` que el anexo viejo de §8
+  proponía — decisión explícita del owner: mensajería, cuando se construya, es estructuralmente
+  distinta y se diseña fresca en su propio slice). Autor vía `author_institution_user_id` (mismo
+  patrón que `audit_events.actor_institution_user_id`, no `staff_member_id` como hizo
+  `report_cards` — publicar es una acción administrativa, no una extensión docente). Dos
+  superficies con gates DISTINTOS: gestión (`Communication::AnnouncementsController`,
+  `authorize!("announcement.publish")` + Registry) y lectura (`Communication::FeedController`, gate
+  nuevo de **membresía** — sin `authorize!`, sin permiso, fuera del Registry, gateado solo por
+  `Current.entitled_addon_keys` — ver Guardrails). `Communication::AnnouncementFeed`: un solo
+  camino de lectura compartido por staff + portal del acudiente + portal del estudiante (ninguno
+  per-hijo/per-self-scope, a diferencia de `report_cards`/`finance` — un anuncio es institución-wide).
+  Retract soft (`Announcement#retract!`), nunca `destroy`. `db/seeds.rb` NO se tocó (mismo alcance
+  que `attendance`/`report_cards`/`finance` — el archivo no tiene ningún concepto de
+  `institution_users`/anuncios/RBAC, es puramente demográfico). El anexo de `communication` (§8 de
+  `PROJECT_STATE.md`) se reescribió para reflejar (A) real y registrar el spec completo de (B)
+  mensajería que definió el owner, con sus 3 preguntas de diseño abiertas — sin construir nada de
+  eso. 442→455 tests totales (13 nuevos). Narrativa completa arriba, en §8.
 
 - **`v1.18.0` — `finance`: UI de tesorería (ítem #4 del MVP, primera superficie sobre modelos ya
   reales).** Recon reveló que `finance` ya estaba addon-gated (`config/entitlements/finance.rb`,

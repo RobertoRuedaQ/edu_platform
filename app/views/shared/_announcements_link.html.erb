@@ -1,0 +1,11 @@
+<%#
+  Membership read surface (§ guardrail: a third gate type alongside RBAC and
+  self-service/relation) — deliberately OUTSIDE Navigation::Registry, same
+  reasoning as shared/_self_service_link.html.erb. Gated by ENTITLEMENT
+  (Current.entitled_addon_keys), not by permission — everyone who is a
+  member sees announcements once the institution has the addon; nobody
+  needs a specific can? to read them.
+-%>
+<% if Current.entitled_addon_keys.include?("communication") -%>
+  <%= link_to "Anuncios", communication_feed_path, class: "self-service-link" %>
+<% end -%>

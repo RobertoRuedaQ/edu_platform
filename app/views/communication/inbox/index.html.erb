@@ -1,0 +1,37 @@
+<% content_for :title, "Mensajes" %>
+
+<%= render "shared/page_header",
+      title: "Mensajes",
+      subtitle: "Conversaciones donde participas.",
+      actions: (ui_button("Nueva conversación", href: new_communication_conversation_path, variant: :primary) if can?("conversation.compose")) %>
+
+<% active_rows, closed_rows = @rows.partition { |row| row.conversation.active? } -%>
+
+<h2>Activas</h2>
+<% if active_rows.any? -%>
+  <%= render layout: "shared/table", locals: { headers: [ "Asunto", "No leídos", "" ] } do -%>
+    <% active_rows.each do |row| -%>
+      <tr>
+        <td><%= row.conversation.subject %></td>
+        <td><%= row.unread_count > 0 ? row.unread_count : "—" %></td>
+        <td><%= link_to "Abrir", communication_inbox_path(row.conversation), class: "btn btn--secondary btn--sm" %></td>
+      </tr>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state", icon: "inbox", title: "Sin conversaciones activas" %>
+<% end -%>
+
+<h2>Cerradas</h2>
+<% if closed_rows.any? -%>
+  <%= render layout: "shared/table", locals: { headers: [ "Asunto", "" ] } do -%>
+    <% closed_rows.each do |row| -%>
+      <tr>
+        <td><%= row.conversation.subject %></td>
+        <td><%= link_to "Ver", communication_inbox_path(row.conversation), class: "btn btn--secondary btn--sm" %></td>
+      </tr>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state", icon: "archive", title: "Sin conversaciones cerradas" %>
+<% end -%>

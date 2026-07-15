@@ -1,0 +1,9 @@
+<%#
+  Bandeja de mensajes (v1.20.0) — participation surface, deliberately
+  OUTSIDE Navigation::Registry, same reasoning as _announcements_link.html.erb.
+  Gated by entitlement (not can?): everyone who is a member sees their own
+  inbox once the institution has the addon.
+-%>
+<% if Current.entitled_addon_keys.include?("communication") -%>
+  <%= link_to "Mensajes", communication_inbox_index_path, class: "self-service-link" %>
+<% end -%>

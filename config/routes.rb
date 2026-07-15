@@ -49,6 +49,9 @@ Rails.application.routes.draw do
       # report_cards (v1.17.0): published-only, by self-scope — no
       # authorize!, outside Navigation::Registry (§7). Plural: many terms.
       resources :report_cards, only: :index, controller: "student_report_cards"
+      # communication (v1.19.0): org-wide, NOT per-self-scope — membership
+      # read surface, same shared feed the staff/guardian surfaces use.
+      resources :announcements, only: :index, controller: "student_announcements"
     end
     resource :guardian, only: :show, controller: "guardian_portal" do
       # Per-child read-only summary (v1.9.0) — resolved through
@@ -67,6 +70,14 @@ Rails.application.routes.draw do
         # per-child nesting as report_cards (substantial content per child).
         # No authorize!, outside Navigation::Registry, no write action.
         resource :finance, only: :show, controller: "guardian_finance"
+      end
+      # communication (v1.19.0): org-wide, NOT per-child — a sibling of
+      # :students, not nested under it.
+      resources :announcements, only: :index, controller: "guardian_announcements"
+      # communication (v1.20.0, subsistema B): reply-only bandeja — no
+      # compose, no close/reopen (§0/§4).
+      resources :inbox, only: %i[index show], controller: "guardian_inbox" do
+        resources :messages, only: :create, controller: "guardian_messages"
       end
       resource :cafeteria, only: :show, controller: "guardian_cafeteria"
       resource :transport, only: :show, controller: "guardian_transport"
@@ -184,6 +195,32 @@ Rails.application.routes.draw do
       resources :payments, only: %i[new create]
       resources :charges, only: %i[new create]
     end
+  end
+
+  # --- communication (v1.19.0, MVP critical path item #5) -------------------
+  # Subsystem (A) anuncios ONLY — messaging (B) is a future slice with its
+  # own fresh model (see HISTORIA.md v1.19.0's spec annex). Two DISTINCT
+  # gates on purpose: #announcements is the RBAC publish/manage surface
+  # (announcement.publish); #feed below is the membership read surface (no
+  # authorize!, outside Navigation::Registry).
+  namespace :communication do
+    resources :announcements, only: %i[index new create edit update] do
+      post :retract, on: :member
+    end
+    resource :feed, only: :show, controller: "feed"
+
+    # --- subsystem (B): mensajería (v1.20.0) ---------------------------
+    # FOUR distinct access paths, FOUR distinct controllers, even though
+    # all four touch the same three tables (§ Guardrails, "nunca colapsar"):
+    # compose (RBAC) / inbox (participation) / messages (participation
+    # reply) / conversation_audits (RBAC, different permission from compose).
+    resources :conversations, only: %i[new create]
+    resources :inbox, only: %i[index show] do
+      resources :messages, only: :create
+      post :close, on: :member
+      post :reopen, on: :member
+    end
+    resources :conversation_audits, only: %i[index show]
   end
 
   # --- transportation (domain views, Prompt Unificado) ----------------------

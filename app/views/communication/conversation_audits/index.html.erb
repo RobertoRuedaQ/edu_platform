@@ -1,0 +1,19 @@
+<% content_for :title, "Auditoría de mensajes" %>
+
+<%= render "shared/page_header",
+      title: "Auditoría de mensajes",
+      subtitle: "Todas las conversaciones de la institución. Leer una donde no participas deja rastro de auditoría." %>
+
+<% if @conversations.any? -%>
+  <%= render layout: "shared/table", locals: { headers: [ "Asunto", "Estado", "" ] } do -%>
+    <% @conversations.each do |conversation| -%>
+      <tr>
+        <td><%= conversation.subject %></td>
+        <td><%= conversation.active? ? "Activa" : "Cerrada" %></td>
+        <td><%= link_to "Ver", communication_conversation_audit_path(conversation), class: "btn btn--secondary btn--sm" %></td>
+      </tr>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state", icon: "shield", title: "Sin conversaciones todavía" %>
+<% end -%>

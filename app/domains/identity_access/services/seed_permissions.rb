@@ -57,7 +57,21 @@ module IdentityAccess
       # sensible que solo previsualizarlo (más cerca del split de
       # accommodations.view/manage que de attendance.record).
       "report_card.view"    => "Ver boletines (previsualización y publicados)",
-      "report_card.publish" => "Publicar boletines"
+      "report_card.publish" => "Publicar boletines",
+      # communication (v1.19.0), subsystem (A) anuncios only. One permission
+      # (unlike report_card's split) — anyone who can publish can also edit/
+      # retract, same unified-permission call as attendance.record. Leer NO
+      # usa permiso: es una superficie de membresía (cualquier miembro activo
+      # ve los anuncios publicados), no RBAC — ver Guardrails.
+      "announcement.publish" => "Crear, editar y retractar anuncios",
+      # communication (v1.20.0), subsistema (B) mensajería. Iniciar es RBAC
+      # (compose); leer/responder la propia bandeja es participación, sin
+      # permiso — ver Guardrails. Auditar es un permiso aparte, deliberada-
+      # mente separado de compose: quien puede iniciar conversaciones NO
+      # necesariamente puede leer las de otros (rector/institution_admin
+      # solamente, nunca el super-admin de plataforma).
+      "conversation.compose" => "Iniciar conversaciones con acudientes/estudiantes",
+      "conversation.audit"   => "Leer cualquier conversación de la institución (deja rastro de auditoría)"
     }.freeze
 
     def self.call

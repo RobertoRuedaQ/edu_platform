@@ -1,0 +1,5 @@
+<% content_for :title, "Nuevo anuncio" %>
+
+<%= render "shared/page_header", title: "Nuevo anuncio" %>
+
+<%= render "form", announcement: @announcement, url: communication_announcements_path %>

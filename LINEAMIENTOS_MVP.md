@@ -233,11 +233,15 @@ v1.14.0: modelos reales (`Charge`/`Payment`/`PaymentPlan`/`Installment`/`Student
 4. ~~**Pago manual en tesorería**~~ (`finance`) — ✅ **cerrado (v1.18.0)**: UI real sobre los 5
    modelos ya existentes (lectura + registrar pago/cargo, dos superficies); planes de pago diferidos.
    Ver `PROJECT_STATE.md`/`HISTORIA.md`.
-5. **`communication`** (Campfire interno: rooms + DM; externo: anuncios + "correos" al acudiente).
-   Columna vertebral de las notificaciones (asistencia/asignaciones derivan avisos de aquí).
-   **Siguiente ítem del camino crítico.**
+5. ~~**`communication`**~~ — ✅ **completo (ambos subsistemas).** Anuncios (subsistema A, difusión
+   org-wide) ✅ **cerrado (v1.19.0)**. Mensajería (subsistema B: conversaciones multiparte,
+   auditoría confidencial-pero-auditable) ✅ **núcleo cerrado (v1.20.0)** — cuatro caminos de
+   acceso (compose RBAC / bandeja-participación / responder-participación / auditoría RBAC).
+   Diferidos anotados (fan-out 1:1 a todos los cuidadores, threading, tags, acudiente-inicia) — ver
+   `PROJECT_STATE.md` §8.2/`HISTORIA.md`.
 6. **`assignments`** (tareas/trabajos/salidas) — depende de matrícula y `group_management` (targeting
-   por grupo); molde #4 para el scope del docente. Fechas se derivan al calendario.
+   por grupo); molde #4 para el scope del docente. Fechas se derivan al calendario. **Siguiente
+   ítem del camino crítico.**
 7. **`calendar`** + scope de visibilidad del cuidador (consume fechas de `assignments`, `attendance`,
    `extracurriculars`).
 8. **`extracurriculars`** (depende de matrícula/término; actividad paga = `Charge` en `finance`, de #4).

@@ -11,11 +11,236 @@
 
 ---
 
-## Changelog completo (v1.0.0 → v1.18.0)
+## Changelog completo (v1.0.0 → v1.20.0)
 
 > Copiado verbatim de §14 de `PROJECT_STATE.md` v1.5.0, antes de que el split editorial (v1.5.1)
 > moviera el changelog fuera del doc magro. Las entradas v1.6.0+ se escribieron directamente aquí,
 > ya con el split vigente.
+
+### v1.20.0 — 2026-07-15 — `communication`: mensajería (ítem #5b del MVP, subsistema B, núcleo)
+
+**Ítem #5b del camino crítico de `LINEAMIENTOS_MVP.md`.** Subsistema (B) de `communication`:
+mensajería privada tipo correo. Las decisiones de fondo llegaron ya aprobadas en el checkpoint
+(modelo multiparte, auditoría confidencial-pero-auditable, auditor = rol de institución, contenido
+completo para el auditor, rastro nunca visible a participantes) — las tres preguntas abiertas que
+`PROJECT_STATE.md` §8.2 venía registrando desde v1.19.0 quedaron resueltas ahí mismo, no antes.
+
+**Recon (STOP #1):** `grep -riE "conversation|message|participant" db/migrate/` sin resultados
+reales (solo coincidencias de nombre en `roster_import_rows`/`announcements`) — confirmado Clase C,
+el anexo de §8 solo lo había dibujado. `communication` seguía addon-gated desde v1.19.0 (reusado tal
+cual); el nav de anuncios ya existía pero mensajería necesitaba sus propias dos entradas (compose,
+auditoría) — la bandeja se queda fuera del registry, mismo criterio que el feed de anuncios.
+
+**Convención de identidad — el hallazgo que fijó el modelo de datos:** `audit_events` guarda
+`actor_institution_user_id`; `guardian_students` guarda `guardian_user_id` (FK directa a `users`,
+CASCADE, no nullify — es la identidad del vínculo, no un dato de atribución). Un acudiente TAMBIÉN
+tiene una fila `institution_users` real (`Core::People::Resolver` la crea siempre, es lo que permite
+el login), pero el handle que el resto de la app usa para "esta persona como acudiente" es siempre
+el `user_id` global, nunca el `institution_user_id` de esa membresía. Se siguió esa convención:
+`conversation_participants`/`messages` usan `institution_user_id` (staff) **XOR**
+`guardian_user_id` (acudiente, FK a `users`), con un CHECK real
+(`num_nonnulls(institution_user_id, guardian_user_id) = 1`) — verificado que la BD lo rechaza de
+verdad insertando SQL crudo que bypasea las validaciones de ActiveRecord, no solo confiando en el
+modelo. Las columnas de identidad usan `on_delete: :cascade` (nunca `nullify`) porque una fila sin
+ninguna identidad violaría el CHECK — a diferencia de `conversations.created_by_institution_user_id`/
+`closed_by_institution_user_id`, que SÍ son atribución opcional y usan `nullify`.
+
+**Ajuste de diseño reportado (no un hallazgo material que detuviera el slice, pero sí una desviación
+del molde literal que el prompt sugería):** el selector de destinatarios acotado NO reusa
+`Schedules::ActiveTermEnrollmentScope`. Ese resolver responde "¿quién está matriculado por materia
+en el término activo?" — una pregunta académica, ajena a "¿de qué estudiantes es responsable este
+staff para poder contactar a sus acudientes?". Forzarlo habría excluido, por ejemplo, a un
+estudiante recién matriculado sin ninguna materia inscrita todavía. Se preservó la MISMA disciplina
+de tres capas (scope RBAC del actor sobre grupos, vía `context.can?` per-row como
+`Attendance::GroupScope`/`ReportCards::GroupScope` ∩ estudiantes de esos grupos ∩ acudientes reales
+vía `GuardianStudent`), solo que la capa de "hecho crudo" es `GroupManagement::Section#students`
+(un hecho de negocio, ya real desde `group_management`), no un resolver académico. Staff, en
+cambio, es explícitamente NO acotado (`ComposeRecipients#staff` = todo `institution_user` activo
+respaldado por una fila `StaffManagement::StaffMember`, institución-wide) — y ahí surgió un segundo
+matiz: "cualquier `institution_user` activo" habría incluido a los acudientes (que también tienen
+esa fila), así que la señal correcta es específicamente la presencia de un `StaffMember`, nunca
+"tiene cero `role_assignments`" (un staff recién invitado sin rol asignado se vería como acudiente
+bajo esa segunda señal).
+
+**Lo construido:**
+- Migración `20260715190531_create_conversations_and_messages.rb`: tres tablas, RLS
+  `ENABLE+FORCE`+policy en cada una, índices `institution_id`-leading, los dos CHECK de
+  exactamente-uno. Corrida en dev y test.
+- Modelos `Communication::Conversation` (`#close!`/`#reopen!`, soft), `Communication::
+  ConversationParticipant` (`#staff?`/`#guardian?`/`#name`), `Communication::Message`
+  (`touch: true` sobre la conversación, para que el ordenamiento de la bandeja por actividad
+  reciente salga gratis de Rails).
+- `Communication::ComposeRecipients` (destinatarios acotados, tres capas), `Communication::
+  ConversationComposer` (transaccional: conversación+participantes+primer mensaje, RE-valida
+  destinatarios server-side — un request manipulado que intente agregar un acudiente fuera de
+  alcance simplemente lo descarta, verificado con un test dedicado), `Communication::MessageSender`
+  (el gate de "responder": participación, nunca `authorize!`; rechaza no-participante o
+  conversación cerrada), `Communication::Inbox` (el ÚNICO cómputo de bandeja+no-leídos, compartido
+  por el shell de staff y el portal del acudiente — mismo patrón que `AnnouncementFeed`/
+  `AccountStatement`/`Computation` de slices anteriores).
+- Dos permisos nuevos: `conversation.compose` (iniciar) y `conversation.audit` (auditar, **permiso
+  distinto** de compose a propósito — quien puede iniciar no necesariamente puede leer las de
+  otros). Acción `conversation_audited` agregada a `IdentityAccess::AuditEventIndex::ACTIONS`
+  (primera vez que esa constante recibe una acción escrita desde FUERA de `identity_access` —
+  docstring del archivo actualizado para reflejarlo).
+- Cuatro controllers, cuatro gates, nunca colapsados: `Communication::ConversationsController`
+  (compose, RBAC), `Communication::InboxController` + `Communication::MessagesController`
+  (bandeja+responder, participación — staff), `Portals::GuardianInboxController` + `Portals::
+  GuardianMessagesController` (mismo, portal del acudiente — sin compose, sin cerrar/reabrir:
+  ninguna ruta expone esas acciones para un acudiente, no hay chequeo extra que las bloquee),
+  `Communication::ConversationAuditsController` (auditoría, RBAC, log condicional).
+- Nav nueva: "Nueva conversación" (`conversation.compose`) y "Auditoría de mensajes"
+  (`conversation.audit`) en `config/navigation/communication.rb`. Enlace "Mensajes" nuevo en el
+  shell de staff (`shared/_inbox_link.html.erb`, gateado por entitlement, fuera del registry, mismo
+  patrón que `_announcements_link.html.erb`) y botón nuevo en el dashboard del acudiente.
+
+**Caso de aceptación, verificado end-to-end:** una conversación de 3 participantes (2 staff + 1
+acudiente) — todos ven todos los mensajes; un staff no-participante sin `conversation.audit` no ve
+la conversación en su bandeja y recibe 404 al acceder directo (confidencialidad real, no solo
+cosmética); la bandeja del staff y la del portal del acudiente devuelven el MISMO set vía
+`Communication::Inbox`; el badge de no-leídos refleja `last_read_at`, abrir la conversación lo
+actualiza, y el propio mensaje de un participante nunca cuenta como no-leído PARA ÉL (sí para los
+demás); cerrar es soft (la fila sobrevive, sale de "activas") y bloquea nuevas respuestas hasta
+reabrir; un acudiente fuera del scope RBAC del actor nunca aparece en el selector de destinatarios
+aunque se manipule el request; el formulario de composición no tiene ningún buscador; un acudiente
+responde en lo suyo pero recibe 403 real al intentar iniciar una conversación; un auditor
+GENUINAMENTE ajeno (no el propio creador con el permiso re-otorgado — el test inicial cometió
+justo ese error y hubo que corregirlo con un actor real, separado y re-autenticado) que lee una
+conversación donde no participa deja un `conversation_audited` real, visible en el visor RBAC-gated
+de auditoría; el mismo actor leyendo SU PROPIA conversación (aunque tenga `conversation.audit`) no
+loguea nada; el rastro nunca aparece en la bandeja de un participante; el CHECK de la BD rechaza de
+verdad una fila sin identidad (SQL crudo, no solo el modelo); `Communication::MessageSender`
+rechaza a un no-participante aunque tenga `conversation.audit`; sin entitlement de `communication`,
+compose/bandeja/auditoría dan 403 con "no está habilitado"; aislamiento cross-tenant verificado con
+query real bajo RLS.
+
+**Decisión explícita, no un olvido:** `db/seeds.rb` NO se tocó — mismo alcance que las cuatro
+slices anteriores (`attendance`/`report_cards`/`finance`/`communication` anuncios): el archivo es
+puramente demográfico/académico, sin ningún concepto de `institution_users`/RBAC/entitlements.
+
+**Resultado:** 472 runs / 0 failures / 0 errors / 1 skip preexistente (baseline 455; 17 tests
+nuevos, todos en `test/integration/messaging_test.rb`). `bin/rails zeitwerk:check` verde. Una
+migración (tres tablas), aplicada en dev y test.
+
+**Archivos nuevos/editados:**
+- Migración: `db/migrate/20260715190531_create_conversations_and_messages.rb`.
+- Modelos: `app/domains/communication/models/{conversation,conversation_participant,message}.rb`.
+- Query object + servicios: `app/domains/communication/queries/compose_recipients.rb`,
+  `app/domains/communication/services/{conversation_composer,message_sender,inbox}.rb`.
+- Controllers: `app/controllers/communication/{conversations,inbox,messages,conversation_audits}_controller.rb`,
+  `app/controllers/portals/guardian_{inbox,messages}_controller.rb`.
+- Vistas: `app/views/communication/conversations/new.html.erb`,
+  `app/views/communication/inbox/{index,show}.html.erb`,
+  `app/views/communication/conversation_audits/{index,show}.html.erb`,
+  `app/views/communication/_message_thread.html.erb` (compartido),
+  `app/views/portals/guardian_inbox/{index,show}.html.erb`,
+  `app/views/shared/_inbox_link.html.erb` (+ botón nuevo en `guardian_portal/show`, wiring en
+  `layouts/application.html.erb`).
+- Config: `config/navigation/communication.rb` (dos entradas nuevas), `config/routes.rb`.
+- Permisos + auditoría: `app/domains/identity_access/services/seed_permissions.rb`,
+  `app/domains/identity_access/services/audit_event_index.rb`.
+- Tests: `test/integration/messaging_test.rb`.
+
+### v1.19.0 — 2026-07-15 — `communication`: anuncios (ítem #5 del MVP, subsistema A)
+
+**Ítem #5 del camino crítico de `LINEAMIENTOS_MVP.md`.** `communication` es, en la visión completa,
+dos subsistemas: (A) anuncios (difusión de una vía) y (B) mensajería (conversaciones privadas). Este
+slice construye SOLO (A) — (B) queda registrada como spec del owner en el anexo (`PROJECT_STATE.md`
+§8.2), con sus tres preguntas de diseño abiertas, para su propio slice con su propio checkpoint.
+
+**Recon (STOP #1) — dos hallazgos que corrigieron el plan:**
+
+1. **`communication` YA estaba addon-gated, igual que `finance` (misma lección).**
+   `config/entitlements/communication.rb` ya registraba el dominio (con un comentario explícito: "No
+   `Communication::` namespace exists yet... this declaration pre-registers the gate"), ya estaba en
+   `ControlPlane::AddonCatalog::DOMAIN_KEYS`, y ya tenía una entrada en `ControlPlane::
+   SeedCatalog::ADDONS` (`metered: true, unit: "mensajes"` — esa métrica es provisional para la
+   FUTURA mensajería, este slice no emite ningún evento de uso). **Diferencia con `finance`:**
+   `finance` ya tenía también su entrada en `Navigation::Registry`; `communication` NO — hubo que
+   crear `config/navigation/communication.rb` desde cero. Tampoco existían permisos
+   `communication.*`/`announcement.*` en el catálogo. Conclusión: cada pieza del gating se verifica
+   por separado, nunca se infiere una de la presencia de otra.
+2. **`grep -riE "announcement|conversation|message|communication" db/migrate/` no devolvió ninguna
+   tabla real** — Clase C confirmado, net-new de verdad (a diferencia de varios recon previos que
+   revelaron sorpresas). El borrador de §8 (`PROJECT_STATE.md`) proponía un modelo `conversations`
+   unificado con `kind` incluyendo `announcement` — el owner decidió (decisión ya cerrada del
+   prompt, §0) que anuncios y mensajería son estructuralmente distintos (difusión sin participantes
+   vs. privada con participantes/hilos/estado) y que el modelo de mensajería debe diseñarse fresco en
+   su propio slice, no heredar la forma de este borrador viejo. Se creó `announcements` como tabla
+   dedicada; §8 se reescribió para reflejarlo.
+
+**Convención de actor:** `audit_events` guarda `actor_institution_user_id` (nullable, `nullify`);
+`report_cards` (v1.17.0) usó `published_by_staff_member_id` en su lugar. Para el autor de un anuncio
+se siguió la convención de `audit_events` (`author_institution_user_id`) — publicar es una acción
+administrativa disponible para cualquiera con el permiso, no una extensión específicamente docente
+como la publicación de boletines.
+
+**Lo construido:**
+- Migración `20260715155950_create_announcements.rb`: `title`/`body`/`status` (CHECK
+  published/retracted, sin estado `draft` — publicar es el acto)/`published_at`/`retracted_at`/
+  `author_institution_user_id` (nullable). RLS `ENABLE+FORCE`+policy, índice
+  `(institution_id, published_at)`. Corrida en dev y test.
+- Modelo `Communication::Announcement` — `#retract!` (soft: `status` + `retracted_at`, nunca
+  `destroy`).
+- `Communication::AnnouncementScope` (molde #4, institución-wide, para la superficie de gestión) y
+  `Communication::AnnouncementFeed` (el ÚNICO camino de lectura — `published`, orden `published_at`
+  desc — consumido por staff, portal del acudiente y portal del estudiante por igual).
+- Permiso nuevo `announcement.publish` (uno solo, cubre crear/editar/retractar — igual criterio
+  unificado que `attendance.record`, a diferencia del split de `report_card.view/publish`: aquí no
+  hay una acción "más sensible" que justifique partirlo).
+- `config/navigation/communication.rb` (nuevo — no existía). Gestión:
+  `Communication::AnnouncementsController#index/new/create/edit/update/retract`,
+  `authorize!("announcement.publish")` en cada acción, cualquiera con el permiso gestiona TODOS los
+  anuncios de su institución (equipo de comunicaciones pequeño; el autor se guarda para atribución,
+  no como límite de edición — decisión reportada, no re-preguntada).
+- Lectura por **membresía** (tercer tipo de gate, ver Guardrails): `Communication::FeedController#show`
+  (staff, sin `authorize!`, fuera del Registry, enlazado desde el shell vía
+  `shared/_announcements_link.html.erb` — mismo patrón que `_self_service_link.html.erb`, pero
+  gateado por `Current.entitled_addon_keys.include?("communication")` en vez de ser incondicional).
+  `Portals::GuardianAnnouncementsController`/`StudentAnnouncementsController#index` — NO por
+  `GuardianScope`/`StudentSelfScope` (un anuncio no es per-hijo/per-self), solo por
+  `Current.institution` del usuario del portal. Los tres controllers renderizan el mismo partial
+  compartido `communication/_announcement_list`.
+- Botones de entrada nuevos en `guardian_portal/show` y `student_portal/show` (el segundo, ahora
+  incondicional — a diferencia de "Mis boletines", que sigue condicionado a `@student`, porque leer
+  anuncios no depende de tener un registro de estudiante vinculado).
+
+**Caso de aceptación, verificado end-to-end:** un actor con `announcement.publish` crea un anuncio
+con atribución de autor real; sin el permiso, 403 en gestión Y sin el tile "Anuncios (gestión)" en el
+nav; un staff SIN el permiso, un acudiente (portal) y un estudiante (portal, incluso sin
+`GroupManagement::Student` vinculado) ven los anuncios publicados vía el MISMO
+`Communication::AnnouncementFeed`; retractar un anuncio lo saca del feed pero la fila sigue existiendo
+(`find(id)` no nulo); sin entitlement de `communication`, gestión Y el feed de staff dan 403 con "no
+está habilitado" (gate #1 antes que gate #2); **el portal NO chequea entitlement** (mismo gap ya
+aceptado de `report_cards`/`finance` — verificado con un test que documenta el comportamiento actual
+en vez de asumirlo); aislamiento cross-tenant verificado con query real bajo RLS.
+
+**Decisión explícita, no un olvido:** `db/seeds.rb` NO se tocó — mismo alcance que las tres slices
+anteriores (`attendance`/`report_cards`/`finance`): el archivo es puramente demográfico/académico
+(no tiene ningún concepto de `institution_users`/RBAC/entitlements), así que sembrar un anuncio de
+demo ahí requeriría inventar infraestructura de autor que no encaja con su forma actual.
+
+**Resultado:** 455 runs / 0 failures / 0 errors / 1 skip preexistente (baseline 442; 13 tests
+nuevos, todos en `test/integration/communication_test.rb`). `bin/rails zeitwerk:check` verde. Una
+migración, aplicada en dev y test.
+
+**Archivos nuevos/editados:**
+- Migración: `db/migrate/20260715155950_create_announcements.rb`.
+- Modelo: `app/domains/communication/models/announcement.rb`.
+- Query object + servicio: `app/domains/communication/queries/announcement_scope.rb`,
+  `app/domains/communication/services/announcement_feed.rb`.
+- Controllers: `app/controllers/communication/announcements_controller.rb`,
+  `app/controllers/communication/feed_controller.rb`,
+  `app/controllers/portals/guardian_announcements_controller.rb`,
+  `app/controllers/portals/student_announcements_controller.rb`.
+- Vistas: `app/views/communication/announcements/{index,new,edit,_form}.html.erb`,
+  `app/views/communication/feed/show.html.erb`, `app/views/communication/_announcement_list.html.erb`
+  (compartido), `app/views/portals/{guardian,student}_announcements/index.html.erb`,
+  `app/views/shared/_announcements_link.html.erb` (+ botones nuevos en `guardian_portal/show` y
+  `student_portal/show`, wiring en `layouts/application.html.erb`).
+- Config: `config/navigation/communication.rb` (nuevo), `config/routes.rb`.
+- Permisos: `app/domains/identity_access/services/seed_permissions.rb`.
+- Tests: `test/integration/communication_test.rb`.
 
 ### v1.18.0 — 2026-07-15 — `finance`: UI de tesorería (ítem #4 del MVP)
 

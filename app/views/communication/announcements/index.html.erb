@@ -1,0 +1,31 @@
+<% content_for :title, "Anuncios" %>
+
+<%= render "shared/page_header",
+      title: "Anuncios",
+      subtitle: "Gestión — publicar, editar y retractar.",
+      actions: ui_button("Nuevo anuncio", href: new_communication_announcement_path, variant: :primary) %>
+
+<% if @announcements.any? -%>
+  <%= render layout: "shared/table",
+        locals: { headers: [ "Título", "Publicado", "Estado", "" ] } do -%>
+    <% @announcements.each do |announcement| -%>
+      <tr>
+        <td><%= announcement.title %></td>
+        <td><%= announcement.published_at.to_fs(:long) %></td>
+        <td><%= announcement.status == "published" ? "Publicado" : "Retractado" %></td>
+        <td>
+          <% if announcement.status == "published" -%>
+            <%= link_to "Editar", edit_communication_announcement_path(announcement), class: "btn btn--secondary btn--sm" %>
+            <%= button_to "Retractar", retract_communication_announcement_path(announcement), method: :post,
+                  class: "btn btn--danger btn--sm" %>
+          <% end -%>
+        </td>
+      </tr>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state",
+        icon: "megaphone",
+        title: "Sin anuncios todavía",
+        description: "Publica el primero desde el botón de arriba." %>
+<% end -%>

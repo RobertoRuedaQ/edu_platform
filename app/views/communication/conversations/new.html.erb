@@ -1,0 +1,42 @@
+<% content_for :title, "Nueva conversación" %>
+
+<%= render "shared/page_header",
+      title: "Nueva conversación",
+      subtitle: "Destinatarios acotados a tu alcance — no hay buscador de personas." %>
+
+<% if @error -%>
+  <%= render "shared/alert", variant: :danger, message: @error %>
+<% end -%>
+
+<%= form_with url: communication_conversations_path, method: :post do -%>
+  <%= render "shared/field", label: "Asunto", name: "subject", type: "text" %>
+
+  <div class="field">
+    <label class="field__label" for="body">Mensaje</label>
+    <textarea class="field__input" id="body" name="body" rows="6"></textarea>
+  </div>
+
+  <fieldset>
+    <legend>Personal</legend>
+    <% @recipients.staff.each do |user| -%>
+      <label>
+        <input type="checkbox" name="staff_user_ids[]" value="<%= user.id %>"> <%= user.name %>
+      </label><br>
+    <% end -%>
+  </fieldset>
+
+  <fieldset>
+    <legend>Acudientes (de estudiantes en tu alcance)</legend>
+    <% if @recipients.guardians.any? -%>
+      <% @recipients.guardians.each do |user| -%>
+        <label>
+          <input type="checkbox" name="guardian_user_ids[]" value="<%= user.id %>"> <%= user.name %>
+        </label><br>
+      <% end -%>
+    <% else -%>
+      <p class="text-muted">No hay acudientes de estudiantes dentro de tu alcance.</p>
+    <% end -%>
+  </fieldset>
+
+  <%= ui_button "Iniciar conversación", type: "submit", variant: :primary %>
+<% end -%>

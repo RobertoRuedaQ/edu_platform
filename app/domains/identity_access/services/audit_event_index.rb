@@ -13,10 +13,11 @@ module IdentityAccess
 
     DISCREPANCY_ACTION = "invitation.discrepancy_reported"
 
-    # The full, real set of actions ever written by Audit.log (identity_access
-    # call sites only — grepped, not guessed). Adding a new call site means
-    # adding its key here too, so the filter select never drifts silently out
-    # of sync with what actually gets written.
+    # The full, real set of actions ever written by IdentityAccess::Audit.log
+    # — grepped across ALL domains (not just identity_access's own call
+    # sites; v1.20.0 added communication's), not guessed. Adding a new call
+    # site means adding its key here too, so the filter select never drifts
+    # silently out of sync with what actually gets written.
     ACTIONS = {
       "invitation.sent"                 => "Invitación enviada",
       "invitation.bounced"              => "Invitación rebotada",
@@ -26,7 +27,11 @@ module IdentityAccess
       "person.suspended"                => "Persona suspendida",
       "person.reactivated"              => "Persona reactivada",
       "roster_import.validated"         => "Carga de roster validada",
-      "roster_import.commit_enqueued"   => "Carga de roster aplicada"
+      "roster_import.commit_enqueued"   => "Carga de roster aplicada",
+      # communication (v1.20.0): written ONLY when a conversation.audit
+      # holder reads a conversation they are NOT a participant of — a
+      # participant reading their own conversation never writes this.
+      "conversation_audited"            => "Conversación auditada (lectura por no-participante)"
     }.freeze
 
     Page = Data.define(:events, :page, :total_pages, :total_count)

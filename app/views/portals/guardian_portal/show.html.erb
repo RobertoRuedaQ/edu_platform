@@ -2,7 +2,11 @@
 
 <%= render "shared/page_header",
       title: "Hola, #{@portal_person_name}",
-      subtitle: "Tus acudidos en esta institución." %>
+      subtitle: "Tus acudidos en esta institución.",
+      actions: safe_join([
+        ui_button("Anuncios", href: portal_guardian_announcements_path, variant: :secondary),
+        ui_button("Mensajes", href: portal_guardian_inbox_index_path, variant: :secondary)
+      ], " ") %>
 
 <% if @children.any? -%>
   <%= render layout: "shared/table",
