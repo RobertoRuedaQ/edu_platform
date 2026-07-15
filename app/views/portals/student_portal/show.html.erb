@@ -2,7 +2,12 @@
 
 <%= render "shared/page_header",
       title: "Hola, #{@portal_person_name}",
-      subtitle: "Tu resumen." %>
+      subtitle: "Tu resumen.",
+      actions: safe_join([
+        ui_button("Anuncios", href: portal_student_announcements_path, variant: :secondary),
+        ui_button("Tareas", href: portal_student_assignments_path, variant: :secondary),
+        (ui_button("Mis boletines", href: portal_student_report_cards_path, variant: :secondary) if @student)
+      ].compact, " ") %>
 
 <% if @student -%>
   <%# Read-only (GS8): no forms here. national_id is never shown (privacy). %>

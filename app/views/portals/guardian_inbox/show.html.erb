@@ -1,0 +1,20 @@
+<% content_for :title, @conversation.subject %>
+
+<%= render "shared/page_header",
+      title: @conversation.subject,
+      subtitle: (@conversation.active? ? "Activa" : "Cerrada"),
+      actions: ui_button("← Volver", href: portal_guardian_inbox_index_path, variant: :secondary) %>
+
+<%= render "communication/message_thread", messages: @messages %>
+
+<% if @conversation.active? -%>
+  <%= form_with url: portal_guardian_inbox_messages_path(@conversation), method: :post do -%>
+    <div class="field">
+      <label class="field__label" for="body">Responder</label>
+      <textarea class="field__input" id="body" name="body" rows="4"></textarea>
+    </div>
+    <%= ui_button "Enviar", type: "submit", variant: :primary %>
+  <% end -%>
+<% else -%>
+  <%= render "shared/alert", variant: :info, message: "Esta conversación está cerrada." %>
+<% end -%>

@@ -1,0 +1,62 @@
+<% content_for :title, @assignment.title %>
+
+<% status_label = { "draft" => "Borrador", "published" => "Publicada", "archived" => "Archivada" }.fetch(@assignment.status) %>
+
+<%= render "shared/page_header",
+      title: @assignment.title,
+      subtitle: "#{status_label} · vence #{@assignment.due_date}",
+      actions: safe_join([
+        (ui_button("Editar", href: edit_assignments_subject_assignment_path(@subject, @assignment), variant: :secondary) unless @assignment.archived?),
+        (button_to "Publicar", publish_assignments_subject_assignment_path(@subject, @assignment), method: :post, class: "btn btn--primary btn--md" if @assignment.draft?),
+        (button_to "Archivar", archive_assignments_subject_assignment_path(@subject, @assignment), method: :post, class: "btn btn--secondary btn--md" if @assignment.published?),
+        (button_to "Eliminar borrador", assignments_subject_assignment_path(@subject, @assignment), method: :delete, class: "btn btn--danger btn--md" if @assignment.draft?)
+      ].compact, " ") %>
+
+<% if @assignment.instructions.present? -%>
+  <p><%= simple_format(@assignment.instructions) %></p>
+<% end -%>
+
+<%= render "shared/page_header", title: (@assignment.published? ? "Calificar" : "Roster (previsualización)") %>
+
+<% if @assignment.published? -%>
+  <% if @rows.any? -%>
+    <%= form_with url: grade_assignments_subject_assignment_path(@subject, @assignment), method: :post do -%>
+      <%= render layout: "shared/table", locals: { headers: [ "Estudiante", "Entrega", "Nota" ] } do -%>
+        <% @rows.each do |row| -%>
+          <tr>
+            <td><%= "#{row.student.first_name} #{row.student.last_name}" %></td>
+            <td>
+              <% if row.submission -%>
+                <%= truncate(row.submission.body, length: 80) %>
+                <% if row.submission.late? -%><strong>(tardía)</strong><% end -%>
+              <% else -%>
+                <span class="text-muted">Sin entregar</span>
+              <% end -%>
+            </td>
+            <td>
+              <input class="field__input" type="number" step="0.1" min="0" max="5"
+                     name="scores[<%= row.student.id %>]" value="<%= row.assessment&.score %>" placeholder="Pendiente">
+            </td>
+          </tr>
+        <% end -%>
+      <% end -%>
+      <%= ui_button "Guardar notas", type: "submit", variant: :primary %>
+    <% end -%>
+  <% else -%>
+    <%= render "shared/empty_state",
+          icon: "users",
+          title: "Sin estudiantes matriculados en el término activo para esta materia" %>
+  <% end -%>
+<% else -%>
+  <% if @roster.any? -%>
+    <%= render layout: "shared/table", locals: { headers: [ "Estudiante" ] } do -%>
+      <% @roster.each do |student| -%>
+        <tr><td><%= "#{student.first_name} #{student.last_name}" %></td></tr>
+      <% end -%>
+    <% end -%>
+  <% else -%>
+    <%= render "shared/empty_state",
+          icon: "users",
+          title: "Sin estudiantes matriculados en el término activo para esta materia" %>
+  <% end -%>
+<% end -%>

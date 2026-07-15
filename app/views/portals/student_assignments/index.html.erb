@@ -1,0 +1,15 @@
+<% content_for :title, "Tareas" %>
+
+<%= render "shared/page_header",
+      title: "Tareas",
+      subtitle: "Publicadas para tus materias.",
+      actions: ui_button("← Volver", href: portal_student_path, variant: :secondary) %>
+
+<% if @student -%>
+  <%= render "assignments/assignment_list", assignments: @assignments %>
+<% else -%>
+  <%= render "shared/empty_state",
+        icon: "user",
+        title: "Tu cuenta aún no está vinculada a un registro de estudiante",
+        description: "Si esto no es lo esperado, contacta a tu institución." %>
+<% end -%>

@@ -1,0 +1,7 @@
+<% content_for :title, @conversation.subject %>
+
+<%= render "shared/page_header",
+      title: @conversation.subject,
+      subtitle: "Vista de auditoría — solo lectura." %>
+
+<%= render "communication/message_thread", messages: @messages %>

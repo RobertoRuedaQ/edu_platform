@@ -1,0 +1,14 @@
+<%# locals: (messages:) -%>
+<%# Shared rendering — inbox, guardian portal inbox, and the audit viewer
+    all render the SAME markup over their own (differently-gated) message
+    list. Plain, no threading (parent_message_id deferred). -%>
+<% if messages.any? -%>
+  <% messages.each do |message| -%>
+    <%= render layout: "shared/card", locals: { class: "message-card", title: message.sender_name } do -%>
+      <p class="message-card__meta"><%= message.created_at.to_fs(:long) %></p>
+      <p><%= simple_format(message.body) %></p>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state", icon: "message-circle", title: "Sin mensajes todavía" %>
+<% end -%>

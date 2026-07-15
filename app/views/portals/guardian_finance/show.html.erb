@@ -1,0 +1,30 @@
+<% content_for :title, "Estado de cuenta de #{@student.first_name}" %>
+
+<%= render "shared/page_header",
+      title: "Estado de cuenta de #{@student.first_name} #{@student.last_name}",
+      subtitle: "Solo lectura — sin acciones de pago en línea.",
+      actions: ui_button("← Volver", href: portal_guardian_student_path(@student), variant: :secondary) %>
+
+<% if @statement -%>
+  <div class="tile-grid">
+    <%= render "finance/balance_summary", balance: @statement.balance, currency: @statement.currency,
+          overdue_total: @statement.overdue_total %>
+  </div>
+
+  <%= render "shared/page_header", title: "Historial" %>
+  <% if @statement.ledger_lines.any? -%>
+    <%= render layout: "shared/table", locals: { headers: [ "Fecha", "Concepto", "Monto" ] } do -%>
+      <% @statement.ledger_lines.each do |line| -%>
+        <%= render "finance/statement_line", date: line.date, concept: line.concept, amount: line.amount,
+              kind: line.kind, currency: @statement.currency %>
+      <% end -%>
+    <% end -%>
+  <% else -%>
+    <%= render "shared/empty_state", icon: "file-text", title: "Sin movimientos todavía" %>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state",
+        icon: "file-text",
+        title: "Aún no hay una cuenta para este estudiante",
+        description: "Cuando la institución registre cargos o pagos, aparecerán aquí." %>
+<% end -%>

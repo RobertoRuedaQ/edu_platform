@@ -1,0 +1,17 @@
+<%# locals: (announcements:) -%>
+<%# Shared rendering for the membership read surface — staff feed, guardian
+    portal, and student portal all render the SAME markup over the SAME
+    Communication::AnnouncementFeed result. Read-only: no retract/edit here. -%>
+<% if announcements.any? -%>
+  <% announcements.each do |announcement| -%>
+    <%= render layout: "shared/card", locals: { class: "announcement-card", title: announcement.title } do -%>
+      <p class="announcement-card__meta"><%= announcement.published_at.to_fs(:long) %></p>
+      <p><%= simple_format(announcement.body) %></p>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state",
+        icon: "megaphone",
+        title: "Sin anuncios todavía",
+        description: "Cuando la institución publique un anuncio, aparecerá aquí." %>
+<% end -%>

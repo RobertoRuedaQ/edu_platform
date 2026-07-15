@@ -1,0 +1,8 @@
+<% content_for :title, "Tareas de #{@student.first_name}" %>
+
+<%= render "shared/page_header",
+      title: "Tareas de #{@student.first_name} #{@student.last_name}",
+      subtitle: "Publicadas para sus materias.",
+      actions: ui_button("← Volver", href: portal_guardian_student_path(@student), variant: :secondary) %>
+
+<%= render "assignments/assignment_list", assignments: @assignments %>

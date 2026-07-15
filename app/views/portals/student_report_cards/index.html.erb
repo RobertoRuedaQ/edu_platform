@@ -1,0 +1,26 @@
+<% content_for :title, "Mis boletines" %>
+
+<%= render "shared/page_header",
+      title: "Mis boletines",
+      subtitle: "Solo boletines publicados." %>
+
+<% if @report_cards.any? -%>
+  <% @report_cards.each do |report_card| -%>
+    <%= render "shared/page_header",
+          title: report_card.academic_term.name,
+          subtitle: "Publicado #{report_card.published_at.to_fs(:long)} · Promedio general: #{report_card.overall_average || "—"}" %>
+    <%= render layout: "shared/table", locals: { headers: [ "Materia", "Promedio" ] } do -%>
+      <% report_card.lines_snapshot.each do |line| -%>
+        <tr>
+          <td><%= line["subject_name"] %></td>
+          <td><%= line["average"] %></td>
+        </tr>
+      <% end -%>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state",
+        icon: "file-text",
+        title: "Aún no hay boletines publicados",
+        description: "Cuando la institución publique un boletín, aparecerá aquí." %>
+<% end -%>

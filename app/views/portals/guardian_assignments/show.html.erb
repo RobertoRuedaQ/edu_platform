@@ -1,0 +1,17 @@
+<% content_for :title, @assignment.title %>
+
+<%= render "shared/page_header",
+      title: @assignment.title,
+      subtitle: "#{@assignment.subject.name} · vence #{@assignment.due_date} · #{@student.first_name} #{@student.last_name}",
+      actions: ui_button("← Volver", href: portal_guardian_student_assignments_path(@student), variant: :secondary) %>
+
+<% if @assignment.instructions.present? -%>
+  <p><%= simple_format(@assignment.instructions) %></p>
+<% end -%>
+
+<%= render "shared/detail_list", items: {
+      "Nota" => (Assignments::StudentView.score_for(@assignment, @student) || "Pendiente")
+    } %>
+
+<%= render "assignments/submission_form", submission: @submission,
+      url: portal_guardian_student_assignment_submission_path(@student, @assignment) %>

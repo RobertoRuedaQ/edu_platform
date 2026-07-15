@@ -1,0 +1,15 @@
+<%# locals: (announcement:, url:) -%>
+<%= form_with model: announcement, url: url do |f| -%>
+  <% if announcement.errors.any? -%>
+    <%= render "shared/alert", variant: :danger, message: announcement.errors.full_messages.join(", ") %>
+  <% end -%>
+
+  <%= render "shared/field", label: "Título", name: "announcement[title]", type: "text", value: announcement.title %>
+
+  <div class="field">
+    <label class="field__label" for="announcement_body">Cuerpo</label>
+    <textarea class="field__input" id="announcement_body" name="announcement[body]" rows="6"><%= announcement.body %></textarea>
+  </div>
+
+  <%= ui_button (announcement.persisted? ? "Guardar" : "Publicar"), type: "submit", variant: :primary %>
+<% end -%>

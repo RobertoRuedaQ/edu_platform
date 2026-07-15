@@ -1,0 +1,25 @@
+<% content_for :title, "Tareas · #{@subject.name}" %>
+
+<%= render "shared/page_header",
+      title: "Tareas de #{@subject.name}",
+      subtitle: "Borradores, publicadas y archivadas.",
+      actions: ui_button("Nueva tarea", href: new_assignments_subject_assignment_path(@subject), variant: :primary) %>
+
+<% if @assignments.any? -%>
+  <%= render layout: "shared/table",
+        locals: { headers: [ "Título", "Vence", "Estado", "" ] } do -%>
+    <% @assignments.each do |assignment| -%>
+      <tr>
+        <td><%= assignment.title %></td>
+        <td><%= assignment.due_date %></td>
+        <td><%= { "draft" => "Borrador", "published" => "Publicada", "archived" => "Archivada" }.fetch(assignment.status) %></td>
+        <td><%= link_to "Ver", assignments_subject_assignment_path(@subject, assignment), class: "btn btn--secondary btn--sm" %></td>
+      </tr>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state",
+        icon: "file-text",
+        title: "Sin tareas todavía",
+        description: "Crea la primera desde el botón de arriba." %>
+<% end -%>

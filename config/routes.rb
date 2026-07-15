@@ -46,6 +46,21 @@ Rails.application.routes.draw do
     resource :student, only: :show, controller: "student_portal" do
       resource :cafeteria, only: :show, controller: "student_cafeteria"
       resource :transport, only: :show, controller: "student_transport"
+      # report_cards (v1.17.0): published-only, by self-scope — no
+      # authorize!, outside Navigation::Registry (§7). Plural: many terms.
+      resources :report_cards, only: :index, controller: "student_report_cards"
+      # communication (v1.19.0): org-wide, NOT per-self-scope — membership
+      # read surface, same shared feed the staff/guardian surfaces use.
+      resources :announcements, only: :index, controller: "student_announcements"
+      # assignments (v1.21.0, slice 1/4; #show + #submission v1.22.0):
+      # published-only, by self-scope, own grade read from the same
+      # schedules::Assessment row report_cards reads. No authorize!, outside
+      # Navigation::Registry. #submission is the FIRST portal write —
+      # StudentSubmissionsController re-derives the same self-scope, never
+      # trusts params directly (see that controller's docstring).
+      resources :assignments, only: %i[index show], controller: "student_assignments" do
+        resource :submission, only: :create, controller: "student_submissions"
+      end
     end
     resource :guardian, only: :show, controller: "guardian_portal" do
       # Per-child read-only summary (v1.9.0) — resolved through
@@ -54,7 +69,33 @@ Rails.application.routes.draw do
       # renders. Plural on purpose: a guardian has many children; the
       # student/cafeteria/transport sub-resources above stay singular
       # (a student only ever has ONE of each, resolved via self-scope).
-      resources :students, only: :show, controller: "guardian_students"
+      resources :students, only: :show, controller: "guardian_students" do
+        # report_cards (v1.17.0): published-only, by relation — nested under
+        # the SPECIFIC child (unlike cafeteria/transport, which summarize
+        # ALL children on one page) since a term's boletín is inherently
+        # per-child. No authorize!, outside Navigation::Registry (§7).
+        resources :report_cards, only: :index, controller: "guardian_report_cards"
+        # finance (v1.18.0): read-only account statement, by relation — same
+        # per-child nesting as report_cards (substantial content per child).
+        # No authorize!, outside Navigation::Registry, no write action.
+        resource :finance, only: :show, controller: "guardian_finance"
+        # assignments (v1.21.0, slice 1/4; #show + #submission v1.22.0):
+        # published-only, per-child (a subject's assignments are inherently
+        # per-child, unlike org-wide announcements). No authorize!, outside
+        # Navigation::Registry. #submission lets a guardian submit ON
+        # BEHALF of this specific already-scoped child (B1).
+        resources :assignments, only: %i[index show], controller: "guardian_assignments" do
+          resource :submission, only: :create, controller: "guardian_submissions"
+        end
+      end
+      # communication (v1.19.0): org-wide, NOT per-child — a sibling of
+      # :students, not nested under it.
+      resources :announcements, only: :index, controller: "guardian_announcements"
+      # communication (v1.20.0, subsistema B): reply-only bandeja — no
+      # compose, no close/reopen (§0/§4).
+      resources :inbox, only: %i[index show], controller: "guardian_inbox" do
+        resources :messages, only: :create, controller: "guardian_messages"
+      end
       resource :cafeteria, only: :show, controller: "guardian_cafeteria"
       resource :transport, only: :show, controller: "guardian_transport"
     end
@@ -144,6 +185,75 @@ Rails.application.routes.draw do
   namespace :attendance do
     resources :groups, only: :index do
       resources :records, only: %i[new create]
+    end
+  end
+
+  # --- report_cards (net-new domain, v1.17.0, MVP critical path item #3) ---
+  # Boletines sobre la mitad de calificaciones ya real de `schedules`.
+  # groups#index lists the actor's OWN groups (report_card.view scope);
+  # publications#new/#create preview + publish a group's roster for the
+  # active term — no groups#show, same rationale as attendance's groups#index.
+  namespace :report_cards do
+    resources :groups, only: :index do
+      resources :publications, only: %i[new create]
+    end
+  end
+
+  # --- finance (UI de tesorería, v1.18.0, MVP critical path item #4) --------
+  # Models (Charge/Payment/PaymentPlan/Installment/StudentAccount) and the
+  # entitlement/nav registration all predate this slice (v1.3.0/S2b) — this
+  # wires the first real controller. `path: ""` keeps accounts#index at the
+  # bare `/finance` the pre-existing nav entry already points to.
+  # payments/charges only ever nest under an account — no accounts#new
+  # (accounts aren't created via UI this slice) and no plan/installment
+  # management (deferred, see HISTORIA.md v1.18.0).
+  namespace :finance do
+    resources :accounts, path: "", only: %i[index show] do
+      resources :payments, only: %i[new create]
+      resources :charges, only: %i[new create]
+    end
+  end
+
+  # --- communication (v1.19.0, MVP critical path item #5) -------------------
+  # Subsystem (A) anuncios ONLY — messaging (B) is a future slice with its
+  # own fresh model (see HISTORIA.md v1.19.0's spec annex). Two DISTINCT
+  # gates on purpose: #announcements is the RBAC publish/manage surface
+  # (announcement.publish); #feed below is the membership read surface (no
+  # authorize!, outside Navigation::Registry).
+  namespace :communication do
+    resources :announcements, only: %i[index new create edit update] do
+      post :retract, on: :member
+    end
+    resource :feed, only: :show, controller: "feed"
+
+    # --- subsystem (B): mensajería (v1.20.0) ---------------------------
+    # FOUR distinct access paths, FOUR distinct controllers, even though
+    # all four touch the same three tables (§ Guardrails, "nunca colapsar"):
+    # compose (RBAC) / inbox (participation) / messages (participation
+    # reply) / conversation_audits (RBAC, different permission from compose).
+    resources :conversations, only: %i[new create]
+    resources :inbox, only: %i[index show] do
+      resources :messages, only: :create
+      post :close, on: :member
+      post :reopen, on: :member
+    end
+    resources :conversation_audits, only: %i[index show]
+  end
+
+  # --- assignments (v1.21.0, MVP critical path item #6, slice 1/4) ----------
+  # Publish + view + grade directly only — submission/attachments/rubrics are
+  # future slices (see HISTORIA.md v1.21.0's roadmap annex). subjects#index
+  # lists the actor's OWN subjects (assignment.manage scope); assignments
+  # nest under a subject; grading is a member action on the SAME resource,
+  # never a separate grades namespace, since the grade always writes to the
+  # one gradebook (schedules::Assessment) via Assignments::GradeRecorder.
+  namespace :assignments do
+    resources :subjects, only: :index do
+      resources :assignments, only: %i[index new create edit update show destroy] do
+        post :publish, on: :member
+        post :archive, on: :member
+        post :grade, on: :member
+      end
     end
   end
 

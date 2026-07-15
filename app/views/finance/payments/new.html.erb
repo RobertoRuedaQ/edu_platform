@@ -1,0 +1,41 @@
+<% content_for :title, "Registrar pago · #{@account.student.first_name} #{@account.student.last_name}" %>
+
+<%= render "shared/page_header",
+      title: "Registrar pago de #{@account.student.first_name} #{@account.student.last_name}",
+      subtitle: "Asiento contable de un pago recibido offline — no cobra tarjeta ni integra pasarela." %>
+
+<% if @error -%>
+  <%= render "shared/alert", variant: :danger, message: @error %>
+<% end -%>
+
+<%= form_with url: finance_account_payments_path(@account), method: :post do -%>
+  <%# Idempotency: the SAME key survives a re-render (e.g. validation error)
+      and a genuine double-submit — Finance::PaymentRecorder returns the
+      already-recorded payment instead of recording a second one. -%>
+  <%= hidden_field_tag :idempotency_key, @idempotency_key %>
+
+  <%= render "shared/field", label: "Monto", name: "amount", type: "number", step: "0.01" %>
+
+  <div class="field">
+    <label class="field__label" for="method">Método</label>
+    <select class="field__input" id="method" name="method">
+      <% { "cash" => "Efectivo", "transfer" => "Transferencia", "card" => "Tarjeta (comprobante offline)", "other" => "Otro" }.each do |value, label| -%>
+        <option value="<%= value %>"><%= label %></option>
+      <% end -%>
+    </select>
+  </div>
+
+  <% if @pending_charges.any? -%>
+    <div class="field">
+      <label class="field__label" for="charge_id">Aplicar a un cargo (opcional)</label>
+      <select class="field__input" id="charge_id" name="charge_id">
+        <option value="">Sin cargo específico</option>
+        <% @pending_charges.each do |charge| -%>
+          <option value="<%= charge.id %>"><%= charge.invoice_number %> — <%= money(charge.amount, currency: @account.currency) %></option>
+        <% end -%>
+      </select>
+    </div>
+  <% end -%>
+
+  <%= ui_button "Registrar pago", type: "submit", variant: :primary %>
+<% end -%>

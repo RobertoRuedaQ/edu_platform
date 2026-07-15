@@ -1,0 +1,17 @@
+<%# locals: (submission:, url:) -%>
+<%# Shared by the student portal and the guardian portal (submitting on
+    behalf of a child, B1) — same upsert form either way. -%>
+<% if submission -%>
+  <p class="text-muted">
+    Entregado <%= submission.submitted_at.to_fs(:long) %>
+    <% if submission.late? -%><strong>(tardía)</strong><% end -%>
+  </p>
+<% end -%>
+
+<%= form_with url: url, method: :post do -%>
+  <div class="field">
+    <label class="field__label" for="body">Tu respuesta</label>
+    <textarea class="field__input" id="body" name="body" rows="6"><%= submission&.body %></textarea>
+  </div>
+  <%= ui_button (submission ? "Actualizar entrega" : "Entregar"), type: "submit", variant: :primary %>
+<% end -%>

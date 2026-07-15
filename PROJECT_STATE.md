@@ -1,13 +1,16 @@
 # edu_platform — Estado del proyecto (magro)
 
-> **Qué es este documento.** La **fuente única de verdad del contexto vivo** del proyecto
-> `edu_platform`: invariantes decididos, estado de lo construido, bordes abiertos, backlog y
-> guardrails. Es el que se lee/pega cada iteración para decidir el próximo slice.
+> **Qué es este documento.** La **fuente única de verdad del ESTADO ASENTADO** del proyecto
+> `edu_platform`: invariantes de arquitectura decididos, mapa de dominios, RBAC. Es el que se
+> lee/pega cada iteración para entender qué ya existe antes de decidir el próximo slice.
 >
 > **Split editorial (v1.5.1):** este doc solía cargar también el changelog completo y las
 > narrativas de "cómo se construyó" cada pieza — eso ahora vive en **`HISTORIA.md`** (archivo
 > append-only, hermano de este archivo), y se carga solo cuando hace falta el *por qué* de algo.
-> Aquí solo queda lo que se necesita para decidir qué sigue.
+>
+> **Split editorial #2 (v1.21.0):** el backlog ordenado y los guardrails operativos (que crecen con
+> CADA slice) ahora viven en **`OPEN_PROCESS.md`** (otro hermano) — este documento queda enfocado
+> en lo asentado (§1–§10), sin la sección que más rápido crecía.
 >
 > **El repositorio sigue siendo la fuente de verdad del código.** Ante discrepancia entre lo escrito
 > aquí y lo que hay en disco, gana el repositorio, y se corrige este documento en la siguiente versión.
@@ -18,10 +21,10 @@
 
 | Campo | Valor |
 |---|---|
-| **Versión del documento** | `v1.16.0` |
-| **Fecha** | 2026-07-14 |
-| **Tests** | 407 runs / 0 fallos / 1 skip preexistente (suite completa, en serie — ver Guardrails) |
-| **Estado en una línea** | Identidad real + RBAC/entitlement reales + portales de persona + autoservicio de staff + auditoría + CHECKPOINT E + #4 barrido (`teacher_management`/`group_management`/`schedules`-calificaciones/`counseling`) + matrícula por término real (`Schedules::ActiveTermEnrollmentScope`, v1.15.0) + **`attendance` (asistencia diaria por homeroom, ítem #2 del MVP): dominio NET-NEW addon-gated, real desde el día uno, molde #4 completo, consume `ActiveTermEnrollmentScope` ∩ grupo ∩ scope RBAC del docente — headcount y el resolver de término intactos**. `LINEAMIENTOS_MVP.md` ordena lo que sigue: boletines sobre `schedules` es el próximo ítem. |
+| **Versión del documento** | `v1.22.0` |
+| **Fecha** | 2026-07-15 |
+| **Tests** | 499 runs / 0 fallos / 1 skip preexistente (suite completa, en serie — ver `OPEN_PROCESS.md`) |
+| **Estado en una línea** | Identidad real + RBAC/entitlement reales + portales de persona + autoservicio de staff + auditoría + CHECKPOINT E + #4 barrido (`teacher_management`/`group_management`/`schedules`-calificaciones/`counseling`) + matrícula por término real (`Schedules::ActiveTermEnrollmentScope`, v1.15.0) + `attendance` (v1.16.0) + `report_cards` (v1.17.0) + `finance` (v1.18.0) + `communication` completo (v1.19.0/v1.20.0) + `assignments` slice 1/4 (v1.21.0: publicar/ver/calificar) + **`assignments` slice 2/4 (ítem #6 del MVP): entrega de texto (`Assignments::Submission`, en-domain, NO anclada a `assessment_id`), ingresable por el estudiante o su acudiente en su nombre (B1) — PRIMER write de portal, gateado por la MISMA relación que ya gatea la lectura (`StudentView.for(student)`), nunca RBAC. Entrega y nota son ejes independientes, pareados solo en lectura (`Assignments::GradingView`)**. `LINEAMIENTOS_MVP.md`/`OPEN_PROCESS.md` ordenan lo que sigue (slice 3: adjuntos, con checkpoint propio de Active Storage). |
 
 ### Convención de versionado de ESTE documento
 
@@ -141,9 +144,11 @@ El **plano de control vive FUERA de `app/domains/*`** — namespace propio `app/
 | Dominio | Propósito |
 |---|---|
 | `counseling` | Psicoorientación. **Carve-out de `student_support`.** Casos/expedientes, sesiones/notas, remisiones, planes de intervención. Puede *leer* (no poseer) la historia médica de `student_support`. **Frontera de confidencialidad más estricta** que convivencia. |
-| `finance` | Tesorería/cartera **dentro** del tenant (el colegio cobra pensiones a acudientes). Cargos, pagos, estados de cuenta, planes de pago. **≠ billing de plataforma.** Tenant-scoped. |
-| `communication` | Hub de comunicación. Ver §8 (anexo). Sigue en fase stub. |
+| `finance` | Tesorería/cartera **dentro** del tenant (el colegio cobra pensiones a acudientes). Cargos, pagos, estados de cuenta, planes de pago. **≠ billing de plataforma.** Tenant-scoped. **UI real desde v1.18.0**: `StudentAccount`/`Charge`/`Payment` (existían desde el primer commit) ahora tienen superficie de supervisión (molde #4, `finance.read`/`finance.write` — permisos que YA existían y ya reusaba `Cafeteria::BalancesController`) y portal del acudiente (solo lectura, mismo camino de lectura — `Finance::AccountStatement`). Dinero en `decimal(12,2)`, NO `*_cents bigint` (ver Guardrails). `PaymentPlan`/`Installment` (planes de pago/cuotas) siguen **sin UI**, diferidos a su propio slice — no alimentan el saldo hoy. |
+| `communication` | Hub de comunicación. Ver §8 (anexo). **Ambos subsistemas reales**: (A) anuncios (v1.19.0, `Communication::Announcement`, difusión org-wide, RBAC para publicar + lectura por membresía); (B) mensajería (v1.20.0, `Conversation`/`ConversationParticipant`/`Message`, multiparte, participante `institution_user` **o** `guardian_user` — CHECK exactamente-uno, cuatro caminos de acceso RBAC/participación/auditoría). Diferidos anotados en §8.2 (fan-out 1:1, threading, tags, acudiente-inicia). |
 | `attendance` | **Asistencia diaria por homeroom (v1.16.0, item #2 del MVP)** — dominio NET-NEW, real desde el día uno (sin fase stub). `AttendanceRecord` (`student_id`+`group_id`+`date`, único `(institution_id, student_id, date)`). Consume `Schedules::ActiveTermEnrollmentScope` (nunca re-deriva el join a término); molde #4 completo (per-row `can?`, `authorize!`, nav). Addon-gated. Por-materia diferido. |
+| `report_cards` | **Boletines (v1.17.0, item #3 del MVP)** — dominio NET-NEW, addon-gated, lee `schedules` por FK (nunca posee `Subject`/`Enrollment`/`Assessment`). `ReportCard` (`student_id`+`academic_term_id`, único `(institution_id, student_id, academic_term_id)`) — snapshot **congelado al publicar** (`lines_snapshot` jsonb + `overall_average`, nunca recomputado al leer un publicado). "Draft" es cómputo vivo sin fila (`ReportCards::Computation`, consumido tanto por el preview de supervisión como por `ReportCards::Publisher`). Dos superficies: supervisión (molde #4, `report_card.view`/`report_card.publish`) y portal (por relación, solo publicados, sin `authorize!`, fuera de `Navigation::Registry`). Consume `Schedules::ActiveTermEnrollmentScope` igual que `attendance`. Asistencia en el boletín y escala Decreto 1290 diferidos. |
+| `assignments` | **Tareas académicas, slices 1–2/4 (v1.21.0/v1.22.0, item #6 del MVP)** — dominio NET-NEW, addon-gated, cuelga del gradebook de `schedules` por FK (`Assignments::Assignment` → `subject_id`; `schedules::Assessment` gana `assignment_id` nullable, aditivo). **La nota vive SOLO en `schedules::Assessment`** — publicar hace fan-out (una fila `Assessment` por matrícula del roster, `score: nil`); calificar `UPDATE`-ea esa misma fila (`Assignments::GradeRecorder`), nunca un almacén paralelo. Roster = `Schedules::ActiveTermEnrollmentScope` ∩ la materia ∩ scope RBAC del docente (vía `grade_level_id` de `Subject`, mismo mecanismo que ya usaba `grades.write`). Supervisión (molde #4, `assignment.manage`) + portal (por relación, solo `published`, con la nota leída del mismo origen que `report_cards`). **v1.22.0**: entrega de texto (`Assignments::Submission`, en-domain `(assignment_id, student_id)`, NO anclada a `assessment_id` — pareo entrega↔nota vía `Assignments::GradingView`, un servicio de lectura), ingresable por el estudiante o su acudiente (B1) — primer write de portal, gateado por relación. Slices 3–4 (adjuntos/rúbricas) diferidos — ver `HISTORIA.md` v1.21.0/v1.22.0. |
 
 ### Tier C — candidatos (crear SOLO bajo confirmación explícita)
 
@@ -372,19 +377,77 @@ sintéticos.
 
 ---
 
-## 8. Dominio `communication` (anexo de diseño — stub)
+## 8. Dominio `communication` (anexo de diseño)
 
-Dos facetas que no se aplanan: **comunicación humana** (persona↔persona) y **notificaciones del
-sistema** (sistema→persona). Borrador de tablas (tenant-scoped, RLS): `conversations` (`kind` ∈
-direct/channel/parent_thread/announcement), `conversation_participants` (institution_user **o**
-guardian, patrón exactamente-uno), `messages` (con hilos), `tags`/`taggings`, `mentions`, y la
-faceta de notificaciones (`notifications`, `notification_preferences`, plantillas).
+Dos subsistemas que NO se aplanan en un solo modelo — decisión cerrada en v1.19.0, supersede el
+borrador anterior de este anexo (que proponía una tabla `conversations` unificada con `kind`
+incluyendo `announcement`; recon de v1.19.0 confirmó que no existía nada real todavía y el owner
+decidió separarlos por ser estructuralmente distintos):
 
-**Colisión de nombres a evitar:** *canales de discusión* (Slack-like) vs. *canales de entrega* de
-notificaciones (in-app/email/push) — nombrar distinto (`_channel_*` vs `_delivery_channel_badge`).
-**Tiempo real (Turbo Streams/Solid Cable) diferido.** Los correos de OTP e invitación **no** pasan
-por este dominio — van directo por `ApplicationMailer`/Active Job; centralizar todo envío saliente
-aquí sería una decisión de arquitectura nueva, no asumida hoy.
+### 8.1 Subsistema (A) — Anuncios — ✅ real desde v1.19.0
+
+Difusión de una vía, org-wide dentro del tenant (staff + acudientes + estudiantes con cuenta, sin
+segmentar por grado/grupo). Tabla dedicada `announcements` (`title`/`body`/`status` ∈
+published/retracted/`author_institution_user_id`/`published_at`/`retracted_at`) — **no** reutiliza
+ningún modelo de mensajería. Publicar/editar/retractar es RBAC (`announcement.publish` +
+`Navigation::Registry`); leer es **membresía** (cualquier miembro activo, sin `authorize!`, fuera
+del Registry, enlazado aparte — ver Guardrails, "tercer tipo de gate"). Retract es SIEMPRE soft
+(`status`), nunca `destroy`. Camino de lectura único (`Communication::AnnouncementFeed`) compartido
+por staff y ambos portales. Ver `HISTORIA.md` v1.19.0 para la narrativa completa.
+
+### 8.2 Subsistema (B) — Mensajería — ✅ núcleo real desde v1.20.0
+
+Las tres preguntas de diseño quedaron resueltas en el checkpoint (no re-abrir sin razón de negocio
+explícita — mismo tratamiento que ⚠-1/⚠-2):
+
+1. **Modelo de hilo = multiparte** (no hub-and-spoke): 2+ participantes, todos ven todos los
+   mensajes en una misma conversación. El fan-out 1:1 "director → cada cuidador en privado" queda
+   como **fast-follow** — un helper de composición que crea N conversaciones de 2, sin cambiar el
+   modelo base.
+2. **Auditor = rol de institución** (`conversation.audit`), nunca el super-admin de plataforma.
+3. **El auditor ve contenido completo**; el rastro **no** se surfacea a los participantes (solo
+   vive en `audit_events`, RBAC-gated).
+
+**Modelo real:** `conversations` (`subject`, `status` ∈ active/closed, `created_by_institution_
+user_id`/`closed_by_institution_user_id` — atribución, nullable+nullify), `conversation_
+participants` (`institution_user_id` **XOR** `guardian_user_id` — CHECK `num_nonnulls(...) = 1`,
+CASCADE en ambas identidades porque son la identidad del registro, no atribución opcional;
+`last_read_at` para no-leídos), `messages` (mismo XOR para el emisor, sin `parent_message_id` —
+threading diferido, se agrega aditivo cuando se construya). Sin tabla de tags (diferido).
+
+**Cuatro caminos de acceso, nunca colapsados** (ver Guardrails): iniciar (RBAC,
+`conversation.compose`, destinatarios acotados — staff de la institución ∪ acudientes de
+estudiantes en el scope RBAC del actor, **nunca** un directorio) → bandeja/responder (participación,
+sin `authorize!`, camino de lectura único `Communication::Inbox` compartido por staff y el portal
+del acudiente) → auditar (RBAC, `conversation.audit`, permiso **distinto** de compose, loguea
+`conversation_audited` en `audit_events` solo si el accesor NO es participante).
+
+**Diferidos, anotados, no construidos:** difusión 1:1 a todos los cuidadores (fast-follow sobre la
+base multiparte); threading (`parent_message_id`); tags/clasificación por temática; mensajería
+iniciada por el acudiente (bloqueada por Habeas Data — "quién puede contactar a quién libremente"
+necesita su propio diseño de directorio acotado); videollamada + acta (futuro lejano). Ver
+`HISTORIA.md` v1.20.0 para la narrativa completa y los hallazgos de recon.
+
+<details>
+<summary>Preguntas originales del checkpoint (resueltas arriba — histórico)</summary>
+
+1. ~~"Director ↔ todos los cuidadores": ¿hilo grupal o hub-and-spoke?~~ → multiparte, ver arriba.
+2. ~~¿Quién audita?~~ → rol de institución, ver arriba.
+3. ~~Frontera de confidencialidad: ¿contenido completo o solo metadata? ¿rastro visible a los
+   participantes?~~ → contenido completo para el auditor; rastro nunca visible a participantes, ver
+   arriba.
+
+</details>
+
+**Colisión de nombres a evitar** (seguía aplicando del borrador anterior): *canales de discusión*
+(Slack-like, si mensajería termina adoptando el concepto) vs. *canales de entrega* de notificaciones
+(in-app/email/push) — nombrar distinto (`_channel_*` vs `_delivery_channel_badge`) si ambos
+terminan existiendo. **Tiempo real (Turbo Streams/Solid Cable) diferido** para ambos subsistemas.
+Los correos de OTP e invitación **no** pasan por este dominio — van directo por
+`ApplicationMailer`/Active Job; centralizar todo envío saliente aquí sería una decisión de
+arquitectura nueva, no asumida hoy. La faceta de **notificaciones del sistema** (sistema→persona,
+`notifications`/`notification_preferences`/plantillas) tampoco se ha diseñado — queda fuera de
+ambos subsistemas descritos arriba, un tercer subsistema (C) a definir si hace falta.
 
 ---
 
@@ -480,128 +543,136 @@ firma del método (no acepta término de búsqueda) y con aserciones sobre la vi
 
 ---
 
-## 11. Próximas iteraciones (backlog ordenado)
+## 11. Próximas iteraciones y guardrails operativos
 
-> Orden sugerido por dependencia y riesgo. Cada iteración cierra con actualización de este documento (bump de versión) y una entrada en `HISTORIA.md`.
-
-> **`LINEAMIENTOS_MVP.md`** (hermano de este archivo, desde v1.14.1) fija el alcance de un primer MVP
-> concreto (colegio K-12: extracurriculares, comunicación, asignaciones académicas/responsabilidades,
-> calendario del cuidador) y **reordena/reprioriza** los ítems de este backlog para ese perfil de
-> cliente — léelo antes de elegir el próximo slice si el trabajo apunta a ese MVP. Camino crítico
-> propuesto ahí (§7): ~~cerrar matrícula/término (B2/Cav.)~~ **✅ mitad de modelo cerrada (v1.15.0)**
-> → ~~`attendance` (net-new)~~ **✅ cerrado (v1.16.0)** → **boletines sobre `schedules`
-> (siguiente)** → UI de tesorería (`finance`) → `communication` → `assignments` (net-new) →
-> `calendar` (net-new) → `extracurriculars` (net-new) → portal del cuidador ampliado →
-> provisioning + correo real. Dominios
-> `student_support`/`counseling`/`cafeteria`/`transportation` reales no aplican
-> a este perfil (no se piden) — no confundir con "backlog general cerrado".
-
-1. **Módulo de autenticación/onboarding — lo que queda** (ver §9.1), en orden recomendado:
-   1. ~~`Core::RosterImport::Parser/Validator/Committer`~~ — ✅ **cerrado para ambos kinds**
-      (estudiantes v1.7.0, acudientes v1.8.0). Estructura por-kind ya lista para un tercer kind si
-      alguna vez hiciera falta (`Strategy.for` + una nueva `Strategies::*`, sin tocar orquestación).
-   2. ~~`Core::Access::GuardianScope` + portales de estudiante/acudiente~~ — ✅ **cerrado (v1.9.0)**, ver `HISTORIA.md`.
-   3. ~~Vistas de autoservicio reales para docente/coordinador/director~~ — ✅ **cerrado (v1.10.0)**, ver `HISTORIA.md`.
-   4. ~~Visor de `audit_events` + bandeja de discrepancias~~ — ✅ **cerrado (v1.11.0)**, ver `HISTORIA.md`. Con esto el track de onboarding queda cerrado salvo el punto 5 (opcional) abajo.
-   5. Batch-invite tras el alta de acudientes, full-async de parse+validar, y purga de `roster_import_rows` post-commit — hardening documentado, no construido (ver `HISTORIA.md` v1.7.0).
-   5. Job recurrente para `Invitations::Expirer` y webhook real para `Invitations::BounceHandler` (opcional / según necesidad real de producción, no bloqueante — único remanente del track).
-2. ~~Cerrar CHECKPOINT E~~ (`staff_management` vs `human_resources`) — ✅ **cerrado (D1, v1.12.0)**, ver `HISTORIA.md`. Ya estaba resuelto en el esquema; este slice fue verificación + corrección de doc, sin migración.
-3. ~~Cablear la puerta de auth real (gate #2, RBAC)~~ — ✅ **P1 cerrado (v1.6.0)**, ver `HISTORIA.md`.
-4. **Vistas de negocio por dominio** — molde fijado (§6.6) en `teacher_management` (v1.13.0) y
-   **barrido a los dominios cableables (v1.14.0)**:
-   - ✅ **Cerrados (Clase A — modelos reales, molde aplicado)**: `teacher_management` +
-     `staff_management` (v1.13.0); `group_management` (`Section`/`Student`, con escritura real de
-     matrícula — `students.section_id` sí existe, a diferencia de `teacher.evaluate`); `schedules`
-     **mitad de calificaciones** (`Subject`/`Enrollment`/`Assessment`, con registro de nota real);
-     `counseling` (`Case`/`SessionNote`/`Referral`, carve-out sensible con caso de seguridad
-     dedicado — ver `HISTORIA.md`).
-   - 🔴 **Bloqueados-en-esquema (Clase C — sin tabla real, NO cablear sin un slice de modelado
-     aparte)**: `cafeteria` (solo `DietaryRestriction` es real; menú/checkout/saldo no tienen
-     ninguna tabla propia); `transportation` (cero modelos reales — ni siquiera parcial);
-     `schedules` **mitad de horario/timetable** (`rooms`/`meeting_patterns` no existen);
-     `student_support` — **corrección importante**: `disciplinary_logs`/`medical_history`/
-     `accommodations` NO tienen ninguna tabla real (a diferencia de lo que un recon superficial
-     asumiría por la presencia de query objects/rosters) — es Clase C igual que `transportation`,
-     no un carve-out "sensible pero cableable".
-   - **`finance`**: Clase A por modelos (`Charge`/`Payment`/`PaymentPlan`/`Installment`/
-     `StudentAccount` son reales), pero **sin ningún controller/ruta/vista** — a diferencia de los
-     demás, no hay stub que reemplazar, hay que construir desde cero. Diferido a su propio slice,
-     no por falta de esquema sino por alcance/forma distinta (ver `HISTORIA.md`).
-   - `core` no es candidato de #4 en sí — no tiene controllers propios; sus recursos de negocio
-     (`students`, etc.) ya viven en `group_management`.
-5. **Plano de control — pendientes del track de billing** (S0→S4 completo, ver §7):
-   1. **S3b — emisión real por dominio**: cablear cada dominio medido para llamar `ControlPlane::Usage::Ingest` en su evento facturable real. **Requiere cerrar M1 primero** (unidad de metering por dominio). Slice transversal, tocará `app/domains/*` — mismo patrón de "una sola pieza" que S2b, no ramificar por dominio. Una vez cerrado, las líneas `usage_overage` del corte dejarán de dar cero — no hace falta tocar `PeriodCut` para eso, ya las suma correctamente.
-   2. **Riel de pago** — fuera de alcance de v1. Finalizar una factura la congela; no la cobra ni la envía.
-   3. **Hardening documentado, no construido**: exclusion constraint `int4range`/`daterange` con GiST por `plan_id` (tiers) o por `(institution_id, addon_id)` (entitlements) para prohibir solapamiento a nivel de BD, al estilo `WITHOUT OVERLAPS` de `schedules`; prorrateo de `addon_fee`; edición manual de líneas de un borrador; tabla `billing_periods` explícita.
-   4. **RBAC intra-plano** (roles/scopes de `platform_admin`) — sigue sin construirse; cualquier `platform_admin` autenticado administra el catálogo/subscriptions/entitlements/headcount/uso/facturas completos.
-   5. **Provisioning de instituciones** (crear/editar una institución desde el control plane) — hoy solo se listan read-only.
-   6. **Schedule recurrente** de `Core::Headcount::SnapshotJob`, `ControlPlane::Usage::RollupJob` y `ControlPlane::Billing::PeriodCutJob` — diferido (todos quedan invocables manual/rake); mismo tratamiento que `Invitations::Expirer`.
-6. **Metering real** por dominio medido (= S3b arriba): definir el evento facturable de cada uno (cierra M1) y llamar `ControlPlane::Usage::Ingest` desde ahí — el pipe genérico, el rollup idempotente, y el corte de periodo que los suma (S4) ya existen, no hay que reconstruirlos.
-7. **Tiempo real** (Turbo Streams sobre Solid Cable, sin Redis): `transportation` (abordaje) y `communication` (canales). Hoy diferido.
-8. **`communication` a fondo**: migraciones de `conversations`/`messages`/`tags`, mensajería con padres, canales.
-9. **`analytics_bi`**: vistas materializadas + reporte cross-tenant auditado (rol `BYPASSRLS`, `edu_bi_reader`).
-10. **Endurecer auditoría** (append-only — ya implementado a nivel de BD) y terminar la bandeja de discrepancias del roster (ver ítem 1.4 arriba).
+> **Movido a `OPEN_PROCESS.md` en v1.21.0.** El backlog ordenado (antes §11) y los guardrails
+> operativos (antes §12) crecen con cada slice y ya dominaban el tamaño de este documento, que debe
+> quedar enfocado en **estado asentado** (arquitectura, mapa de dominios, RBAC). `OPEN_PROCESS.md`
+> es el archivo que se actualiza en CADA slice de aquí en adelante — este documento ya no.
 
 ---
 
-## 12. Guardrails operativos (recordatorio permanente)
+## 12. Changelog
 
-- Migraciones: **`bin/migrate`**, nunca `rails db:migrate`. `edu_migrator` con `CREATE` en las 4 bases.
-- **Migrar development NO migra test** — correr también `RAILS_ENV=test bin/migrate` tras cada migración nueva, o el test suite falla con `NoMethodError` (no con un error de SQL) sobre la columna/tabla nueva.
-- `EDU_MIGRATOR_PASSWORD` es solo de entorno, nunca vive en el repo. Si se pierde en dev local, resetear con `psql` (auth `trust` del superusuario del SO) vía `ALTER ROLE edu_migrator PASSWORD '...'` — nunca dejar la contraseña en archivos temporales tras usarla.
-- **Timestamps de migración no pueden ser >24h futuros respecto al reloj real de la máquina** (Rails 8 valida `version.to_i < (Time.now.utc + 1.day).strftime(...)`) — generar el timestamp con el reloj real al momento de escribir el archivo, no proyectando una fecha narrativa.
-- **Suite de tests: correr en serie.** La paralelización por fork (`workers: :number_of_processors`, default cuando la suite pasa ~50 tests) **crashea el proceso Ruby** en esta máquina (YJIT + fork). `PARALLEL_WORKERS=1 bin/rails test` corre limpia (Rails respeta esa env var como override de `parallelize`, sin tocar `test_helper.rb`). Un crash de proceso ≠ fallo de test — no asumirlo sin correr en serie primero.
-- **Sin `default_scope`** para tenancy ni scope de rol — siempre Query objects.
-- **RLS con `FORCE`**; runtime sin `BYPASSRLS`; cross-tenant solo por el rol auditado (`edu_bi_reader`).
-- **`authorize!` en el controlador** (puerta dura, llamada a mano dentro de cada acción); `can?` en la vista solo cosmético.
-- **Sin `RoleAssignment` real que aplique = cero permisos (fail-closed), siempre** (P1, cerrado) — no hay fallback a ninguna persona stub en runtime; `Authorization::StubAssignments`/`StubResolver` quedan retirados (solo `StubResolver` sigue vivo como contexto fijo para un caso de test puntual, ver `HISTORIA.md`). Cada persona nueva creada vía `PeopleController` necesita `RoleAssignment` reales para tener acceso — importante para onboarding real.
-- **`has_secure_password` con `validations: false` en `Core::User`** — un `password_digest` nulo es un estado válido (persona invitada, no completada). No "arreglar" agregando de vuelta la validación de presencia por defecto sin releer la narrativa en `HISTORIA.md` (§9.4 original).
-- **Suspender (`institution_users.status`) bloquea login y quita grants reales en la siguiente request** (confirmado, P1) — `Current#resolve_institution_user` solo resuelve membresías `active`, así que sin `institution_user_id` el motor real (`IdentityAccess::PermissionCheck`) no carga ningún `role_assignment`: cero permisos, de verdad. NO destruye sesiones ya abiertas de otras instituciones del mismo usuario.
-- **Sin gemas nuevas** salvo bottleneck documentado e irresoluble con lo nativo. `bcrypt` no cuenta como nueva — es la gema que el propio scaffold de Rails deja comentada para `has_secure_password`.
-- Propshaft sin `@import`/Sass; importmap sin build; **tokens-only** (no tocar `tokens.css` salvo token faltante justificado); accesibilidad AA.
-- Cross-domain siempre por **FK + stub** hasta que exista el modelo real; no inventar tablas de otros dominios.
-- El **plano de control fuera de `app/domains/*`** — no scopearlo por `institution_id` por costumbre.
-- **Zeitwerk colapsa `app/domains/*/{models,queries,services,jobs,policies}`** — un archivo en `app/domains/<d>/services/<ns>/foo.rb` define `<D>::<Ns>::Foo`, NO `<D>::Services::<Ns>::Foo`. Verificar con `bin/rails zeitwerk:check` antes de dar por buena una constante nueva.
-- **Gate #1 (entitlement) siempre antes de gate #2 (RBAC)** — `Entitlement::Controller` (una sola pieza, incluida una vez en `ApplicationController`) corre antes de que la acción llegue a `authorize!`; un módulo no habilitado nunca revela detalles de RBAC. Ver §7.1.
-- **Los dominios fundacionales nunca se gatean por entitlement** — su ausencia de `Entitlement::Registry` (`config/entitlements/*.rb`) ES la señal de "no gateado"; no existe (ni debe crearse) una lista aparte de "fundacionales".
-- **`Entitlement::Registry` no referencia `ControlPlane::AddonCatalog::DOMAIN_KEYS` en runtime** — solo `test/models/entitlement/registry_consistency_test.rb` cruza ambas listas. No "simplificar" el runtime del inquilino para que lea la constante del control plane directamente; ese acoplamiento es exactamente lo que este seam evita.
-- **`sign_in_as_member` (test helper) otorga entitlement de todos los dominios gateados por defecto** — la institución efímera de test se comporta como un tenant completamente aprovisionado. Un test que necesite el escenario "no entitled" debe **revocar** el dominio específico, no asumir que parte sin ninguno.
-- **`sign_in_as_member` (P1) también otorga por defecto un `RoleAssignment` real institución-wide** (`grant_default_role: false` para optar por "cero grants"). Un test que necesite un escenario de scope MÁS ANGOSTO llama a `with_grants`/`grant_role!` (test_helper.rb) — `with_grants` **revoca primero** cualquier asignación existente antes de sembrar la nueva (los `RoleAssignment` reales solo SUMAN, no se reemplazan entre sí como sí hacía swapear `Authorization::StubAssignments.all`).
-- **`scope_department_id`/`scope_grade_level_id`/`scope_group_id` tienen FK real** (a `departments`/`grade_levels`/`sections`) — sembrar un `RoleAssignment` con scope real exige que esa fila exista primero (`grant_role!` lo hace por `find_or_create_by!(id: scope_id)`). Reusar el mismo id fijo entre archivos de test distintos es seguro porque cada test corre en su propia transacción revertida (fixtures transaccionales) — no hay colisión entre tests.
-- **Todo job nuevo que toque datos tenant-scoped debe heredar `ApplicationJob`** (no reinventar el manejo del GUC) — ese mecanismo incluye un `Tenant::Guc.reset!` explícito en el `ensure`, no solo confiar en que el `COMMIT` de la transacción limpie el `SET LOCAL` (dentro de un test envuelto en una transacción englobante, la transacción del job es un SAVEPOINT, y Postgres no limpia `SET LOCAL` al liberar un savepoint).
-- **Verificar "el GUC no se filtró" con una query real bajo RLS, nunca con una relectura de `current_setting()`** — esa relectura puede devolver un valor obsoleto por el query cache de ActiveRecord dentro de una transacción, dando un falso positivo de fuga (o, peor, un falso negativo). La prueba real es: sin ningún GUC fijado, ¿una tabla RLS-protegida devuelve cero filas?
-- **El headcount cuenta `GroupManagement::Student.status == "active"` de la institución, NUNCA matrícula/término — a propósito, y esto sigue así aunque el join YA exista (v1.15.0, F3).** `enrollments.academic_term_id` (FK real) y `Schedules::ActiveTermEnrollmentScope` existen y son consumibles desde v1.15.0 — pero el headcount de facturación (S3a/S4) deliberadamente NO los usa. `academic_term_label` en el snapshot sigue siendo solo una etiqueta descriptiva, nunca un filtro del conteo. Facturar sobre "matriculado en el término activo" en vez de `status == "active"` es una **decisión de negocio separada y explícita** (reabrir Cav. del lado de facturación) — nunca un efecto colateral de cablear un consumidor académico del nuevo query object. Verificado con un test de regresión dedicado (`Core::Headcount::SnapshotterTest`, v1.15.0).
-- **El corte de periodo (`ControlPlane::Billing::PeriodCut`) nunca re-lee el catálogo vivo** — solo el `price_tiers_snapshot`/`base_price_per_student_cents` congelados en `subscriptions` al firmar (S2a). Si un futuro cambio "optimiza" esto para leer `plans`/`plan_price_tiers` directamente, rompe la garantía de snapshot inmutable que todo el track de billing (S2a→S4) depende de sostener.
-- **Los overrides se aplican con `coalesce(override, catálogo)` campo por campo, nunca de-todo-o-nada** — un entitlement puede tener override de fee pero no de cupo, por ejemplo. `source_ref` de cada línea registra si se aplicó un override, para que la factura sea defendible sin tener que abrir la base de datos.
-- **`InvoiceLineItem#readonly?` bloquea `update`/`destroy` de una fila individual, pero `PeriodCut` regenera un `draft` con `invoice.line_items.delete_all`** (bulk SQL, bypasea `readonly?` a propósito) — no confundir "una línea no se edita nunca" con "un borrador no se regenera nunca". Solo `delete_all`/`create!` desde el servicio, nunca `destroy`/`update` de una línea suelta.
-- **Nunca escribir código después de un `.enqueue`/`.enqueue_for` que dependa del GUC del tenant seguir fijado** (RosterImport, v1.7.0) — bajo el adaptador de test de ActiveJob (`perform_enqueued_jobs`) un job se ejecuta SINCRÓNICAMENTE, y `ApplicationJob#around_perform` resetea incondicionalmente el GUC en su `ensure` al terminar; cualquier query tenant-scoped (p. ej. un `Audit.log`) que corra DESPUÉS de encolar en la misma acción puede fallar RLS aunque siga siendo, técnicamente, la misma request. Esto no es solo un artefacto de test — cualquier adaptador de cola que corra inline expone lo mismo. Ordenar siempre: auditar/hacer trabajo tenant-scoped **antes** de encolar, nunca después.
-- **Cifrar un valor suelto dentro de una columna `jsonb` (no un atributo `encrypts` completo)** — usar la API de bajo nivel `ActiveRecord::Encryption.encryptor.encrypt/decrypt(valor, key_provider: ActiveRecord::Encryption.key_provider, cipher_options: { deterministic: true })` (ver `Core::RosterImport::Cipher`), NO la macro declarativa `encrypts` (que opera sobre un atributo AR entero, no sobre una clave dentro de un hash jsonb). Mismo cifrado determinístico que cualquier `encrypts ..., deterministic: true` existente, así que sigue siendo comparable contra esos atributos vía query normal (Rails encripta el lado de la query de forma transparente).
-- **Al enmascarar un dato sensible para mostrarlo en una vista, nunca reveles más de la mitad de los caracteres** — una regla de "muestra los últimos 4" revela el valor COMPLETO si el dato tiene 4 caracteres o menos (encontrado real en RosterImport's preview, v1.7.0, no solo hipotético). Calcular el tramo visible como `[largo/2, N].min`, nunca un valor fijo sin tope relativo al tamaño real. (v1.8.0: esta regla se movió de un helper de vista a `Core::RosterImport::Cipher.mask` — cada strategy decide qué se enmascara en su propio `preview_columns`; la vista nunca decide qué es sensible.)
-- **Un acudiente (`Core::RosterImport` kind `guardians`) obtiene SIEMPRE cero `IdentityAccess::RoleAssignment`** — no es staff, su acceso es por relación (`guardian_students`), nunca por RBAC. `Core::People::Resolver` ya garantiza esto por construcción (nunca toca `role_assignments`); no "arreglar" esto agregando un rol "para que el portal funcione" cuando `GuardianScope` se construya — el portal se gatea por relación, no por permiso.
-- **El upsert de un link `guardian_students` (o cualquier vínculo similar) es SIEMPRE aditivo: un CSV/import nunca borra un vínculo ausente del archivo** — solo crea vínculos nuevos o re-afirma (actualiza `relationship`, reactiva si estaba `revoked`) los que el archivo menciona. Desvincular es una acción explícita y separada, nunca un efecto secundario de un re-import. Verificado con un test dedicado ("el link ausente del CSV sobrevive"), no solo inferido.
-- **Estrategia por-kind para pipelines multi-tipo (`Core::RosterImport::Strategy.for`)** — cuando un mismo pipeline (parse→validar→commit) debe soportar variantes con reglas distintas, extraer un objeto-estrategia por variante (columnas, validación, upsert, preview) y mantener la orquestación compartida sin ningún `if kind == ...`. Añadir un tipo nuevo es agregar una clase, no editar las existentes ni sus tests.
-- **El portal de una persona (estudiante/acudiente) se gatea SIEMPRE por relación (`Core::Access::GuardianScope`/`StudentSelfScope`), nunca por RBAC** — ninguno de los dos tiene ni necesita `authorize!`; el query object explícito+scoped ES la puerta. No agregar un rol/permiso "para que el portal funcione" cuando se cablee un dominio nuevo dentro de él (backlog #4) — el gate sigue siendo la relación, el entitlement (si aplica al dominio colgado) se resuelve aparte. Y **`GuardianScope` nace y se mantiene sin buscador** — ninguna versión futura le agrega un parámetro de término/búsqueda; es el invariante de Habeas Data no negociable de este proyecto.
-- **`GuardianScope`/`StudentSelfScope` siguen sin filtrar por término, por elección, no por limitación de esquema** — desde v1.15.0 el join `enrollments.academic_term_id`↔`academic_terms` SÍ existe (`Schedules::ActiveTermEnrollmentScope`), así que ya no es cierto que "no hay cómo". Estos self-scopes resuelven "mis hijos activos"/"mi propio registro" por relación pura, sin necesidad de acotar por término — agregarlo sería scope creep, no una corrección. Si un slice futuro quisiera "mis hijos matriculados este término" como una vista DISTINTA, compone `ActiveTermEnrollmentScope` aparte; no se modifica el self-scope existente.
-- **El autoservicio de staff se gatea por identidad (self-scope en `services/access/`), nunca por `authorize!`** — muestra solo datos **propios** (perfil, roles vigentes, grupos/departamento derivados de las propias `role_assignments`). Mostrar a OTRA persona (mis colegas de departamento, mis estudiantes) es supervisión (backlog #4, RBAC con scope), no autoservicio — cruzar esa línea saca la vista de esta sección. Ninguna de estas superficies (student/guardian/staff) vive en `Navigation::Registry`, porque esa lista SIEMPRE filtra por `can?`; se enlazan aparte (header del shell / portal).
-- **El filtro de término activo es real solo donde el FK existe** — `role_assignments.effective_now` (P1); `enrollments.academic_term_id`↔`academic_terms` (v1.15.0, matrícula por término, cierra la mitad de modelo de Cav.). **La salvedad B2 sigue vigente para `role_assignments.valid_from/until`** (fechado independiente del calendario lectivo, sin FK a `academic_terms` — un borde DISTINTO al de matrícula, no tocado por v1.15.0). `schedules`' mitad de horario/timetable sigue sin ninguna tabla real (ni parcial) — cualquier tile que lo use hoy es necesariamente vista previa sobre el stub existente, marcada como tal, nunca presentada como dato real. El headcount de facturación sigue sin filtrar por término A PROPÓSITO (ver el guardrail de headcount, arriba) — no confundir "el join ya existe" con "todo lo que toca estudiantes ya filtra por término".
-- **El visor de auditoría se gatea por RBAC (`authorize!`), a diferencia de las superficies self-service — y `audit_events` es append-only: ninguna vista lo muta.** Un futuro "marcar atendida" (si se construye) **es un evento nuevo append** (`Audit.log` de, p. ej., `discrepancy_acknowledged`) con estado **derivado** de su presencia — nunca un `UPDATE` sobre la fila original (la BD ya lo impediría: `REVOKE UPDATE, DELETE ON audit_events FROM edu_app_runtime`).
-- **Los filtros del visor de auditoría nunca son un directorio de estudiantes** — actor/acción/fecha sobre metadata, con acción tomada de un **conjunto conocido** (`IdentityAccess::AuditEventIndex::ACTIONS`), jamás texto libre ni autocompletado de personas (Habeas Data, mismo invariante que `GuardianScope`). El filtro de actor sí lista al STAFF de la propia institución (no son menores; es la misma superficie ya visible en "Personas").
-- **El staff vive en UN SOLO hogar (`staff_management`), y el docente es una especialización, no un dominio aparte** (CHECKPOINT E, D1, v1.12.0) — `StaffManagement::StaffMember` es el empleo generalizado de TODO staff (`department_id` **nullable** para no-académicos); `TeacherManagement::Teacher` es su extensión docente vía `teachers.staff_member_id` (FK **nullable, aditiva** — el link puede faltar sin que el perfil base esté incompleto). `Core::Access::StaffProfileScope` ya resuelve a ambos por identidad, sin distinguir. Esto **ya estaba en el esquema desde el primer commit** — no inventar una migración de "generalizar staff" sin releer `HISTORIA.md` v1.12.0 primero. Los directorios `StaffRoster`/`TeacherRoster`/`DepartmentRoster` **ya son reales** desde v1.13.0 (ver abajo).
-- **El molde de vistas de negocio (#4) es `teacher_management` (los cinco esqueletos de §6.6, per-row `can?`); los demás dominios lo COPIAN, no lo reinventan** — un slice de #4 sobre `core`/`student_support`/`group_management`/`schedules`/`counseling`/`cafeteria`/`transportation` que introduce un query object de índice con una forma distinta a `TeacherScope`/`DepartmentScope`/`StaffScope` (institución explícita + per-row `can?` vía `.select`, nunca `default_scope`, nunca forzar `PermissionCheck#scope_for`) debe justificar por qué, no asumirlo por defecto.
-- **#4 es supervisión: RBAC + scope + `Navigation::Registry`; la contracara del autoservicio (identidad, `/mis_datos`) — no confundir las dos superficies para un mismo dominio.** Un índice que muestra a OTRAS personas dentro del alcance del actor SIEMPRE lleva `authorize!` y vive en el registry; uno que muestra "lo mío" nunca lleva `authorize!` y nunca vive ahí. `teacher_management`/`staff_management` ya tienen ambas superficies simultáneamente y son el ejemplo canónico de que no se pisan: `/mis_datos` (autoservicio) y `/teacher_management/*`+`/staff_management/staff` (supervisión) leen las MISMAS tablas por caminos de acceso completamente distintos.
-- **Triage A/B/C/S antes de cablear CUALQUIER dominio de #4** (barrido v1.14.0) — antes de aplicar el molde §6.6 a un dominio nuevo, verificar contra el disco (no contra la presencia de un query object/roster, que puede ser 100% stub) si sus tablas de negocio SON reales. `student_support` parecía cableable (tenía `queries/`/`services/` con nombres "reales") y resultó ser Clase C completo — cero migración para `disciplinary_logs`/`medical_history`/`accommodations` en todo el repo. **La señal real es `grep create_table` en `db/migrate/`, nunca la presencia de un archivo con nombre de query object.** Ver `CONCEPTOS_TECNICOS.md` para la taxonomía completa (A/B/C/S).
-- **Un dominio con modelos reales pero CERO vista/controller (`finance`) no es lo mismo que un stub a reemplazar** — cablearlo es construir desde cero (rutas, controller, nav), no swapear una fuente de datos. Tratarlo como su propio slice de alcance distinto, no como un ítem más del barrido de #4.
-- **`students.section_id`/`Schedules::Assessment` ya existían como target real** — a diferencia de `teacher.evaluate` (v1.13.0, sin modelo destino), la acción de matrícula de `group_management` y el registro de nota de `schedules` SÍ se cablearon como escritura real completa, no solo el gate. La regla general (BV6): cablear el gate siempre; el workflow completo SOLO si el modelo destino ya existe — verificarlo caso por caso, no asumir "gate-only" por defecto.
-- **`Schedules::ActiveTermEnrollmentScope` es EL resolver canónico de "estudiante matriculado en el término activo"** (v1.15.0, cierra la mitad de modelo de Cav./B2) — todo slice académico futuro (asistencia, notas-por-término, actividades, asignaciones, ver `LINEAMIENTOS_MVP.md`) lo CONSUME, no re-deriva su propio join a `academic_terms`. No es identity-gated (a diferencia de `GuardianScope`/`StudentSelfScope`) ni RBAC-scoped por sí mismo — resuelve el hecho académico crudo; cada consumidor aplica su propio scope de RBAC encima (mismo layering que `TeacherManagement::TeacherScope`). Solo un término activo por institución (invariante de BD ya existente) — el query NUNCA reimplementa esa resolución, solo lee `Core::AcademicTerm.active`.
-- **"Roster tomable" = resolver académico ∩ scope de negocio ∩ scope RBAC — tres capas, nunca colapsadas en una** (`attendance`, v1.16.0, primer consumidor real de `ActiveTermEnrollmentScope`): (1) `ActiveTermEnrollmentScope.resolve(institution:)` — el hecho crudo, institución completa; (2) `.where(section_id: group.id)` — el scope de NEGOCIO (este grupo/homeroom); (3) `authorize!("attendance.record", group)` + el query object per-row (`Attendance::GroupScope`) — el scope de RBAC del actor (sus propios grupos). El mismo layering aplica a todo slice académico futuro que "actúe sobre los alumnos de un grupo en el término activo" (notas-por-término, actividades, asignaciones) — no reinventar el orden ni colapsar las tres capas en una sola query ad hoc.
-- **Un dominio net-new addon-gated real desde el día uno (sin fase stub) es un patrón válido** (`attendance`, v1.16.0) — a diferencia de los dominios de la Fase 0 (que nacieron 100% stub y se cablearon después, backlog #4), un dominio construido HOY con recon-first + checkpoint de diseño no necesita pasar por una fase de roster en memoria: el modelo real, el query object y las vistas se construyen en el mismo slice.
+El changelog completo (`v1.0.0` → `v1.22.0`) vive en **`HISTORIA.md`**. Entrada de esta versión:
 
----
+- **`v1.22.0` — `assignments`: entrega de texto, slice 2/4 (ítem #6 del MVP).** Recon confirmó el
+  modelo real que dejó v1.21.0 sin sorpresas materiales. Tabla nueva `submissions` con llave
+  EN-DOMINIO `(assignment_id, student_id)` — deliberadamente NO anclada a `schedules::assessments`
+  (el default del prompt, confirmado como la opción más limpia): el pareo entrega↔nota se resuelve
+  en `Assignments::GradingView`, un servicio de lectura (mismo patrón que
+  `Finance::AccountStatement`), nunca por FK cruzado — mantiene `assignments` sin acoplar un eje
+  nuevo hacia `schedules`. **Primer write desde un portal**: gateado por la MISMA relación que ya
+  gatea la lectura (`Assignments::StudentView.for(student)`), nunca RBAC — una tarea fuera de ese
+  scope (ajena, `draft`, `archived`) 404 en la escritura exactamente como en la lectura.
+  `submitted_by_user_id` registra atribución (el estudiante o su acudiente, por B1 — un menor sin
+  login entrega a través de su acudiente); la entrega siempre pertenece al `student_id`, nunca a
+  quien la tecleó. Tardía es un flag calculado (`Submission#late?`), nunca un bloqueo. 487→499 tests
+  totales (12 nuevos, incluyendo dos que atraparon un bug de test real: reusar `as_teacher` después
+  de un `sign_in_as` de portal no basta — hay que re-autenticar la sesión de vuelta). Narrativa
+  completa en `HISTORIA.md`.
 
-## 13. Changelog
+- **`v1.21.0` — `assignments`: tareas académicas, slice 1/4 (ítem #6 del MVP: publicar + ver +
+  calificar directo).** Recon confirmó net-new en TODOS los niveles (sin tabla, sin gating, sin
+  permisos — a diferencia de `finance`/`communication`). Hallazgo material que corrigió el modelo
+  de datos: `schedules::Assessment belongs_to :enrollment` (no `:subject`) y el `score` vive
+  DIRECTAMENTE en esa fila — no hay tabla de "grade-entries" separada. Un FK singular
+  `assignments.assessment_id` no puede representar una tarea de todo un curso; el FK va al revés:
+  `assessments.assignment_id` (nullable, aditivo, mismo patrón que `enrollments.academic_term_id`).
+  Publicar (`Assignments::Publisher`) hace fan-out: una fila `Assessment` por matrícula del roster
+  (`ActiveTermEnrollmentScope` ∩ la materia ∩ scope RBAC del docente vía `grade_level_id` de
+  `Subject` — el mismo mecanismo que ya usaba `grades.write`, sin inventar una dimensión de scope
+  nueva), cada una `score: nil`. Calificar (`Assignments::GradeRecorder`) `UPDATE`-ea esa misma
+  fila — nunca crea una segunda. A diferencia de mensajería (v1.20.0), aquí `ActiveTermEnrollmentScope`
+  SÍ es el resolver semánticamente correcto (elegibilidad académica real). Estado
+  draft/published/archived — archivar es soft, nunca toca las notas ya fanned-out; solo un borrador
+  (cero assessments por construcción) se puede eliminar de verdad. Portal (estudiante/acudiente):
+  solo lectura, solo `published`, nota leída del MISMO origen que `report_cards`
+  (`Assignments::StudentView`). Slices 2–4 (entrega de texto, adjuntos, rúbricas) registrados como
+  roadmap en `HISTORIA.md`, sin construir. 472→487 tests totales (15 nuevos). **Este slice también
+  disparó el split editorial #2**: §11 (backlog) y §12 (guardrails) de este documento se movieron a
+  `OPEN_PROCESS.md` — se actualiza ahí de aquí en adelante, no aquí.
 
-El changelog completo (`v1.0.0` → `v1.16.0`) vive en **`HISTORIA.md`**. Entrada de esta versión:
+- **`v1.20.0` — `communication`: mensajería (ítem #5b del MVP, subsistema (B), núcleo).** Tres
+  tablas net-new (`conversations`/`conversation_participants`/`messages`) — confirmado por recon
+  que no existía nada real, solo el borrador del anexo. Gating de `communication` reusado tal cual
+  (ya estaba desde v1.19.0); nav nueva para compose y auditoría (`Navigation::Registry`, dos
+  entradas RBAC, la bandeja se queda fuera del registry, mismo criterio que el feed de anuncios).
+  Identidad de participante/emisor: `institution_user_id` XOR `guardian_user_id` (CHECK real
+  `num_nonnulls(...) = 1`, cascade en ambas identidades — mismo handle que
+  `guardian_students.guardian_user_id`, nunca `institution_user_id` para un acudiente aunque
+  también tenga esa fila). Cuatro caminos de acceso sobre las mismas tres tablas, cuatro
+  controllers distintos: `ConversationsController` (compose, RBAC, destinatarios acotados —
+  staff ∪ acudientes de estudiantes en el scope RBAC del actor, nunca un directorio) →
+  `InboxController`/`Portals::GuardianInboxController` (bandeja+responder, participación, sin
+  `authorize!`, `Communication::Inbox` compartido) → `ConversationAuditsController` (auditoría,
+  RBAC, permiso `conversation.audit` distinto de compose, log condicional `conversation_audited`
+  en `audit_events` solo si el accesor no es participante). **Ajuste de diseño reportado**: el
+  selector de destinatarios NO reusa `Schedules::ActiveTermEnrollmentScope` (semánticamente ajeno a
+  "de quién es responsable este staff para mensajería") — usa `GroupManagement::Section#students`
+  como hecho de negocio crudo en su lugar. Cerrar es soft; sin threading; sin tags; acudiente
+  responde pero nunca inicia. 455→472 tests totales (17 nuevos). Narrativa completa en `HISTORIA.md`.
+- **`v1.19.0` — `communication`: anuncios (ítem #5 del MVP, subsistema (A) only).** Recon confirmó
+  que `communication` ya estaba addon-gated (`config/entitlements/communication.rb`,
+  `AddonCatalog::DOMAIN_KEYS`, `SeedCatalog::ADDONS` — metered "mensajes", provisional para la
+  mensajería futura) pero SIN entrada en `Navigation::Registry` ni permisos `communication.*`/
+  `announcement.*` — a diferencia de `finance`, el gating estaba pero el nav no; se creó
+  `config/navigation/communication.rb` y el permiso `announcement.publish` desde cero. Tabla
+  `announcements` dedicada (NO el modelo unificado `conversations` que el anexo viejo de §8
+  proponía — decisión explícita del owner: mensajería, cuando se construya, es estructuralmente
+  distinta y se diseña fresca en su propio slice). Autor vía `author_institution_user_id` (mismo
+  patrón que `audit_events.actor_institution_user_id`, no `staff_member_id` como hizo
+  `report_cards` — publicar es una acción administrativa, no una extensión docente). Dos
+  superficies con gates DISTINTOS: gestión (`Communication::AnnouncementsController`,
+  `authorize!("announcement.publish")` + Registry) y lectura (`Communication::FeedController`, gate
+  nuevo de **membresía** — sin `authorize!`, sin permiso, fuera del Registry, gateado solo por
+  `Current.entitled_addon_keys` — ver Guardrails). `Communication::AnnouncementFeed`: un solo
+  camino de lectura compartido por staff + portal del acudiente + portal del estudiante (ninguno
+  per-hijo/per-self-scope, a diferencia de `report_cards`/`finance` — un anuncio es institución-wide).
+  Retract soft (`Announcement#retract!`), nunca `destroy`. `db/seeds.rb` NO se tocó (mismo alcance
+  que `attendance`/`report_cards`/`finance` — el archivo no tiene ningún concepto de
+  `institution_users`/anuncios/RBAC, es puramente demográfico). El anexo de `communication` (§8 de
+  `PROJECT_STATE.md`) se reescribió para reflejar (A) real y registrar el spec completo de (B)
+  mensajería que definió el owner, con sus 3 preguntas de diseño abiertas — sin construir nada de
+  eso. 442→455 tests totales (13 nuevos). Narrativa completa arriba, en §8.
 
+- **`v1.18.0` — `finance`: UI de tesorería (ítem #4 del MVP, primera superficie sobre modelos ya
+  reales).** Recon reveló que `finance` ya estaba addon-gated (`config/entitlements/finance.rb`,
+  `AddonCatalog::DOMAIN_KEYS`, `SeedCatalog::ADDONS`), ya tenía entrada en `Navigation::Registry`, y
+  ya tenía permisos `finance.read`/`finance.write` sembrados a `institution_admin` y reusados por
+  `Cafeteria::BalancesController` — todo desde v1.3.0/S2b. Cero de eso se reconstruyó; se reusó tal
+  cual (no se inventaron `finance.view`/`finance.manage`). Segundo hallazgo material: el dinero es
+  `decimal(12,2)`, no `*_cents bigint` (comiteado antes de que F6 existiera) — se mantuvo la
+  representación (exacta, sin drift de float) en vez de migrar el esquema. `idempotency_key` (con
+  índice único por institución) ya existía sin usar en `charges`/`payments` desde el primer commit —
+  este slice lo activó como guarda real de doble-submit. `Finance::PaymentRecorder`/
+  `Finance::ChargeCreator`: transaccionales, con `account.lock!` (pessimista, coexiste sin conflicto
+  con el `lock_version` optimista ya presente). `Finance::AccountStatement`: un solo camino de
+  lectura (mismo patrón que `ReportCards::Computation`, v1.17.0) consumido por supervisión (molde #4,
+  scope institución-wide — tesorería es función central, no por grupo) y portal del acudiente (solo
+  lectura, sin riel de pago, sin gating por entitlement — mismo gap ya aceptado de `report_cards`).
+  `PaymentPlan`/`Installment` confirmados sin ninguna conexión al saldo — quedan sin UI, diferidos.
+  428→442 tests totales (14 nuevos). Narrativa completa en `HISTORIA.md`.
+- **`v1.17.0` — `report_cards`: boletines (ítem #3 del MVP, dominio net-new).** Checkpoint de diseño
+  (aprobado): dominio propio, addon-gated, lee `schedules` por FK (nunca posee `Subject`/
+  `Enrollment`/`Assessment`). `report_cards` (`student_id`+`academic_term_id`, único
+  `(institution_id, student_id, academic_term_id)`, `lines_snapshot` jsonb + `overall_average`
+  congelados al publicar, `published_by_staff_member_id` nullable). Recon: `Schedules::Assessment`
+  ya traía `weight`/`max_score` — no existía lógica de promedio/GPA en `schedules`, así que
+  `ReportCards::Computation` la introduce (normaliza cada nota a la escala 0.0–5.0 antes de
+  ponderar; una materia sin notas cargadas no aporta línea, nunca un cero). El roster tomable es la
+  MISMA intersección de tres capas que `attendance` (v1.16.0): `Schedules::ActiveTermEnrollmentScope`
+  ∩ el grupo ∩ el scope RBAC del actor — pero con permisos split (`report_card.view`/
+  `report_card.publish`) en vez de uno solo. Publicación real, síncrona, idempotente
+  (`ReportCards::Publisher`): regenera vía `delete_all`+`create!`, nunca `update`/`destroy_all` sobre
+  el AR object (`ReportCard#readonly? = persisted?` lo bloquea — mismo patrón que
+  `ControlPlane::InvoiceLineItem`/`PeriodCut`). Invariante estrella verificado con test dedicado: un
+  boletín publicado nunca re-lee una nota editada después. Dos superficies: supervisión (molde #4)
+  y portal (por relación, solo publicados, sin `authorize!`, fuera de `Navigation::Registry`) — el
+  portal de persona sigue sin chequear entitlement (mismo gap ya aceptado en `cafeteria`/
+  `transportation`, no nuevo de este slice). Headcount y `ActiveTermEnrollmentScope` verificados
+  intactos. Una migración, aplicada en dev y test. 21 tests nuevos (428 runs totales, 0 fallos).
+  Narrativa completa en `HISTORIA.md`.
 - **`v1.16.0` — `attendance`: asistencia diaria por homeroom (ítem #2 del MVP, dominio net-new).**
   Checkpoint de diseño (aprobado): dominio propio, addon-gated, diaria por homeroom — no `schedules`
   (grano equivocado, por materia) ni `group_management` (fundacional, y asistencia es addon-able).

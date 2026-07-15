@@ -1,0 +1,8 @@
+<% content_for :title, "Anuncios" %>
+
+<%= render "shared/page_header",
+      title: "Anuncios",
+      subtitle: "Comunicados de tu institución.",
+      actions: ui_button("← Volver", href: portal_student_path, variant: :secondary) %>
+
+<%= render "communication/announcement_list", announcements: @announcements %>

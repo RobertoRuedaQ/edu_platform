@@ -51,7 +51,34 @@ module IdentityAccess
       # unified-permission call as disciplinary_logs.manage (no read/write
       # split like accommodations/medical_history, since there's no
       # confidentiality tier here).
-      "attendance.record" => "Registrar y ver la asistencia de un grupo"
+      "attendance.record" => "Registrar y ver la asistencia de un grupo",
+      # report_cards (v1.17.0): split view/publish, unlike attendance's single
+      # permission — publicar un boletín es una acción distinta y más
+      # sensible que solo previsualizarlo (más cerca del split de
+      # accommodations.view/manage que de attendance.record).
+      "report_card.view"    => "Ver boletines (previsualización y publicados)",
+      "report_card.publish" => "Publicar boletines",
+      # communication (v1.19.0), subsystem (A) anuncios only. One permission
+      # (unlike report_card's split) — anyone who can publish can also edit/
+      # retract, same unified-permission call as attendance.record. Leer NO
+      # usa permiso: es una superficie de membresía (cualquier miembro activo
+      # ve los anuncios publicados), no RBAC — ver Guardrails.
+      "announcement.publish" => "Crear, editar y retractar anuncios",
+      # communication (v1.20.0), subsistema (B) mensajería. Iniciar es RBAC
+      # (compose); leer/responder la propia bandeja es participación, sin
+      # permiso — ver Guardrails. Auditar es un permiso aparte, deliberada-
+      # mente separado de compose: quien puede iniciar conversaciones NO
+      # necesariamente puede leer las de otros (rector/institution_admin
+      # solamente, nunca el super-admin de plataforma).
+      "conversation.compose" => "Iniciar conversaciones con acudientes/estudiantes",
+      "conversation.audit"   => "Leer cualquier conversación de la institución (deja rastro de auditoría)",
+      # assignments (v1.21.0), slice 1/4. Un solo permiso cubre crear/editar/
+      # publicar/archivar/calificar — mismo criterio unificado que
+      # attendance.record (no hay nivel de confidencialidad que justifique
+      # partirlo, a diferencia de report_card.view/publish). Ver la propia
+      # tarea desde el portal NO usa permiso: es relación (StudentSelfScope/
+      # GuardianScope), ver Guardrails.
+      "assignment.manage" => "Crear, editar, publicar, archivar y calificar tareas"
     }.freeze
 
     def self.call

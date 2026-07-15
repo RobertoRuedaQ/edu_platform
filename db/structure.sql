@@ -175,6 +175,27 @@ CREATE TABLE public.addons (
 
 
 --
+-- Name: announcements; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.announcements (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    author_institution_user_id uuid,
+    title character varying NOT NULL,
+    body text NOT NULL,
+    status character varying DEFAULT 'published'::character varying NOT NULL,
+    published_at timestamp(6) without time zone NOT NULL,
+    retracted_at timestamp(6) without time zone,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT announcements_status_check CHECK (((status)::text = ANY ((ARRAY['published'::character varying, 'retracted'::character varying])::text[])))
+);
+
+ALTER TABLE ONLY public.announcements FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: ar_internal_metadata; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -203,10 +224,33 @@ CREATE TABLE public.assessments (
     term character varying NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
+    assignment_id uuid,
     CONSTRAINT assessments_score_range_check CHECK (((score IS NULL) OR ((score >= (0)::numeric) AND (score <= (5)::numeric))))
 );
 
 ALTER TABLE ONLY public.assessments FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: assignments; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.assignments (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    subject_id uuid NOT NULL,
+    title character varying NOT NULL,
+    instructions text,
+    due_date date NOT NULL,
+    status character varying DEFAULT 'draft'::character varying NOT NULL,
+    created_by_institution_user_id uuid,
+    published_at timestamp(6) without time zone,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT assignments_status_check CHECK (((status)::text = ANY ((ARRAY['draft'::character varying, 'published'::character varying, 'archived'::character varying])::text[])))
+);
+
+ALTER TABLE ONLY public.assignments FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -318,6 +362,45 @@ CREATE TABLE public.control_plane_sessions (
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL
 );
+
+
+--
+-- Name: conversation_participants; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.conversation_participants (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    conversation_id uuid NOT NULL,
+    institution_user_id uuid,
+    guardian_user_id uuid,
+    last_read_at timestamp(6) without time zone,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT conversation_participants_identity_check CHECK ((num_nonnulls(institution_user_id, guardian_user_id) = 1))
+);
+
+ALTER TABLE ONLY public.conversation_participants FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: conversations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.conversations (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    subject character varying NOT NULL,
+    status character varying DEFAULT 'active'::character varying NOT NULL,
+    created_by_institution_user_id uuid,
+    closed_at timestamp(6) without time zone,
+    closed_by_institution_user_id uuid,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT conversations_status_check CHECK (((status)::text = ANY ((ARRAY['active'::character varying, 'closed'::character varying])::text[])))
+);
+
+ALTER TABLE ONLY public.conversations FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -680,6 +763,25 @@ CREATE TABLE public.invoices (
 
 
 --
+-- Name: messages; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.messages (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    conversation_id uuid NOT NULL,
+    institution_user_id uuid,
+    guardian_user_id uuid,
+    body text NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT messages_sender_identity_check CHECK ((num_nonnulls(institution_user_id, guardian_user_id) = 1))
+);
+
+ALTER TABLE ONLY public.messages FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: payment_plans; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -827,6 +929,28 @@ CREATE TABLE public.referrals (
 );
 
 ALTER TABLE ONLY public.referrals FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: report_cards; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.report_cards (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    student_id uuid NOT NULL,
+    academic_term_id uuid NOT NULL,
+    status character varying DEFAULT 'published'::character varying NOT NULL,
+    lines_snapshot jsonb DEFAULT '[]'::jsonb NOT NULL,
+    overall_average numeric(3,1),
+    published_at timestamp(6) without time zone NOT NULL,
+    published_by_staff_member_id uuid,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT report_cards_status_check CHECK (((status)::text = ANY ((ARRAY['draft'::character varying, 'published'::character varying])::text[])))
+);
+
+ALTER TABLE ONLY public.report_cards FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -1116,6 +1240,25 @@ ALTER TABLE ONLY public.subjects FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: submissions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.submissions (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    assignment_id uuid NOT NULL,
+    student_id uuid NOT NULL,
+    body text NOT NULL,
+    submitted_by_user_id uuid,
+    submitted_at timestamp(6) without time zone NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+ALTER TABLE ONLY public.submissions FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: subscriptions; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1294,6 +1437,14 @@ ALTER TABLE ONLY public.addons
 
 
 --
+-- Name: announcements announcements_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.announcements
+    ADD CONSTRAINT announcements_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: ar_internal_metadata ar_internal_metadata_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1307,6 +1458,14 @@ ALTER TABLE ONLY public.ar_internal_metadata
 
 ALTER TABLE ONLY public.assessments
     ADD CONSTRAINT assessments_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: assignments assignments_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.assignments
+    ADD CONSTRAINT assignments_pkey PRIMARY KEY (id);
 
 
 --
@@ -1355,6 +1514,22 @@ ALTER TABLE ONLY public.control_plane_email_otps
 
 ALTER TABLE ONLY public.control_plane_sessions
     ADD CONSTRAINT control_plane_sessions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: conversation_participants conversation_participants_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.conversation_participants
+    ADD CONSTRAINT conversation_participants_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: conversations conversations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.conversations
+    ADD CONSTRAINT conversations_pkey PRIMARY KEY (id);
 
 
 --
@@ -1502,6 +1677,14 @@ ALTER TABLE ONLY public.invoices
 
 
 --
+-- Name: messages messages_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.messages
+    ADD CONSTRAINT messages_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: payment_plans payment_plans_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1563,6 +1746,14 @@ ALTER TABLE ONLY public.programs
 
 ALTER TABLE ONLY public.referrals
     ADD CONSTRAINT referrals_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: report_cards report_cards_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.report_cards
+    ADD CONSTRAINT report_cards_pkey PRIMARY KEY (id);
 
 
 --
@@ -1686,6 +1877,14 @@ ALTER TABLE ONLY public.subjects
 
 
 --
+-- Name: submissions submissions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.submissions
+    ADD CONSTRAINT submissions_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: subscriptions subscriptions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1734,6 +1933,13 @@ ALTER TABLE ONLY public.users
 
 
 --
+-- Name: idx_assignments_on_institution_subject_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_assignments_on_institution_subject_status ON public.assignments USING btree (institution_id, subject_id, status);
+
+
+--
 -- Name: idx_charges_idempotency; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1745,6 +1951,13 @@ CREATE UNIQUE INDEX idx_charges_idempotency ON public.charges USING btree (insti
 --
 
 CREATE UNIQUE INDEX idx_installments_seq ON public.installments USING btree (institution_id, payment_plan_id, sequence);
+
+
+--
+-- Name: idx_messages_on_conversation_and_time; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_messages_on_conversation_and_time ON public.messages USING btree (institution_id, conversation_id, created_at);
 
 
 --
@@ -1766,6 +1979,34 @@ CREATE UNIQUE INDEX idx_on_institution_id_student_id_subject_id_d3059c6cb5 ON pu
 --
 
 CREATE UNIQUE INDEX idx_on_institution_id_teacher_id_subject_id_b6a57dc73b ON public.teaching_assignments USING btree (institution_id, teacher_id, subject_id);
+
+
+--
+-- Name: idx_participants_on_guardian_user; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_participants_on_guardian_user ON public.conversation_participants USING btree (institution_id, guardian_user_id);
+
+
+--
+-- Name: idx_participants_on_institution_user; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_participants_on_institution_user ON public.conversation_participants USING btree (institution_id, institution_user_id);
+
+
+--
+-- Name: idx_participants_unique_guardian_user; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_participants_unique_guardian_user ON public.conversation_participants USING btree (institution_id, conversation_id, guardian_user_id);
+
+
+--
+-- Name: idx_participants_unique_institution_user; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_participants_unique_institution_user ON public.conversation_participants USING btree (institution_id, conversation_id, institution_user_id);
 
 
 --
@@ -1818,6 +2059,13 @@ CREATE UNIQUE INDEX idx_rp_unique ON public.role_permissions USING btree (instit
 
 
 --
+-- Name: idx_submissions_unique_assignment_student; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_submissions_unique_assignment_student ON public.submissions USING btree (institution_id, assignment_id, student_id);
+
+
+--
 -- Name: index_academic_terms_on_institution_id_and_code; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1864,6 +2112,20 @@ CREATE UNIQUE INDEX index_active_storage_variant_records_uniqueness ON public.ac
 --
 
 CREATE UNIQUE INDEX index_addons_on_key ON public.addons USING btree (key);
+
+
+--
+-- Name: index_announcements_on_institution_and_published_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_announcements_on_institution_and_published_at ON public.announcements USING btree (institution_id, published_at);
+
+
+--
+-- Name: index_assessments_on_assignment_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_assessments_on_assignment_id ON public.assessments USING btree (assignment_id);
 
 
 --
@@ -1969,6 +2231,13 @@ CREATE INDEX index_control_plane_email_otps_on_platform_admin_id ON public.contr
 --
 
 CREATE INDEX index_control_plane_sessions_on_platform_admin_id ON public.control_plane_sessions USING btree (platform_admin_id);
+
+
+--
+-- Name: index_conversations_on_institution_and_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_conversations_on_institution_and_status ON public.conversations USING btree (institution_id, status);
 
 
 --
@@ -2340,6 +2609,34 @@ CREATE INDEX index_referrals_on_institution_id ON public.referrals USING btree (
 --
 
 CREATE INDEX index_referrals_on_institution_id_and_counseling_case_id ON public.referrals USING btree (institution_id, counseling_case_id);
+
+
+--
+-- Name: index_report_cards_on_academic_term_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_report_cards_on_academic_term_id ON public.report_cards USING btree (academic_term_id);
+
+
+--
+-- Name: index_report_cards_on_institution_student_term; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_report_cards_on_institution_student_term ON public.report_cards USING btree (institution_id, student_id, academic_term_id);
+
+
+--
+-- Name: index_report_cards_on_institution_term; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_report_cards_on_institution_term ON public.report_cards USING btree (institution_id, academic_term_id);
+
+
+--
+-- Name: index_report_cards_on_student_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_report_cards_on_student_id ON public.report_cards USING btree (student_id);
 
 
 --
@@ -2745,6 +3042,14 @@ ALTER TABLE ONLY public.student_guardians
 
 
 --
+-- Name: report_cards fk_rails_0eed72e3b0; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.report_cards
+    ADD CONSTRAINT fk_rails_0eed72e3b0 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: enrollments fk_rails_107f77c451; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2801,6 +3106,14 @@ ALTER TABLE ONLY public.roster_import_rows
 
 
 --
+-- Name: submissions fk_rails_19447e9b4d; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.submissions
+    ADD CONSTRAINT fk_rails_19447e9b4d FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE CASCADE;
+
+
+--
 -- Name: subjects fk_rails_1b26c6deb0; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2814,6 +3127,14 @@ ALTER TABLE ONLY public.subjects
 
 ALTER TABLE ONLY public.attendance_records
     ADD CONSTRAINT fk_rails_1b3d8c1086 FOREIGN KEY (recorded_by_staff_member_id) REFERENCES public.staff_members(id) ON DELETE SET NULL;
+
+
+--
+-- Name: conversations fk_rails_1c8ed89d7f; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.conversations
+    ADD CONSTRAINT fk_rails_1c8ed89d7f FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
 
 
 --
@@ -2905,11 +3226,27 @@ ALTER TABLE ONLY public.payment_plans
 
 
 --
+-- Name: messages fk_rails_31aae3c129; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.messages
+    ADD CONSTRAINT fk_rails_31aae3c129 FOREIGN KEY (institution_user_id) REFERENCES public.institution_users(id) ON DELETE CASCADE;
+
+
+--
 -- Name: departments fk_rails_33e5ee827a; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.departments
     ADD CONSTRAINT fk_rails_33e5ee827a FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: submissions fk_rails_3474dffb40; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.submissions
+    ADD CONSTRAINT fk_rails_3474dffb40 FOREIGN KEY (submitted_by_user_id) REFERENCES public.users(id) ON DELETE SET NULL;
 
 
 --
@@ -3009,6 +3346,14 @@ ALTER TABLE ONLY public.institution_users
 
 
 --
+-- Name: messages fk_rails_4e7bd59607; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.messages
+    ADD CONSTRAINT fk_rails_4e7bd59607 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: assessments fk_rails_4ee550d14a; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3041,6 +3386,22 @@ ALTER TABLE ONLY public.email_otps
 
 
 --
+-- Name: assessments fk_rails_5977cbb29b; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.assessments
+    ADD CONSTRAINT fk_rails_5977cbb29b FOREIGN KEY (assignment_id) REFERENCES public.assignments(id) ON DELETE SET NULL;
+
+
+--
+-- Name: report_cards fk_rails_5c455c708b; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.report_cards
+    ADD CONSTRAINT fk_rails_5c455c708b FOREIGN KEY (academic_term_id) REFERENCES public.academic_terms(id) ON DELETE CASCADE;
+
+
+--
 -- Name: invoice_line_items fk_rails_5c7d14200a; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3057,6 +3418,14 @@ ALTER TABLE ONLY public.control_plane_audit_events
 
 
 --
+-- Name: assignments fk_rails_5e63c7027f; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.assignments
+    ADD CONSTRAINT fk_rails_5e63c7027f FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: role_permissions fk_rails_60126080bd; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3065,11 +3434,27 @@ ALTER TABLE ONLY public.role_permissions
 
 
 --
+-- Name: submissions fk_rails_61cac0823d; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.submissions
+    ADD CONSTRAINT fk_rails_61cac0823d FOREIGN KEY (assignment_id) REFERENCES public.assignments(id) ON DELETE CASCADE;
+
+
+--
 -- Name: subscriptions fk_rails_63d3df128b; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.subscriptions
     ADD CONSTRAINT fk_rails_63d3df128b FOREIGN KEY (plan_id) REFERENCES public.plans(id) ON DELETE SET NULL;
+
+
+--
+-- Name: assignments fk_rails_63e6cfa07e; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.assignments
+    ADD CONSTRAINT fk_rails_63e6cfa07e FOREIGN KEY (subject_id) REFERENCES public.subjects(id) ON DELETE CASCADE;
 
 
 --
@@ -3137,6 +3522,22 @@ ALTER TABLE ONLY public.invitations
 
 
 --
+-- Name: conversations fk_rails_7024c7cecf; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.conversations
+    ADD CONSTRAINT fk_rails_7024c7cecf FOREIGN KEY (closed_by_institution_user_id) REFERENCES public.institution_users(id) ON DELETE SET NULL;
+
+
+--
+-- Name: assignments fk_rails_7453d408a5; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.assignments
+    ADD CONSTRAINT fk_rails_7453d408a5 FOREIGN KEY (created_by_institution_user_id) REFERENCES public.institution_users(id) ON DELETE SET NULL;
+
+
+--
 -- Name: sessions fk_rails_758836b4f0; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3185,6 +3586,22 @@ ALTER TABLE ONLY public.invitations
 
 
 --
+-- Name: conversation_participants fk_rails_7ef36bddbe; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.conversation_participants
+    ADD CONSTRAINT fk_rails_7ef36bddbe FOREIGN KEY (guardian_user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: messages fk_rails_7f927086d2; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.messages
+    ADD CONSTRAINT fk_rails_7f927086d2 FOREIGN KEY (conversation_id) REFERENCES public.conversations(id) ON DELETE CASCADE;
+
+
+--
 -- Name: counseling_cases fk_rails_801b5a774d; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3201,11 +3618,27 @@ ALTER TABLE ONLY public.invoice_line_items
 
 
 --
+-- Name: conversations fk_rails_80b2afaacf; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.conversations
+    ADD CONSTRAINT fk_rails_80b2afaacf FOREIGN KEY (created_by_institution_user_id) REFERENCES public.institution_users(id) ON DELETE SET NULL;
+
+
+--
 -- Name: attendance_records fk_rails_828d16c97c; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.attendance_records
     ADD CONSTRAINT fk_rails_828d16c97c FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE CASCADE;
+
+
+--
+-- Name: submissions fk_rails_8432d864a2; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.submissions
+    ADD CONSTRAINT fk_rails_8432d864a2 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
 
 
 --
@@ -3305,6 +3738,22 @@ ALTER TABLE ONLY public.payments
 
 
 --
+-- Name: announcements fk_rails_ae3a554996; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.announcements
+    ADD CONSTRAINT fk_rails_ae3a554996 FOREIGN KEY (author_institution_user_id) REFERENCES public.institution_users(id) ON DELETE SET NULL;
+
+
+--
+-- Name: conversation_participants fk_rails_af3ab0831d; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.conversation_participants
+    ADD CONSTRAINT fk_rails_af3ab0831d FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: counseling_cases fk_rails_b0c6112576; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3345,6 +3794,14 @@ ALTER TABLE ONLY public.payments
 
 
 --
+-- Name: announcements fk_rails_b77566ea57; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.announcements
+    ADD CONSTRAINT fk_rails_b77566ea57 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: teaching_assignments fk_rails_b86c9538a3; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3358,6 +3815,14 @@ ALTER TABLE ONLY public.teaching_assignments
 
 ALTER TABLE ONLY public.roster_import_batches
     ADD CONSTRAINT fk_rails_b8dabed25c FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: report_cards fk_rails_bbed8eb10a; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.report_cards
+    ADD CONSTRAINT fk_rails_bbed8eb10a FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE CASCADE;
 
 
 --
@@ -3382,6 +3847,14 @@ ALTER TABLE ONLY public.dietary_restrictions
 
 ALTER TABLE ONLY public.email_otps
     ADD CONSTRAINT fk_rails_bf2bd8aedb FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: messages fk_rails_bf37ff0933; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.messages
+    ADD CONSTRAINT fk_rails_bf37ff0933 FOREIGN KEY (guardian_user_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 
 --
@@ -3473,11 +3946,27 @@ ALTER TABLE ONLY public.role_assignments
 
 
 --
+-- Name: conversation_participants fk_rails_cd21bdc262; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.conversation_participants
+    ADD CONSTRAINT fk_rails_cd21bdc262 FOREIGN KEY (institution_user_id) REFERENCES public.institution_users(id) ON DELETE CASCADE;
+
+
+--
 -- Name: roster_import_batches fk_rails_d389255138; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.roster_import_batches
     ADD CONSTRAINT fk_rails_d389255138 FOREIGN KEY (created_by_id) REFERENCES public.institution_users(id) ON DELETE SET NULL;
+
+
+--
+-- Name: conversation_participants fk_rails_d4fdd4cae0; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.conversation_participants
+    ADD CONSTRAINT fk_rails_d4fdd4cae0 FOREIGN KEY (conversation_id) REFERENCES public.conversations(id) ON DELETE CASCADE;
 
 
 --
@@ -3601,6 +4090,14 @@ ALTER TABLE ONLY public.teachers
 
 
 --
+-- Name: report_cards fk_rails_f2bae774b9; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.report_cards
+    ADD CONSTRAINT fk_rails_f2bae774b9 FOREIGN KEY (published_by_staff_member_id) REFERENCES public.staff_members(id) ON DELETE SET NULL;
+
+
+--
 -- Name: role_assignments fk_rails_f2c879ee03; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3638,6 +4135,19 @@ CREATE POLICY academic_terms_tenant_isolation ON public.academic_terms USING ((i
 
 
 --
+-- Name: announcements; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.announcements ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: announcements announcements_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY announcements_tenant_isolation ON public.announcements USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
 -- Name: assessments; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -3648,6 +4158,19 @@ ALTER TABLE public.assessments ENABLE ROW LEVEL SECURITY;
 --
 
 CREATE POLICY assessments_tenant_isolation ON public.assessments USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: assignments; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.assignments ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: assignments assignments_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY assignments_tenant_isolation ON public.assignments USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
 
 
 --
@@ -3687,6 +4210,32 @@ ALTER TABLE public.charges ENABLE ROW LEVEL SECURITY;
 --
 
 CREATE POLICY charges_tenant_isolation ON public.charges USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: conversation_participants; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.conversation_participants ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: conversation_participants conversation_participants_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY conversation_participants_tenant_isolation ON public.conversation_participants USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: conversations; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.conversations ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: conversations conversations_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY conversations_tenant_isolation ON public.conversations USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
 
 
 --
@@ -3872,6 +4421,19 @@ CREATE POLICY invitations_tenant_isolation ON public.invitations USING ((institu
 
 
 --
+-- Name: messages; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: messages messages_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY messages_tenant_isolation ON public.messages USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
 -- Name: payment_plans; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -3921,6 +4483,19 @@ ALTER TABLE public.referrals ENABLE ROW LEVEL SECURITY;
 --
 
 CREATE POLICY referrals_tenant_isolation ON public.referrals USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: report_cards; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.report_cards ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: report_cards report_cards_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY report_cards_tenant_isolation ON public.report_cards USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
 
 
 --
@@ -4080,6 +4655,19 @@ CREATE POLICY subjects_tenant_isolation ON public.subjects USING ((institution_i
 
 
 --
+-- Name: submissions; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.submissions ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: submissions submissions_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY submissions_tenant_isolation ON public.submissions USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
 -- Name: teachers; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -4112,6 +4700,11 @@ CREATE POLICY teaching_assignments_tenant_isolation ON public.teaching_assignmen
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260715203148'),
+('20260715195639'),
+('20260715190531'),
+('20260715155950'),
+('20260715142947'),
 ('20260714205355'),
 ('20260714201234'),
 ('20260714000001'),

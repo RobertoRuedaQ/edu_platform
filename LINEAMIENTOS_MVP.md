@@ -223,18 +223,30 @@ v1.14.0: modelos reales (`Charge`/`Payment`/`PaymentPlan`/`Installment`/`Student
 > Reordenado con v1.14.0 (notas medio hecha, matrícula parcial, finance model-ready) y las decisiones
 > de asistencia/notas/pago manual/Campfire.
 
-1. **Matrícula / término**: cerrar el join `enrollments`↔`academic_terms` (B2/Cav.), reconciliando
-   `students.section_id` + `Schedules::Enrollment` ya reales. Desbloquea asistencia, notas-por-término,
-   actividades y targeting de asignaciones. Más chico de lo pensado.
-2. **Asistencia** (`attendance`, net-new + checkpoint de diseño) — el loop diario, ahora requisito.
-3. **Notas → boletines + portal**: agregación sobre `Schedules::Assessment` (ya real) + mostrar al
-   cuidador. Barato porque la libreta ya existe.
-4. **Pago manual en tesorería** (`finance`): UI sobre modelos ya reales. Independiente — puede ir en
-   paralelo; necesario antes de cobrar actividades pagas.
-5. **`communication`** (Campfire interno: rooms + DM; externo: anuncios + "correos" al acudiente).
-   Columna vertebral de las notificaciones (asistencia/asignaciones derivan avisos de aquí).
-6. **`assignments`** (tareas/trabajos/salidas) — depende de matrícula y `group_management` (targeting
-   por grupo); molde #4 para el scope del docente. Fechas se derivan al calendario.
+1. ~~**Matrícula / término**~~ — ✅ **cerrado (v1.15.0)**: cerró el join `enrollments`↔`academic_terms`
+   (B2/Cav., mitad de modelo) vía `Schedules::ActiveTermEnrollmentScope`. Ver `PROJECT_STATE.md`/`HISTORIA.md`.
+2. ~~**Asistencia**~~ (`attendance`, net-new + checkpoint de diseño) — ✅ **cerrado (v1.16.0)**: el
+   loop diario, dominio propio addon-gated. Ver `PROJECT_STATE.md`/`HISTORIA.md`.
+3. ~~**Notas → boletines + portal**~~ (`report_cards`, net-new) — ✅ **cerrado (v1.17.0)**: dominio
+   propio addon-gated que lee `schedules` por FK; snapshot congelado al publicar; portal solo
+   publicados. Ver `PROJECT_STATE.md`/`HISTORIA.md`.
+4. ~~**Pago manual en tesorería**~~ (`finance`) — ✅ **cerrado (v1.18.0)**: UI real sobre los 5
+   modelos ya existentes (lectura + registrar pago/cargo, dos superficies); planes de pago diferidos.
+   Ver `PROJECT_STATE.md`/`HISTORIA.md`.
+5. ~~**`communication`**~~ — ✅ **completo (ambos subsistemas).** Anuncios (subsistema A, difusión
+   org-wide) ✅ **cerrado (v1.19.0)**. Mensajería (subsistema B: conversaciones multiparte,
+   auditoría confidencial-pero-auditable) ✅ **núcleo cerrado (v1.20.0)** — cuatro caminos de
+   acceso (compose RBAC / bandeja-participación / responder-participación / auditoría RBAC).
+   Diferidos anotados (fan-out 1:1 a todos los cuidadores, threading, tags, acudiente-inicia) — ver
+   `PROJECT_STATE.md` §8.2/`HISTORIA.md`.
+6. **`assignments`** (tareas académicas) — **slices 1–2/4 hechos.** ~~Publicar + ver + calificar
+   directo~~ ✅ **cerrado (v1.21.0)**: cuelga del gradebook de `schedules` por FK (fan-out a
+   `Assessment` al publicar, calificar reusa esa misma fila). ~~Entrega de texto~~ ✅ **cerrado
+   (v1.22.0)**: llave en-dominio `(assignment_id, student_id)`, ingresable por el estudiante o su
+   acudiente (B1) — primer write de portal, gateado por relación (`StudentView.for`), nunca RBAC.
+   **Slices 3–4 pendientes** (adjuntos, con checkpoint propio de Active Storage/serving/docx →
+   rúbricas) — roadmap completo en `HISTORIA.md` v1.21.0/v1.22.0. **Siguiente ítem del camino
+   crítico** (slice 3, o `calendar` — ver `OPEN_PROCESS.md`).
 7. **`calendar`** + scope de visibilidad del cuidador (consume fechas de `assignments`, `attendance`,
    `extracurriculars`).
 8. **`extracurriculars`** (depende de matrícula/término; actividad paga = `Charge` en `finance`, de #4).

@@ -1,0 +1,19 @@
+<% content_for :title, "Crear cargo · #{@account.student.first_name} #{@account.student.last_name}" %>
+
+<%= render "shared/page_header",
+      title: "Crear cargo para #{@account.student.first_name} #{@account.student.last_name}",
+      subtitle: "El número de factura se genera automáticamente." %>
+
+<% if @error -%>
+  <%= render "shared/alert", variant: :danger, message: @error %>
+<% end -%>
+
+<%= form_with url: finance_account_charges_path(@account), method: :post do -%>
+  <%= hidden_field_tag :idempotency_key, @idempotency_key %>
+
+  <%= render "shared/field", label: "Monto", name: "amount", type: "number", step: "0.01" %>
+  <%= render "shared/field", label: "Descripción", name: "description", type: "text" %>
+  <%= render "shared/field", label: "Vence", name: "due_on", type: "date" %>
+
+  <%= ui_button "Crear cargo", type: "submit", variant: :primary %>
+<% end -%>

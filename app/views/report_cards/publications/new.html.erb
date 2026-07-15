@@ -1,0 +1,54 @@
+<% content_for :title, "Boletines · #{@group.name}" %>
+
+<%= render "shared/page_header",
+      title: "Boletines de #{@group.name}",
+      subtitle: @academic_term ? @academic_term.name : "Sin término activo" %>
+
+<% if @error -%>
+  <%= render "shared/alert", variant: :danger, message: @error %>
+<% end -%>
+
+<% if @rows.any? -%>
+  <%= form_with url: report_cards_group_publications_path(@group), method: :post do -%>
+    <%= render layout: "shared/table",
+          locals: { headers: [ "", "Estudiante", "Materias", "Promedio", "Estado" ] } do -%>
+      <% @rows.each do |row| -%>
+        <% student = row[:student] -%>
+        <% computation = row[:computation] -%>
+        <% published = row[:published] -%>
+        <tr>
+          <td>
+            <% if can?("report_card.publish", @group) -%>
+              <input type="checkbox" name="student_ids[]" value="<%= student.id %>">
+            <% end -%>
+          </td>
+          <td><%= "#{student.first_name} #{student.last_name}" %></td>
+          <td>
+            <% if computation.lines.any? -%>
+              <%= computation.lines.map { |line| "#{line.subject_name}: #{line.average}" }.join(" · ") %>
+            <% else -%>
+              <span class="text-muted">Sin notas registradas</span>
+            <% end -%>
+          </td>
+          <td><%= computation.overall_average || "—" %></td>
+          <td>
+            <% if published -%>
+              Publicado <%= published.published_at.to_fs(:long) %>
+            <% else -%>
+              Sin publicar
+            <% end -%>
+          </td>
+        </tr>
+      <% end -%>
+    <% end -%>
+
+    <% if can?("report_card.publish", @group) -%>
+      <%= ui_button "Publicar boletines seleccionados", type: "submit", variant: :primary %>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state",
+        icon: "users",
+        title: "Sin estudiantes matriculados en el término activo",
+        description: "Este grupo no tiene estudiantes matriculados en el término activo de la institución." %>
+<% end -%>

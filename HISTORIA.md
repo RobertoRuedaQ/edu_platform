@@ -11,11 +11,695 @@
 
 ---
 
-## Changelog completo (v1.0.0 → v1.16.0)
+## Changelog completo (v1.0.0 → v1.22.0)
 
 > Copiado verbatim de §14 de `PROJECT_STATE.md` v1.5.0, antes de que el split editorial (v1.5.1)
 > moviera el changelog fuera del doc magro. Las entradas v1.6.0+ se escribieron directamente aquí,
 > ya con el split vigente.
+
+### v1.22.0 — 2026-07-15 — `assignments`: entrega de texto, slice 2/4 (ítem #6 del MVP)
+
+**Slice 2 de 4 de `assignments`.** Sobre la base de v1.21.0 (publicar + ver + calificar directo):
+el estudiante entrega una respuesta de texto a una tarea publicada; el docente la ve junto a la
+nota. Entrega también por el acudiente en nombre del hijo (B1: un menor de K-12 sin login no podría
+entregar de otro modo). Solo texto — sin adjuntos (slice 3) ni rúbrica (slice 4).
+
+**Recon (STOP #1):** confirmó el modelo real de v1.21.0 sin ninguna sorpresa material —
+`assignments.status` ∈ draft/published/archived; el fan-out (`assessments.assignment_id`, una fila
+por matrícula con `score: nil` al publicar); el roster de tres capas
+(`Roster.for_subject`); el camino estudiante→matrícula→assessment→assignment ya resuelto por
+`Assignments::StudentView.for(student)` (exactamente "las tareas publicadas de las materias en las
+que el estudiante está matriculado en el término activo"); la superficie de portal (`Portals::
+Student/GuardianAssignmentsController`, solo lectura hasta ahora); la superficie de calificación del
+docente (`AssignmentsController#show`, con `@roster`/`@scores` separados — se refactorizó a un
+único `Assignments::GradingView`).
+
+**Decisión de la llave de la entrega — el prompt dejaba la puerta abierta a anclarla al
+`assessment_id` fanned-out; se confirmó el default (llave en-dominio).** Anclar a `assessment_id`
+habría acoplado `submissions`→`schedules` en un eje que no hace falta: la fila `Assessment` de un
+estudiante para una tarea es un detalle de implementación del gradebook (existe SOLO porque
+`Assignments::Publisher` la fanned-out), no algo que `submissions` debería conocer o depender de.
+La llave en-dominio `(assignment_id, student_id)` es más limpia y sigue el mismo principio que ya
+guio a `report_cards`/`finance`: un servicio de lectura (`Assignments::GradingView`, mismo espíritu
+que `Finance::AccountStatement`) empareja roster+nota+entrega en un solo lugar, nunca un FK cruzado
+en el esquema.
+
+**Lo construido:**
+- Migración `20260715203148_create_submissions.rb`: `assignment_id`/`student_id` (único compuesto
+  `institution_id`-leading — una entrega por estudiante por tarea, last-write-wins, sin historial),
+  `body` (text), `submitted_by_user_id` (nullable+nullify, atribución — nunca la identidad
+  propietaria, que es siempre `student_id`), `submitted_at`. RLS `ENABLE+FORCE`+policy. Corrida en
+  dev y test.
+- Modelo `Assignments::Submission` (`#late?`, flag calculado comparando `submitted_at` contra
+  `assignment.due_date` — nunca un bloqueo).
+- `Assignments::SubmissionRecorder` (upsert `find_or_initialize_by` sobre el único compuesto —
+  confía en que el caller ya resolvió `assignment` a través del scope correcto, misma división de
+  responsabilidad que `Communication::MessageSender`/`ConversationComposer`).
+- `Assignments::StudentView` gana `submission_for` (junto al `score_for` ya existente).
+- `Assignments::GradingView` nuevo — el servicio de lectura que pareó roster+assessment+submission
+  para la vista del docente, reemplazando los `@roster`/`@scores` sueltos que `AssignmentsController
+  #show` armaba antes.
+- **El PRIMER write desde un portal en todo el proyecto**: `Portals::StudentSubmissionsController`/
+  `GuardianSubmissionsController#create`. El gate es exactamente el mismo query object que ya
+  acotaba la LECTURA (`Assignments::StudentView.for(student)`) — nunca `authorize!`, nunca un
+  permiso nuevo. Un acudiente resuelve primero al hijo por `GuardianScope` (nunca confía en
+  `params[:student_id]` crudo) y LUEGO resuelve la tarea por `StudentView.for(ese hijo)` — dos
+  scopes encadenados, la tarea de otro hijo o de otro estudiante 404 en ambos pasos.
+- Vistas de portal (`#show` nuevo en ambos `Portals::*AssignmentsController`, formulario de entrega
+  compartido `assignments/_submission_form`) y la vista del docente actualizada para mostrar la
+  entrega (truncada) + badge "tardía" junto al input de nota.
+
+**Caso de aceptación, verificado end-to-end:** un estudiante entrega texto en su tarea publicada y
+el docente la ve en la MISMA vista de calificar; un acudiente entrega en nombre de su hijo —
+`submitted_by_user_id` registra al acudiente, `student_id` sigue siendo el hijo; un estudiante NO
+puede entregar en una tarea de una materia en la que no está matriculado (404, no 403 — la tarea
+simplemente no existe en su scope); un acudiente NO puede entregar por un no-hijo (404); reenviar
+actualiza la MISMA fila (verificado por conteo, nunca 2); entregar en un `draft` o un `archived` da
+404 (ninguno de los dos aparece en `StudentView.for`); una entrega después de `due_date` se acepta
+y se marca tardía, nunca se bloquea; calificar sin entrega funciona igual que siempre, y entregar
+nunca mueve la nota ya registrada (los dos ejes verificados independientes en el mismo test); sin
+campo de adjunto en el formulario; sin entitlement de `assignments`, el portal SIGUE aceptando la
+entrega (mismo gap ya aceptado — `Portals::*` nunca chequea entitlement); aislamiento cross-tenant
+verificado con query real bajo RLS.
+
+**Hallazgo de proceso, no de producto:** el primer intento de dos tests fallaba porque, tras hacer
+`sign_in_as(student_user, ...)` para probar el portal, el test seguía usando `as_teacher` (que solo
+edita los `RoleAssignment` de `@user`) asumiendo que la sesión HTTP también volvía a ser la del
+docente — no es así; `with_grants` nunca re-autentica. Corregido re-logueando explícitamente como
+`@user` antes de la verificación del lado del docente. Vale como recordatorio para los próximos
+slices con superficies staff+portal en el mismo test.
+
+**Decisión explícita, no un olvido:** `db/seeds.rb` NO se tocó — mismo alcance que las cinco slices
+anteriores (el archivo es puramente demográfico/académico, sin ningún concepto de
+`institution_users`/`Assignments::Assignment`/RBAC).
+
+**Resultado:** 499 runs / 0 failures / 0 errors / 1 skip preexistente (baseline 487; 12 tests
+nuevos, todos en `test/integration/submissions_test.rb`). `bin/rails zeitwerk:check` verde. Una
+migración, aplicada en dev y test.
+
+**Archivos nuevos/editados:**
+- Migración: `db/migrate/20260715203148_create_submissions.rb`.
+- Modelo: `app/domains/assignments/models/submission.rb`.
+- Servicios: `app/domains/assignments/services/submission_recorder.rb`,
+  `app/domains/assignments/services/grading_view.rb` (+ edit a
+  `app/domains/assignments/services/student_view.rb`).
+- Controllers: `app/controllers/portals/student_submissions_controller.rb`,
+  `app/controllers/portals/guardian_submissions_controller.rb` (+ edits a
+  `app/controllers/portals/{student,guardian}_assignments_controller.rb` para `#show` +
+  `app/controllers/assignments/assignments_controller.rb` para usar `GradingView`).
+- Vistas: `app/views/assignments/_submission_form.html.erb` (compartido),
+  `app/views/portals/{student,guardian}_assignments/show.html.erb` (+ edits a
+  `app/views/assignments/_assignment_list.html.erb` y
+  `app/views/assignments/assignments/show.html.erb`).
+- Config: `config/routes.rb`.
+- Tests: `test/integration/submissions_test.rb`.
+- Proceso: `OPEN_PROCESS.md` (backlog + guardrails nuevos).
+
+### v1.21.0 — 2026-07-15 — `assignments`: tareas académicas, slice 1/4 (ítem #6 del MVP)
+
+**Ítem #6 del camino crítico de `LINEAMIENTOS_MVP.md`.** El owner definió el ciclo completo de
+`assignments` (publicar → ver → entregar texto/adjunto → revisar → calificar directo o por
+rúbrica), a construir en ~4 slices. **Este slice es SOLO el #1: publicar + ver + calificar
+directo.** El roadmap completo de los slices 2–4 queda registrado en el anexo (§2 abajo), sin
+construir nada de eso.
+
+**Recon (STOP #1) — el hallazgo que reescribió el modelo de datos propuesto:**
+
+`grep -riE "assignment" db/migrate/` no devolvió ninguna tabla real — net-new confirmado, y a
+diferencia de `finance`/`communication`, **tampoco** había ni entitlement, ni `DOMAIN_KEYS`, ni nav,
+ni permisos pre-sembrados: hubo que construir el gating completo, como `attendance`/`report_cards`.
+
+El hallazgo que importó fue sobre `schedules::Assessment`: `belongs_to :enrollment` (NO
+`:subject`), y **el `score` vive directamente en esa fila** — no existe ninguna tabla de
+"grade-entries" separada; cada `Assessment` YA ES la entrada de nota de UN estudiante (vía su
+`Enrollment`, que es estudiante+materia+término). El prompt asumía `assignments.assessment_id`
+(FK singular, tarea→un Assessment) — pero eso no puede representar una tarea que aplica a un curso
+completo: un roster de 30 estudiantes necesita 30 filas `Assessment`, no una. **Corrección de
+diseño**: el FK va en la dirección OPUESTA — `assessments.assignment_id` (nullable, aditivo, mismo
+patrón que `enrollments.academic_term_id`, v1.15.0). Una `Assignment` es la PLANTILLA; publicarla
+hace *fan-out*: crea una fila `Assessment` por cada matrícula del roster, cada una con `score: nil`
+inicialmente — el mismo estado que `report_cards` (v1.17.0) ya trata como "materia sin notas, no
+cero". Calificar es un `UPDATE` sobre esa fila ya existente, nunca un `CREATE` paralelo.
+
+Segundo hallazgo, menor: `Schedules::Subject` tiene `grade_level_id` — el mecanismo de scope YA
+existente (`Authorization::Assignment::SCOPE_READERS[:grade_level]`) ya cubre recursos `Subject`
+sin inventar una dimensión de scope nueva; es el MISMO mecanismo que `Schedules::
+GradeEntriesController` ya usaba para `grades.write` (aunque nadie lo había puesto en negro sobre
+blanco hasta ahora).
+
+**Matiz sobre `ActiveTermEnrollmentScope` (a diferencia de mensajería, v1.20.0):** aquí SÍ es el
+resolver semánticamente correcto — una tarea es para los matriculados en la materia/término, que es
+exactamente lo que ese resolver resuelve. La elección de resolver sigue siendo semántica caso por
+caso (ver el guardrail correspondiente en `OPEN_PROCESS.md`), no automática por precedente — en
+mensajería no aplicaba, aquí sí.
+
+**Lo construido:**
+- Migración `20260715195639_create_assignments.rb`: tabla `assignments` (`subject_id`, `title`,
+  `instructions`, `due_date`, `status` CHECK draft/published/archived,
+  `created_by_institution_user_id` nullable+nullify) + `add_reference :assessments, :assignment`
+  (nullable, `on_delete: :nullify`). RLS `ENABLE+FORCE`+policy en `assignments`. Corrida en dev y
+  test.
+- Modelo `Assignments::Assignment`; `Schedules::Assessment` gana `belongs_to :assignment, optional:
+  true`.
+- `Assignments::Roster` (tres capas: `ActiveTermEnrollmentScope` ∩ enrollments de ESTA materia en
+  el término activo — compuesto explícitamente, el resolver no toma un parámetro de materia).
+- `Assignments::Publisher` (fan-out transaccional, idempotente por construcción — solo dispara en
+  la transición borrador→publicada).
+- `Assignments::GradeRecorder` (`UPDATE` de la fila ya fanned-out — nunca un `CREATE`; localiza la
+  fila vía `join(:enrollment).where(assignment_id:, enrollments: { student_id: })`).
+- `Assignments::StudentView` (el ÚNICO camino de lectura para el portal — mismo patrón que
+  `ReportCards::Computation`/`Communication::Inbox`: una computación, dos superficies).
+- `Assignments::SubjectScope` (molde #4, per-row `can?` sobre `Schedules::Subject`).
+- Addon-gating completo desde cero: `config/entitlements/assignments.rb`,
+  `AddonCatalog::DOMAIN_KEYS`, `SeedCatalog::ADDONS` (`metered: false`), permiso único
+  `assignment.manage` (crear/editar/publicar/archivar/calificar — mismo criterio unificado que
+  `attendance.record`, sin split como `report_card.view/publish`: no hay una acción "más sensible"
+  que lo justifique aquí), `config/navigation/assignments.rb`.
+- Supervisión: `Assignments::SubjectsController#index` → `Assignments::AssignmentsController`
+  (`index/new/create/edit/update/show/destroy` + `publish`/`archive`/`grade` como member actions —
+  grading nunca es un namespace aparte, siempre escribe al ÚNICO gradebook). `#show` renderiza el
+  roster con inputs de nota inline (mismo estilo que la toma de asistencia de `attendance`,
+  v1.16.0).
+- Portal: `Portals::StudentAssignmentsController#index` (self-scope) y `Portals::
+  GuardianAssignmentsController#index` (nested per-hijo, mismo criterio que `report_cards`/
+  `finance` — contenido sustancial por hijo). Ambos renderizan `assignments/_assignment_list`
+  (partial compartido) sobre `Assignments::StudentView`.
+
+**Caso de aceptación, verificado end-to-end:** crear una tarea la deja en `draft` sin ningún
+`Assessment` fanned-out; publicarla crea exactamente una fila `Assessment` por estudiante
+matriculado en la materia/término activo (ninguna para un estudiante NO matriculado), cada una
+`score: nil` — y esa fila ungraded NO rompe `ReportCards::Computation` (contribuye cero líneas,
+nunca un cero real); calificar escribe en ESA misma fila (`ReportCards::Computation` la lee
+inmediatamente con el valor correcto) y re-calificar actualiza en vez de duplicar; un docente
+scopeado a `grade_level_a` gestiona/califica solo materias de ese grado, 403 en materias de otro
+grado, y el índice de materias solo muestra las propias; sin `assignment.manage`, 403 y sin tile de
+nav; grading antes de publicar es rechazado silenciosamente (no hay fila que actualizar); un
+borrador se elimina de verdad, una publicada NUNCA (solo se archiva, y archivar no toca los
+`Assessment` ya fanned-out); el portal del estudiante ve la tarea publicada CON su propia nota
+(mismo origen que `report_cards`) y nunca ve un borrador; el del acudiente ve solo las de su
+propio hijo (404 al adivinar otro); sin entitlement de `assignments`, 403 con "no está habilitado";
+aislamiento cross-tenant verificado con query real bajo RLS; `due_date` persiste tal cual
+(calendar-forward, sin vista de calendario construida).
+
+**Decisión explícita, no un olvido:** `db/seeds.rb` NO se tocó — mismo alcance que las cuatro
+slices anteriores (el archivo es puramente demográfico/académico, sin ningún concepto de
+`institution_users`/RBAC/entitlements).
+
+**Resultado:** 487 runs / 0 failures / 0 errors / 1 skip preexistente (baseline 472; 15 tests
+nuevos, todos en `test/integration/assignments_test.rb`). `bin/rails zeitwerk:check` verde. Una
+migración, aplicada en dev y test.
+
+**Archivos nuevos/editados:**
+- Migración: `db/migrate/20260715195639_create_assignments.rb`.
+- Modelo: `app/domains/assignments/models/assignment.rb` (+ edit a
+  `app/domains/schedules/models/assessment.rb`).
+- Query object + servicios: `app/domains/assignments/queries/subject_scope.rb`,
+  `app/domains/assignments/services/{roster,publisher,grade_recorder,student_view}.rb`.
+- Controllers: `app/controllers/assignments/{subjects,assignments}_controller.rb`,
+  `app/controllers/portals/{student,guardian}_assignments_controller.rb`.
+- Vistas: `app/views/assignments/subjects/index.html.erb`,
+  `app/views/assignments/assignments/{index,new,edit,show,_form}.html.erb`,
+  `app/views/assignments/_assignment_list.html.erb` (compartido),
+  `app/views/portals/{student,guardian}_assignments/index.html.erb` (+ botones nuevos en
+  `student_portal/show`/`guardian_students/show`).
+- Config: `config/entitlements/assignments.rb`, `config/navigation/assignments.rb`,
+  `config/routes.rb`, `app/control_plane/control_plane/addon_catalog.rb`,
+  `app/control_plane/control_plane/seed_catalog.rb`.
+- Permisos: `app/domains/identity_access/services/seed_permissions.rb`.
+- Tests: `test/integration/assignments_test.rb`.
+- **Reestructuración editorial**: `OPEN_PROCESS.md` (nuevo — backlog + guardrails movidos desde
+  `PROJECT_STATE.md` §11/§12), `PROJECT_STATE.md` (pointer + intro actualizada).
+
+#### Anexo — roadmap completo de `assignments` (slices 2–4, SIN construir)
+
+Registrado aquí tal como lo definió el owner, para que el próximo slice de `assignments` arranque
+con el contexto completo — nada de esto existe en el código todavía.
+
+- **Slice 2 — entrega de texto del estudiante.** El estudiante escribe una respuesta de texto sobre
+  una tarea `published` desde su portal. Sin diseñar todavía: dónde vive la entrega (¿tabla propia
+  `submissions`, o un campo en algo existente?), si hay un estado de entrega (a tiempo/tarde/sin
+  entregar) visible para el docente, y si la fecha de entrega real se compara contra `due_date`.
+- **Slice 3 — adjuntos** (docx/pdf/jpg/png) + revisión en la app. **Checkpoint de diseño propio,
+  obligatorio antes de tocar código** — tres realidades a resolver ahí, no antes:
+  1. **Active Storage nunca se ha usado en este repo.** Adoptarlo es una decisión de infraestructura
+     nueva (¿qué service usa — disco local en dev, algo real en producción?), no solo "agregar
+     `has_one_attached`".
+  2. **El serving debe ser tenant-scoped**, nunca la URL pública default de Active Storage (que no
+     pasa por RLS ni por ningún gate de la app) — necesita un controller propio que resuelva el
+     adjunto a través de `authorize!`/relación antes de servir el blob, mismo espíritu que
+     "self-scope"/"RBAC" ya aplican en cualquier otro dato sensible de este repo.
+  3. **docx no se renderiza nativo en un navegador** — la app necesita convertir (¿a PDF? ¿a HTML?)
+     o limitarse a permitir la descarga sin previsualización. Decidir ahí, no asumir "se muestra
+     igual que un PDF".
+- **Slice 4 — rúbricas.** Criterios → nota equivalente a la escala 0.0–5.0 que
+  `ReportCards::Computation` ya usa. Sin diseñar todavía: si una rúbrica es reusable entre tareas o
+  se define por tarea, cómo se pondera cada criterio, y si la nota final calculada desde la rúbrica
+  sigue escribiéndose en `schedules::Assessment.score` (consistente con el guardrail de este slice
+  1: la nota vive SOLO ahí) o si la rúbrica en sí necesita su propia tabla de criterios+puntajes
+  colgando del mismo `Assessment`.
+
+### v1.20.0 — 2026-07-15 — `communication`: mensajería (ítem #5b del MVP, subsistema B, núcleo)
+
+**Ítem #5b del camino crítico de `LINEAMIENTOS_MVP.md`.** Subsistema (B) de `communication`:
+mensajería privada tipo correo. Las decisiones de fondo llegaron ya aprobadas en el checkpoint
+(modelo multiparte, auditoría confidencial-pero-auditable, auditor = rol de institución, contenido
+completo para el auditor, rastro nunca visible a participantes) — las tres preguntas abiertas que
+`PROJECT_STATE.md` §8.2 venía registrando desde v1.19.0 quedaron resueltas ahí mismo, no antes.
+
+**Recon (STOP #1):** `grep -riE "conversation|message|participant" db/migrate/` sin resultados
+reales (solo coincidencias de nombre en `roster_import_rows`/`announcements`) — confirmado Clase C,
+el anexo de §8 solo lo había dibujado. `communication` seguía addon-gated desde v1.19.0 (reusado tal
+cual); el nav de anuncios ya existía pero mensajería necesitaba sus propias dos entradas (compose,
+auditoría) — la bandeja se queda fuera del registry, mismo criterio que el feed de anuncios.
+
+**Convención de identidad — el hallazgo que fijó el modelo de datos:** `audit_events` guarda
+`actor_institution_user_id`; `guardian_students` guarda `guardian_user_id` (FK directa a `users`,
+CASCADE, no nullify — es la identidad del vínculo, no un dato de atribución). Un acudiente TAMBIÉN
+tiene una fila `institution_users` real (`Core::People::Resolver` la crea siempre, es lo que permite
+el login), pero el handle que el resto de la app usa para "esta persona como acudiente" es siempre
+el `user_id` global, nunca el `institution_user_id` de esa membresía. Se siguió esa convención:
+`conversation_participants`/`messages` usan `institution_user_id` (staff) **XOR**
+`guardian_user_id` (acudiente, FK a `users`), con un CHECK real
+(`num_nonnulls(institution_user_id, guardian_user_id) = 1`) — verificado que la BD lo rechaza de
+verdad insertando SQL crudo que bypasea las validaciones de ActiveRecord, no solo confiando en el
+modelo. Las columnas de identidad usan `on_delete: :cascade` (nunca `nullify`) porque una fila sin
+ninguna identidad violaría el CHECK — a diferencia de `conversations.created_by_institution_user_id`/
+`closed_by_institution_user_id`, que SÍ son atribución opcional y usan `nullify`.
+
+**Ajuste de diseño reportado (no un hallazgo material que detuviera el slice, pero sí una desviación
+del molde literal que el prompt sugería):** el selector de destinatarios acotado NO reusa
+`Schedules::ActiveTermEnrollmentScope`. Ese resolver responde "¿quién está matriculado por materia
+en el término activo?" — una pregunta académica, ajena a "¿de qué estudiantes es responsable este
+staff para poder contactar a sus acudientes?". Forzarlo habría excluido, por ejemplo, a un
+estudiante recién matriculado sin ninguna materia inscrita todavía. Se preservó la MISMA disciplina
+de tres capas (scope RBAC del actor sobre grupos, vía `context.can?` per-row como
+`Attendance::GroupScope`/`ReportCards::GroupScope` ∩ estudiantes de esos grupos ∩ acudientes reales
+vía `GuardianStudent`), solo que la capa de "hecho crudo" es `GroupManagement::Section#students`
+(un hecho de negocio, ya real desde `group_management`), no un resolver académico. Staff, en
+cambio, es explícitamente NO acotado (`ComposeRecipients#staff` = todo `institution_user` activo
+respaldado por una fila `StaffManagement::StaffMember`, institución-wide) — y ahí surgió un segundo
+matiz: "cualquier `institution_user` activo" habría incluido a los acudientes (que también tienen
+esa fila), así que la señal correcta es específicamente la presencia de un `StaffMember`, nunca
+"tiene cero `role_assignments`" (un staff recién invitado sin rol asignado se vería como acudiente
+bajo esa segunda señal).
+
+**Lo construido:**
+- Migración `20260715190531_create_conversations_and_messages.rb`: tres tablas, RLS
+  `ENABLE+FORCE`+policy en cada una, índices `institution_id`-leading, los dos CHECK de
+  exactamente-uno. Corrida en dev y test.
+- Modelos `Communication::Conversation` (`#close!`/`#reopen!`, soft), `Communication::
+  ConversationParticipant` (`#staff?`/`#guardian?`/`#name`), `Communication::Message`
+  (`touch: true` sobre la conversación, para que el ordenamiento de la bandeja por actividad
+  reciente salga gratis de Rails).
+- `Communication::ComposeRecipients` (destinatarios acotados, tres capas), `Communication::
+  ConversationComposer` (transaccional: conversación+participantes+primer mensaje, RE-valida
+  destinatarios server-side — un request manipulado que intente agregar un acudiente fuera de
+  alcance simplemente lo descarta, verificado con un test dedicado), `Communication::MessageSender`
+  (el gate de "responder": participación, nunca `authorize!`; rechaza no-participante o
+  conversación cerrada), `Communication::Inbox` (el ÚNICO cómputo de bandeja+no-leídos, compartido
+  por el shell de staff y el portal del acudiente — mismo patrón que `AnnouncementFeed`/
+  `AccountStatement`/`Computation` de slices anteriores).
+- Dos permisos nuevos: `conversation.compose` (iniciar) y `conversation.audit` (auditar, **permiso
+  distinto** de compose a propósito — quien puede iniciar no necesariamente puede leer las de
+  otros). Acción `conversation_audited` agregada a `IdentityAccess::AuditEventIndex::ACTIONS`
+  (primera vez que esa constante recibe una acción escrita desde FUERA de `identity_access` —
+  docstring del archivo actualizado para reflejarlo).
+- Cuatro controllers, cuatro gates, nunca colapsados: `Communication::ConversationsController`
+  (compose, RBAC), `Communication::InboxController` + `Communication::MessagesController`
+  (bandeja+responder, participación — staff), `Portals::GuardianInboxController` + `Portals::
+  GuardianMessagesController` (mismo, portal del acudiente — sin compose, sin cerrar/reabrir:
+  ninguna ruta expone esas acciones para un acudiente, no hay chequeo extra que las bloquee),
+  `Communication::ConversationAuditsController` (auditoría, RBAC, log condicional).
+- Nav nueva: "Nueva conversación" (`conversation.compose`) y "Auditoría de mensajes"
+  (`conversation.audit`) en `config/navigation/communication.rb`. Enlace "Mensajes" nuevo en el
+  shell de staff (`shared/_inbox_link.html.erb`, gateado por entitlement, fuera del registry, mismo
+  patrón que `_announcements_link.html.erb`) y botón nuevo en el dashboard del acudiente.
+
+**Caso de aceptación, verificado end-to-end:** una conversación de 3 participantes (2 staff + 1
+acudiente) — todos ven todos los mensajes; un staff no-participante sin `conversation.audit` no ve
+la conversación en su bandeja y recibe 404 al acceder directo (confidencialidad real, no solo
+cosmética); la bandeja del staff y la del portal del acudiente devuelven el MISMO set vía
+`Communication::Inbox`; el badge de no-leídos refleja `last_read_at`, abrir la conversación lo
+actualiza, y el propio mensaje de un participante nunca cuenta como no-leído PARA ÉL (sí para los
+demás); cerrar es soft (la fila sobrevive, sale de "activas") y bloquea nuevas respuestas hasta
+reabrir; un acudiente fuera del scope RBAC del actor nunca aparece en el selector de destinatarios
+aunque se manipule el request; el formulario de composición no tiene ningún buscador; un acudiente
+responde en lo suyo pero recibe 403 real al intentar iniciar una conversación; un auditor
+GENUINAMENTE ajeno (no el propio creador con el permiso re-otorgado — el test inicial cometió
+justo ese error y hubo que corregirlo con un actor real, separado y re-autenticado) que lee una
+conversación donde no participa deja un `conversation_audited` real, visible en el visor RBAC-gated
+de auditoría; el mismo actor leyendo SU PROPIA conversación (aunque tenga `conversation.audit`) no
+loguea nada; el rastro nunca aparece en la bandeja de un participante; el CHECK de la BD rechaza de
+verdad una fila sin identidad (SQL crudo, no solo el modelo); `Communication::MessageSender`
+rechaza a un no-participante aunque tenga `conversation.audit`; sin entitlement de `communication`,
+compose/bandeja/auditoría dan 403 con "no está habilitado"; aislamiento cross-tenant verificado con
+query real bajo RLS.
+
+**Decisión explícita, no un olvido:** `db/seeds.rb` NO se tocó — mismo alcance que las cuatro
+slices anteriores (`attendance`/`report_cards`/`finance`/`communication` anuncios): el archivo es
+puramente demográfico/académico, sin ningún concepto de `institution_users`/RBAC/entitlements.
+
+**Resultado:** 472 runs / 0 failures / 0 errors / 1 skip preexistente (baseline 455; 17 tests
+nuevos, todos en `test/integration/messaging_test.rb`). `bin/rails zeitwerk:check` verde. Una
+migración (tres tablas), aplicada en dev y test.
+
+**Archivos nuevos/editados:**
+- Migración: `db/migrate/20260715190531_create_conversations_and_messages.rb`.
+- Modelos: `app/domains/communication/models/{conversation,conversation_participant,message}.rb`.
+- Query object + servicios: `app/domains/communication/queries/compose_recipients.rb`,
+  `app/domains/communication/services/{conversation_composer,message_sender,inbox}.rb`.
+- Controllers: `app/controllers/communication/{conversations,inbox,messages,conversation_audits}_controller.rb`,
+  `app/controllers/portals/guardian_{inbox,messages}_controller.rb`.
+- Vistas: `app/views/communication/conversations/new.html.erb`,
+  `app/views/communication/inbox/{index,show}.html.erb`,
+  `app/views/communication/conversation_audits/{index,show}.html.erb`,
+  `app/views/communication/_message_thread.html.erb` (compartido),
+  `app/views/portals/guardian_inbox/{index,show}.html.erb`,
+  `app/views/shared/_inbox_link.html.erb` (+ botón nuevo en `guardian_portal/show`, wiring en
+  `layouts/application.html.erb`).
+- Config: `config/navigation/communication.rb` (dos entradas nuevas), `config/routes.rb`.
+- Permisos + auditoría: `app/domains/identity_access/services/seed_permissions.rb`,
+  `app/domains/identity_access/services/audit_event_index.rb`.
+- Tests: `test/integration/messaging_test.rb`.
+
+### v1.19.0 — 2026-07-15 — `communication`: anuncios (ítem #5 del MVP, subsistema A)
+
+**Ítem #5 del camino crítico de `LINEAMIENTOS_MVP.md`.** `communication` es, en la visión completa,
+dos subsistemas: (A) anuncios (difusión de una vía) y (B) mensajería (conversaciones privadas). Este
+slice construye SOLO (A) — (B) queda registrada como spec del owner en el anexo (`PROJECT_STATE.md`
+§8.2), con sus tres preguntas de diseño abiertas, para su propio slice con su propio checkpoint.
+
+**Recon (STOP #1) — dos hallazgos que corrigieron el plan:**
+
+1. **`communication` YA estaba addon-gated, igual que `finance` (misma lección).**
+   `config/entitlements/communication.rb` ya registraba el dominio (con un comentario explícito: "No
+   `Communication::` namespace exists yet... this declaration pre-registers the gate"), ya estaba en
+   `ControlPlane::AddonCatalog::DOMAIN_KEYS`, y ya tenía una entrada en `ControlPlane::
+   SeedCatalog::ADDONS` (`metered: true, unit: "mensajes"` — esa métrica es provisional para la
+   FUTURA mensajería, este slice no emite ningún evento de uso). **Diferencia con `finance`:**
+   `finance` ya tenía también su entrada en `Navigation::Registry`; `communication` NO — hubo que
+   crear `config/navigation/communication.rb` desde cero. Tampoco existían permisos
+   `communication.*`/`announcement.*` en el catálogo. Conclusión: cada pieza del gating se verifica
+   por separado, nunca se infiere una de la presencia de otra.
+2. **`grep -riE "announcement|conversation|message|communication" db/migrate/` no devolvió ninguna
+   tabla real** — Clase C confirmado, net-new de verdad (a diferencia de varios recon previos que
+   revelaron sorpresas). El borrador de §8 (`PROJECT_STATE.md`) proponía un modelo `conversations`
+   unificado con `kind` incluyendo `announcement` — el owner decidió (decisión ya cerrada del
+   prompt, §0) que anuncios y mensajería son estructuralmente distintos (difusión sin participantes
+   vs. privada con participantes/hilos/estado) y que el modelo de mensajería debe diseñarse fresco en
+   su propio slice, no heredar la forma de este borrador viejo. Se creó `announcements` como tabla
+   dedicada; §8 se reescribió para reflejarlo.
+
+**Convención de actor:** `audit_events` guarda `actor_institution_user_id` (nullable, `nullify`);
+`report_cards` (v1.17.0) usó `published_by_staff_member_id` en su lugar. Para el autor de un anuncio
+se siguió la convención de `audit_events` (`author_institution_user_id`) — publicar es una acción
+administrativa disponible para cualquiera con el permiso, no una extensión específicamente docente
+como la publicación de boletines.
+
+**Lo construido:**
+- Migración `20260715155950_create_announcements.rb`: `title`/`body`/`status` (CHECK
+  published/retracted, sin estado `draft` — publicar es el acto)/`published_at`/`retracted_at`/
+  `author_institution_user_id` (nullable). RLS `ENABLE+FORCE`+policy, índice
+  `(institution_id, published_at)`. Corrida en dev y test.
+- Modelo `Communication::Announcement` — `#retract!` (soft: `status` + `retracted_at`, nunca
+  `destroy`).
+- `Communication::AnnouncementScope` (molde #4, institución-wide, para la superficie de gestión) y
+  `Communication::AnnouncementFeed` (el ÚNICO camino de lectura — `published`, orden `published_at`
+  desc — consumido por staff, portal del acudiente y portal del estudiante por igual).
+- Permiso nuevo `announcement.publish` (uno solo, cubre crear/editar/retractar — igual criterio
+  unificado que `attendance.record`, a diferencia del split de `report_card.view/publish`: aquí no
+  hay una acción "más sensible" que justifique partirlo).
+- `config/navigation/communication.rb` (nuevo — no existía). Gestión:
+  `Communication::AnnouncementsController#index/new/create/edit/update/retract`,
+  `authorize!("announcement.publish")` en cada acción, cualquiera con el permiso gestiona TODOS los
+  anuncios de su institución (equipo de comunicaciones pequeño; el autor se guarda para atribución,
+  no como límite de edición — decisión reportada, no re-preguntada).
+- Lectura por **membresía** (tercer tipo de gate, ver Guardrails): `Communication::FeedController#show`
+  (staff, sin `authorize!`, fuera del Registry, enlazado desde el shell vía
+  `shared/_announcements_link.html.erb` — mismo patrón que `_self_service_link.html.erb`, pero
+  gateado por `Current.entitled_addon_keys.include?("communication")` en vez de ser incondicional).
+  `Portals::GuardianAnnouncementsController`/`StudentAnnouncementsController#index` — NO por
+  `GuardianScope`/`StudentSelfScope` (un anuncio no es per-hijo/per-self), solo por
+  `Current.institution` del usuario del portal. Los tres controllers renderizan el mismo partial
+  compartido `communication/_announcement_list`.
+- Botones de entrada nuevos en `guardian_portal/show` y `student_portal/show` (el segundo, ahora
+  incondicional — a diferencia de "Mis boletines", que sigue condicionado a `@student`, porque leer
+  anuncios no depende de tener un registro de estudiante vinculado).
+
+**Caso de aceptación, verificado end-to-end:** un actor con `announcement.publish` crea un anuncio
+con atribución de autor real; sin el permiso, 403 en gestión Y sin el tile "Anuncios (gestión)" en el
+nav; un staff SIN el permiso, un acudiente (portal) y un estudiante (portal, incluso sin
+`GroupManagement::Student` vinculado) ven los anuncios publicados vía el MISMO
+`Communication::AnnouncementFeed`; retractar un anuncio lo saca del feed pero la fila sigue existiendo
+(`find(id)` no nulo); sin entitlement de `communication`, gestión Y el feed de staff dan 403 con "no
+está habilitado" (gate #1 antes que gate #2); **el portal NO chequea entitlement** (mismo gap ya
+aceptado de `report_cards`/`finance` — verificado con un test que documenta el comportamiento actual
+en vez de asumirlo); aislamiento cross-tenant verificado con query real bajo RLS.
+
+**Decisión explícita, no un olvido:** `db/seeds.rb` NO se tocó — mismo alcance que las tres slices
+anteriores (`attendance`/`report_cards`/`finance`): el archivo es puramente demográfico/académico
+(no tiene ningún concepto de `institution_users`/RBAC/entitlements), así que sembrar un anuncio de
+demo ahí requeriría inventar infraestructura de autor que no encaja con su forma actual.
+
+**Resultado:** 455 runs / 0 failures / 0 errors / 1 skip preexistente (baseline 442; 13 tests
+nuevos, todos en `test/integration/communication_test.rb`). `bin/rails zeitwerk:check` verde. Una
+migración, aplicada en dev y test.
+
+**Archivos nuevos/editados:**
+- Migración: `db/migrate/20260715155950_create_announcements.rb`.
+- Modelo: `app/domains/communication/models/announcement.rb`.
+- Query object + servicio: `app/domains/communication/queries/announcement_scope.rb`,
+  `app/domains/communication/services/announcement_feed.rb`.
+- Controllers: `app/controllers/communication/announcements_controller.rb`,
+  `app/controllers/communication/feed_controller.rb`,
+  `app/controllers/portals/guardian_announcements_controller.rb`,
+  `app/controllers/portals/student_announcements_controller.rb`.
+- Vistas: `app/views/communication/announcements/{index,new,edit,_form}.html.erb`,
+  `app/views/communication/feed/show.html.erb`, `app/views/communication/_announcement_list.html.erb`
+  (compartido), `app/views/portals/{guardian,student}_announcements/index.html.erb`,
+  `app/views/shared/_announcements_link.html.erb` (+ botones nuevos en `guardian_portal/show` y
+  `student_portal/show`, wiring en `layouts/application.html.erb`).
+- Config: `config/navigation/communication.rb` (nuevo), `config/routes.rb`.
+- Permisos: `app/domains/identity_access/services/seed_permissions.rb`.
+- Tests: `test/integration/communication_test.rb`.
+
+### v1.18.0 — 2026-07-15 — `finance`: UI de tesorería (ítem #4 del MVP)
+
+**Ítem #4 del camino crítico de `LINEAMIENTOS_MVP.md`.** `finance` es Clase A por modelos
+(`Charge`/`Payment`/`PaymentPlan`/`Installment`/`StudentAccount`, reales desde el primer commit)
+pero sin ningún controller/ruta/vista — se construye desde cero, no se reemplaza un stub. Tres
+decisiones llegaron ya aprobadas: dos superficies (supervisión + estado de cuenta del acudiente);
+escritura = registrar pagos/cargos, planes de pago diferidos; y "este slice decide el addon-gating".
+
+**Recon (STOP #1) — tres hallazgos materiales que corrigieron el plan:**
+
+1. **El dinero es `decimal(12,2)`, no `*_cents bigint`** — las cinco tablas usan `t.decimal
+   precision: 12, scale: 2` desde `027ec44` (primer commit), anterior a que F6 (cents-bigint) se
+   adoptara para el billing del control plane (`ControlPlane::Addon` etc., commits posteriores).
+   `decimal`/`BigDecimal` es aritmética exacta en Postgres y en Ruby — no tiene el problema de drift
+   de float que F6 existe para prevenir, es solo una representación distinta. El helper `money()` ya
+   espera un decimal directo (`number_to_currency(amount, ...)`), confirmando que decimal es la
+   forma nativa que el resto del código ya asume. **Decisión: mantener `decimal`, sin migración** —
+   el invariante equivalente es "nunca castear a Float, toda la aritmética en `BigDecimal`".
+2. **`finance` YA estaba addon-gated, en el nav, y con permisos sembrados — todo desde ANTES de que
+   existiera un controller real.** `config/entitlements/finance.rb` (registrado en v1.3.0/S2b, con
+   un comentario explícito: "No `Finance::*Controller` exists yet... this declaration pre-registers
+   the gate"), `finance` ya en `ControlPlane::AddonCatalog::DOMAIN_KEYS` y en
+   `ControlPlane::SeedCatalog::ADDONS` (700.000 cop/mes), `config/navigation/finance.rb` ya apuntando
+   a `/finance` con permiso `finance.read`. Y los permisos `finance.read`/`finance.write` YA estaban
+   en `IdentityAccess::SeedPermissions::CATALOG`, YA sembrados a `institution_admin` (vía el stub
+   `RoleRoster`), y **YA reusados por `Cafeteria::BalancesController`** para su propia función de
+   "Saldos" (comentario explícito ahí: "Reuses finance.read... rather than..."). El §2 del prompt
+   ("este slice decide el addon-gating") era un no-op — no se agregó ni cambió nada de eso. El §7
+   ("agregar `finance.view`/`finance.manage`") tampoco se siguió literal: se reusaron
+   `finance.read`/`finance.write` para no crear una segunda superficie de permiso solapada ni romper
+   el consumidor cruzado de cafetería.
+3. **Ya existían 5 partials de vista pre-construidos** en `app/views/finance/`
+   (`_balance_summary`, `_charge_row`, `_payment_status_badge`, `_statement_line`,
+   `_payment_plan_card`) con locals planos (no objetos AR) — se ensamblaron en las vistas nuevas en
+   vez de duplicar su lógica. `_payment_plan_card` quedó sin usar (tiene su propio TODO, planes
+   diferidos). `Payment`/`Charge` ya traían una columna `idempotency_key` con índice único por
+   institución, sin usar hasta este slice — se activó como la guarda real de doble-submit en vez de
+   inventar una nueva.
+
+**Checkpoint de rol de tesorería:** no existe un rol formal en el catálogo (`IdentityAccess::
+RoleRoster` es un stub, igual que confirmó `attendance`/`report_cards`), pero
+`test/integration/cafeteria_test.rb` ya usa el `role_key` `"treasury"` como convención de facto para
+un actor con `finance.read`. Se siguió esa misma convención en los tests de este slice (con
+`finance.write` agregado) — no se agregó ninguna fila nueva a `RoleRoster`.
+
+**Lo construido:**
+- Sin migración — los cinco modelos ya existían; RLS `FORCE` ya estaba en las cinco tablas
+  (verificado, sin hallazgo material ahí).
+- `Finance::AccountScope` — query object nuevo (molde #4), institución-wide por diseño (tesorería es
+  función central, no por grupo/homeroom como los dominios académicos).
+- `Finance::AccountStatement` — el único camino de lectura del estado de cuenta (saldo, cargos
+  pendientes, historial fusionado cronológico), consumido por AMBAS superficies (mismo patrón que
+  `ReportCards::Computation`, v1.17.0). Puentea `StudentAccount`→`student_id`→`Charge` porque
+  `Charge` no tiene FK a `StudentAccount` (solo a `student` directo).
+- `Finance::PaymentRecorder`/`Finance::ChargeCreator` — transaccionales, `account.lock!` (pessimista)
+  + guarda de `idempotency_key` (chequeada antes Y después del lock, para cerrar la ventana de
+  carrera). `PaymentRecorder` marca un `Charge` como `paid` si los pagos completados contra él ya
+  cubren su monto.
+- `Finance::AccountsController#index/show`, `Finance::PaymentsController#new/create`,
+  `Finance::ChargesController#new/create` — rutas bajo `namespace :finance` con `resources
+  :accounts, path: ""` para que `index` caiga exactamente en `/finance` (el path que el nav
+  pre-existente ya esperaba).
+- Portal: `Portals::GuardianFinanceController#show`, nested bajo `guardian/students/:id/finance`
+  (mismo criterio de anidado por-hijo que `report_cards`, v1.17.0, por volumen de contenido) — solo
+  lectura, mismo `AccountStatement`, sin `authorize!`, fuera de `Navigation::Registry`, ninguna
+  acción de escritura expuesta. Botón "Estado de cuenta" agregado a `guardian_students/show`.
+
+**Caso de aceptación, verificado end-to-end:** registrar un pago de $50.000 baja el saldo a
+exactamente `-50000.00` (BigDecimal, sin drift); crear un cargo de $120.000 sube el saldo a
+`120000.00`; pagar un cargo por su monto completo lo marca `paid`; una escritura que viola un
+`CHECK` de la BD (`method` inválido) revierte TODO — ni el `Payment` ni el cambio de saldo quedan
+persistidos (atomicidad real, no solo aserta que "debería"); resubmitir el mismo
+`idempotency_key` nunca duplica un pago ni un cargo; un docente sin `finance.read` recibe 403; sin
+entitlement de `finance`, 403 con "no está habilitado" antes que cualquier chequeo de RBAC; el
+acudiente ve el estado de cuenta de SU hijo (nunca otra familia, 404 al adivinar), sin ninguna
+acción de escritura ni formulario en la página, y ve el empty state (no un error) si no tiene hijos
+resueltos; supervisión y portal leen la MISMA cifra de saldo para la misma cuenta (mismo
+`Finance::AccountStatement`); aislamiento cross-tenant verificado con query real bajo RLS.
+
+**Resultado:** 442 runs / 0 failures / 0 errors / 1 skip preexistente (baseline 428; 14 tests
+nuevos, todos en `test/integration/finance_test.rb`). `bin/rails zeitwerk:check` verde. Cero
+migraciones — dominio ya real en esquema, solo se construyó UI+servicios+gating (gating ya existía).
+
+**Archivos nuevos/editados:**
+- Servicios: `app/domains/finance/services/account_statement.rb`,
+  `app/domains/finance/services/payment_recorder.rb`, `app/domains/finance/services/charge_creator.rb`.
+- Query object: `app/domains/finance/queries/account_scope.rb`.
+- Controllers: `app/controllers/finance/accounts_controller.rb`,
+  `app/controllers/finance/payments_controller.rb`, `app/controllers/finance/charges_controller.rb`,
+  `app/controllers/portals/guardian_finance_controller.rb`.
+- Vistas: `app/views/finance/accounts/{index,show}.html.erb`,
+  `app/views/finance/payments/new.html.erb`, `app/views/finance/charges/new.html.erb`,
+  `app/views/portals/guardian_finance/show.html.erb` (+ botón nuevo en
+  `app/views/portals/guardian_students/show.html.erb`). Reusa los 5 partials pre-existentes de
+  `app/views/finance/_*` sin modificarlos.
+- Rutas: `config/routes.rb` (`namespace :finance` + nested resource de portal). Sin cambios a
+  `config/entitlements/finance.rb`, `config/navigation/finance.rb`,
+  `ControlPlane::AddonCatalog::DOMAIN_KEYS`, `ControlPlane::SeedCatalog::ADDONS`, ni
+  `IdentityAccess::SeedPermissions::CATALOG` — los cinco ya estaban correctos.
+- Tests: `test/integration/finance_test.rb`.
+
+### v1.17.0 — 2026-07-15 — `report_cards`: boletines (ítem #3 del MVP)
+
+**Ítem #3 del camino crítico de `LINEAMIENTOS_MVP.md`**, sobre la mitad de calificaciones ya real de
+`schedules` (v1.14.0/v1.15.0). Tres decisiones de diseño llegaron YA aprobadas en el prompt (no
+checkpoint de diseño abierto esta vez, a diferencia de `attendance` v1.16.0): dominio `report_cards`
+propio addon-gated; snapshot congelado al publicar; dos superficies (supervisión + portal).
+
+**Recon (STOP #1):** confirmado `grep -riE "boletin|report_card" db/migrate/ app/domains/`
+sin resultados — dominio net-new real, sin stub previo de ninguna fase. `Schedules::Assessment`
+(desde v1.14.0) ya trae `weight` (default 1.0) y `max_score` (default 5.0) — ninguna lógica de
+promedio/GPA existía todavía en `schedules`, así que el prompt tenía razón en pedir que este slice
+la introdujera, y en `report_cards`, nunca en `schedules`. `Schedules::Enrollment.academic_term_id`
+(v1.15.0) es el join real que hace posible filtrar notas por término sin re-derivar nada.
+`Schedules::ActiveTermEnrollmentScope.resolve(institution:)` confirmado idéntico a como lo consumió
+`attendance` — mismo resolver, sin cambios. Plantilla de addon-gating de `attendance` (v1.16.0)
+copiada literal: `config/entitlements/*.rb` de una línea, entrada en
+`ControlPlane::AddonCatalog::DOMAIN_KEYS`, `test/models/entitlement/registry_consistency_test.rb`
+(genérico, sin tocar). **Hallazgo que ajustó el plan**: `IdentityAccess::RoleRoster` es un catálogo
+STUB (documentado como tal en su propio archivo) — `attendance.record` tampoco está ahí, así que
+sembrar `report_card.view`/`report_card.publish` a roles reales no tiene un ancla de seed real en
+este repo; se agregaron solo a `IdentityAccess::SeedPermissions::CATALOG` (el catálogo global real),
+mismo alcance que `attendance` tomó.
+
+**Lo construido:**
+- Migración `20260715142947_create_report_cards.rb`: tabla + 2 índices (unicidad
+  `(institution_id, student_id, academic_term_id)` + `(institution_id, academic_term_id)`) + CHECK
+  de `status` (`draft`/`published` — hoy toda fila persistida es `published`, ver más abajo) +
+  `enable_rls`. Corrida en dev y test.
+- Modelo `ReportCards::ReportCard` — `readonly? = persisted?`, mismo patrón que
+  `ControlPlane::InvoiceLineItem`: una vez publicada, una fila nunca se `update`/`destroy` individual.
+- `ReportCards::Computation` — agregación EN VIVO por `(estudiante, término)`: cada
+  `Schedules::Assessment` con nota se normaliza a la escala 0.0–5.0 (`score/max_score*5.0`) antes de
+  ponderar por `weight`; una materia sin notas cargadas no aporta línea (nunca un cero, el boletín a
+  mitad de término es parcial por diseño); `overall_average` es el promedio simple de las líneas por
+  materia. Consumida tanto por el preview de supervisión como por `Publisher` — es LA única fuente
+  de verdad del cómputo, nunca duplicada.
+- `ReportCards::Publisher` — publicación síncrona idempotente: por estudiante, computa, congela el
+  snapshot, y regenera la fila con `ReportCard.where(...).delete_all` + `create!` (nunca
+  `destroy_all`/`update` — `delete_all` bypassea `readonly?` a propósito, mismo balance que
+  `ControlPlane::Billing::PeriodCut` ya documenta para `InvoiceLineItem`; de hecho el primer intento
+  usó `destroy_all` y disparó `ActiveRecord::ReadOnlyRecord` en desarrollo, confirmando por qué el
+  patrón de `PeriodCut` existe).
+- Dos permisos nuevos, split (a diferencia del único `attendance.record`): `report_card.view`
+  (previsualizar + ver publicados) y `report_card.publish` (publicar/regenerar) — publicar es una
+  acción más sensible que previsualizar, mismo criterio que separó `accommodations.view`/`.manage`.
+- `config/entitlements/report_cards.rb` + `report_cards` agregado a
+  `ControlPlane::AddonCatalog::DOMAIN_KEYS` + a `ControlPlane::SeedCatalog::ADDONS` (fee plano, sin
+  medición — `metered` queda en su default `false`).
+- `ReportCards::GroupScope` — query object nuevo (NO reutiliza `Attendance::GroupScope`, filtra por
+  `report_card.view`, un permiso distinto).
+- Supervisión: `ReportCards::GroupsController#index` (mis grupos) →
+  `ReportCards::PublicationsController#new` (preview: roster tomable + promedio en vivo por
+  estudiante, sin persistir nada) → `#create` (publica los estudiantes seleccionados vía
+  `Publisher`). Nav: `config/navigation/report_cards.rb` ("Boletines", permiso `report_card.view`).
+- Portal: `Portals::GuardianReportCardsController#index` (nested bajo el hijo específico, vía
+  `GuardianScope.for(user).find(params[:student_id])` — nunca `Student.find` directo) y
+  `Portals::StudentReportCardsController#index` (vía `StudentSelfScope`). Ambos: sin `authorize!`,
+  fuera de `Navigation::Registry`, consultan solo `status: "published"` — nunca ven un preview. Se
+  enlazan desde `guardian_students/show` y `student_portal/show` (botón "Boletines"/"Mis boletines"),
+  no desde ningún registry.
+- **Decisión explícita, no un olvido**: `db/seeds.rb` NO se tocó — mismo alcance que `attendance`
+  (v1.16.0) tampoco lo tocó; el catálogo de addons demo se siembra por el rake task
+  `control_plane:seed_catalog` (ya actualizado), no por `db/seeds.rb`, y el prompt dejaba la fila de
+  demo condicionada a "si el seed de demo lo amerita" — no lo amerita todavía sin una necesidad real
+  de demo end-to-end.
+
+**Modelo de datos — el fork del "draft":** el prompt proponía dos formas posibles (fila desde
+draft, estilo `invoices`, vs. cómputo vivo sin fila) y dejaba el default explícito: **cómputo vivo
+sin fila**. Se tomó ese default — una fila `report_cards` existe SOLO al publicar, así que hoy el
+`status` de cualquier fila persistida es siempre `"published"`; el CHECK sigue permitiendo `"draft"`
+por si esa decisión se revierte más adelante, pero no hay código que lo produzca hoy.
+
+**Caso de aceptación, verificado end-to-end:** un docente con `role_assignment` scoped a
+`group:9°A` ve solo 9°A en el índice; el preview de 9°A muestra el promedio calculado en vivo de un
+estudiante matriculado en el término activo y excluye a uno del grupo que no lo está; publicar
+persiste un `ReportCard` congelado por estudiante seleccionado; **editar la nota viva DESPUÉS de
+publicar no cambia el boletín ya publicado** (test estrella, verificado con `update_columns` directo
+sobre el `Assessment` para evitar cualquier duda de que el read-path esté cacheando en memoria);
+re-publicar el mismo (estudiante, término) regenera la fila (mismo `id` no sobrevive — prueba de que
+fue `delete_all`+`create!`, no un `update`) sin duplicar; el mismo docente recibe 403 en `group:9°B`
+(fuera de su scope); un actor con `report_card.view` pero sin `report_card.publish` no ve el botón
+de publicar en la vista Y recibe 403 real si intenta el POST igual (cosmético vs. gate duro, nunca
+confundidos); sin entitlement de `report_cards`, la petición da 403 con "no está habilitado" (gate
+#1 antes que gate #2); aislamiento cross-tenant verificado con query real bajo RLS; sin
+`input[type=search]`/`input[name=q]` en la vista de publicación; el portal del acudiente ve el
+boletín publicado de SU hijo y recibe 404 (nunca 200) al adivinar el id del hijo de otra familia; el
+portal nunca muestra nada si no se publicó todavía (ni preview, ni draft). Test de regresión
+adicional: el headcount de `Core::Headcount::Snapshotter` no se ve afectado por la existencia de
+`report_cards` — no se tocó su fuente ni se re-derivó el join de término.
+
+**Resultado:** 428 runs / 0 failures / 0 errors / 1 skip preexistente (baseline 407; 21 tests
+nuevos: 17 en `test/integration/report_cards_test.rb`, 4 en
+`test/models/report_cards/computation_test.rb`). `bin/rails zeitwerk:check` verde. Una migración,
+aplicada en dev y test.
+
+**Archivos nuevos/editados:**
+- Migración: `db/migrate/20260715142947_create_report_cards.rb`.
+- Modelo: `app/domains/report_cards/models/report_card.rb`.
+- Servicios: `app/domains/report_cards/services/computation.rb`,
+  `app/domains/report_cards/services/publisher.rb`.
+- Query object: `app/domains/report_cards/queries/group_scope.rb`.
+- Controllers: `app/controllers/report_cards/groups_controller.rb`,
+  `app/controllers/report_cards/publications_controller.rb`,
+  `app/controllers/portals/guardian_report_cards_controller.rb`,
+  `app/controllers/portals/student_report_cards_controller.rb`.
+- Vistas: `app/views/report_cards/groups/index.html.erb`,
+  `app/views/report_cards/publications/new.html.erb`,
+  `app/views/portals/guardian_report_cards/index.html.erb`,
+  `app/views/portals/student_report_cards/index.html.erb` (+ botones de entrada nuevos en
+  `app/views/portals/guardian_students/show.html.erb` y `app/views/portals/student_portal/show.html.erb`).
+- Config: `config/entitlements/report_cards.rb`, `config/navigation/report_cards.rb`,
+  `config/routes.rb` (namespace `report_cards` + nested resources de portal).
+- Catálogo/permisos: `app/control_plane/control_plane/addon_catalog.rb`,
+  `app/control_plane/control_plane/seed_catalog.rb`,
+  `app/domains/identity_access/services/seed_permissions.rb`.
+- Tests: `test/integration/report_cards_test.rb`, `test/models/report_cards/computation_test.rb`.
 
 ### v1.16.0 — 2026-07-14 — `attendance`: asistencia diaria por homeroom (ítem #2 del MVP)
 

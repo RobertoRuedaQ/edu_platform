@@ -3,7 +3,12 @@
 <%= render "shared/page_header",
       title: "#{@student.first_name} #{@student.last_name}",
       subtitle: "Resumen de solo lectura.",
-      actions: ui_button("← Volver a mis acudidos", href: portal_guardian_path, variant: :secondary) %>
+      actions: safe_join([
+        ui_button("Boletines", href: portal_guardian_student_report_cards_path(@student), variant: :secondary),
+        ui_button("Tareas", href: portal_guardian_student_assignments_path(@student), variant: :secondary),
+        ui_button("Estado de cuenta", href: portal_guardian_student_finance_path(@student), variant: :secondary),
+        ui_button("← Volver a mis acudidos", href: portal_guardian_path, variant: :secondary)
+      ], " ") %>
 
 <%# Read-only (GS8): no forms here. national_id is never shown (privacy). %>
 <%= render "shared/detail_list", items: {
