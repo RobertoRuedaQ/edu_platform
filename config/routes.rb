@@ -52,6 +52,10 @@ Rails.application.routes.draw do
       # communication (v1.19.0): org-wide, NOT per-self-scope — membership
       # read surface, same shared feed the staff/guardian surfaces use.
       resources :announcements, only: :index, controller: "student_announcements"
+      # assignments (v1.21.0, slice 1/4): published-only, by self-scope, own
+      # grade read from the same schedules::Assessment row report_cards
+      # reads. No authorize!, outside Navigation::Registry.
+      resources :assignments, only: :index, controller: "student_assignments"
     end
     resource :guardian, only: :show, controller: "guardian_portal" do
       # Per-child read-only summary (v1.9.0) — resolved through
@@ -70,6 +74,10 @@ Rails.application.routes.draw do
         # per-child nesting as report_cards (substantial content per child).
         # No authorize!, outside Navigation::Registry, no write action.
         resource :finance, only: :show, controller: "guardian_finance"
+        # assignments (v1.21.0, slice 1/4): published-only, per-child (a
+        # subject's assignments are inherently per-child, unlike org-wide
+        # announcements). No authorize!, outside Navigation::Registry.
+        resources :assignments, only: :index, controller: "guardian_assignments"
       end
       # communication (v1.19.0): org-wide, NOT per-child — a sibling of
       # :students, not nested under it.
@@ -221,6 +229,23 @@ Rails.application.routes.draw do
       post :reopen, on: :member
     end
     resources :conversation_audits, only: %i[index show]
+  end
+
+  # --- assignments (v1.21.0, MVP critical path item #6, slice 1/4) ----------
+  # Publish + view + grade directly only — submission/attachments/rubrics are
+  # future slices (see HISTORIA.md v1.21.0's roadmap annex). subjects#index
+  # lists the actor's OWN subjects (assignment.manage scope); assignments
+  # nest under a subject; grading is a member action on the SAME resource,
+  # never a separate grades namespace, since the grade always writes to the
+  # one gradebook (schedules::Assessment) via Assignments::GradeRecorder.
+  namespace :assignments do
+    resources :subjects, only: :index do
+      resources :assignments, only: %i[index new create edit update show destroy] do
+        post :publish, on: :member
+        post :archive, on: :member
+        post :grade, on: :member
+      end
+    end
   end
 
   # --- transportation (domain views, Prompt Unificado) ----------------------

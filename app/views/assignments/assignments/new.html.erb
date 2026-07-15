@@ -1,0 +1,5 @@
+<% content_for :title, "Nueva tarea" %>
+
+<%= render "shared/page_header", title: "Nueva tarea de #{@subject.name}" %>
+
+<%= render "form", assignment: @assignment, url: assignments_subject_assignments_path(@subject) %>

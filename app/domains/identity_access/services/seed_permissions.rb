@@ -71,7 +71,14 @@ module IdentityAccess
       # necesariamente puede leer las de otros (rector/institution_admin
       # solamente, nunca el super-admin de plataforma).
       "conversation.compose" => "Iniciar conversaciones con acudientes/estudiantes",
-      "conversation.audit"   => "Leer cualquier conversación de la institución (deja rastro de auditoría)"
+      "conversation.audit"   => "Leer cualquier conversación de la institución (deja rastro de auditoría)",
+      # assignments (v1.21.0), slice 1/4. Un solo permiso cubre crear/editar/
+      # publicar/archivar/calificar — mismo criterio unificado que
+      # attendance.record (no hay nivel de confidencialidad que justifique
+      # partirlo, a diferencia de report_card.view/publish). Ver la propia
+      # tarea desde el portal NO usa permiso: es relación (StudentSelfScope/
+      # GuardianScope), ver Guardrails.
+      "assignment.manage" => "Crear, editar, publicar, archivar y calificar tareas"
     }.freeze
 
     def self.call

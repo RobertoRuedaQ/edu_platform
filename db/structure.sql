@@ -224,10 +224,33 @@ CREATE TABLE public.assessments (
     term character varying NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
+    assignment_id uuid,
     CONSTRAINT assessments_score_range_check CHECK (((score IS NULL) OR ((score >= (0)::numeric) AND (score <= (5)::numeric))))
 );
 
 ALTER TABLE ONLY public.assessments FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: assignments; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.assignments (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    subject_id uuid NOT NULL,
+    title character varying NOT NULL,
+    instructions text,
+    due_date date NOT NULL,
+    status character varying DEFAULT 'draft'::character varying NOT NULL,
+    created_by_institution_user_id uuid,
+    published_at timestamp(6) without time zone,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT assignments_status_check CHECK (((status)::text = ANY ((ARRAY['draft'::character varying, 'published'::character varying, 'archived'::character varying])::text[])))
+);
+
+ALTER TABLE ONLY public.assignments FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -1419,6 +1442,14 @@ ALTER TABLE ONLY public.assessments
 
 
 --
+-- Name: assignments assignments_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.assignments
+    ADD CONSTRAINT assignments_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: attendance_records attendance_records_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1875,6 +1906,13 @@ ALTER TABLE ONLY public.users
 
 
 --
+-- Name: idx_assignments_on_institution_subject_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_assignments_on_institution_subject_status ON public.assignments USING btree (institution_id, subject_id, status);
+
+
+--
 -- Name: idx_charges_idempotency; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2047,6 +2085,13 @@ CREATE UNIQUE INDEX index_addons_on_key ON public.addons USING btree (key);
 --
 
 CREATE INDEX index_announcements_on_institution_and_published_at ON public.announcements USING btree (institution_id, published_at);
+
+
+--
+-- Name: index_assessments_on_assignment_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_assessments_on_assignment_id ON public.assessments USING btree (assignment_id);
 
 
 --
@@ -3291,6 +3336,14 @@ ALTER TABLE ONLY public.email_otps
 
 
 --
+-- Name: assessments fk_rails_5977cbb29b; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.assessments
+    ADD CONSTRAINT fk_rails_5977cbb29b FOREIGN KEY (assignment_id) REFERENCES public.assignments(id) ON DELETE SET NULL;
+
+
+--
 -- Name: report_cards fk_rails_5c455c708b; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3315,6 +3368,14 @@ ALTER TABLE ONLY public.control_plane_audit_events
 
 
 --
+-- Name: assignments fk_rails_5e63c7027f; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.assignments
+    ADD CONSTRAINT fk_rails_5e63c7027f FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: role_permissions fk_rails_60126080bd; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3328,6 +3389,14 @@ ALTER TABLE ONLY public.role_permissions
 
 ALTER TABLE ONLY public.subscriptions
     ADD CONSTRAINT fk_rails_63d3df128b FOREIGN KEY (plan_id) REFERENCES public.plans(id) ON DELETE SET NULL;
+
+
+--
+-- Name: assignments fk_rails_63e6cfa07e; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.assignments
+    ADD CONSTRAINT fk_rails_63e6cfa07e FOREIGN KEY (subject_id) REFERENCES public.subjects(id) ON DELETE CASCADE;
 
 
 --
@@ -3400,6 +3469,14 @@ ALTER TABLE ONLY public.invitations
 
 ALTER TABLE ONLY public.conversations
     ADD CONSTRAINT fk_rails_7024c7cecf FOREIGN KEY (closed_by_institution_user_id) REFERENCES public.institution_users(id) ON DELETE SET NULL;
+
+
+--
+-- Name: assignments fk_rails_7453d408a5; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.assignments
+    ADD CONSTRAINT fk_rails_7453d408a5 FOREIGN KEY (created_by_institution_user_id) REFERENCES public.institution_users(id) ON DELETE SET NULL;
 
 
 --
@@ -4018,6 +4095,19 @@ CREATE POLICY assessments_tenant_isolation ON public.assessments USING ((institu
 
 
 --
+-- Name: assignments; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.assignments ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: assignments assignments_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY assignments_tenant_isolation ON public.assignments USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
 -- Name: attendance_records; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -4531,6 +4621,7 @@ CREATE POLICY teaching_assignments_tenant_isolation ON public.teaching_assignmen
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260715195639'),
 ('20260715190531'),
 ('20260715155950'),
 ('20260715142947'),

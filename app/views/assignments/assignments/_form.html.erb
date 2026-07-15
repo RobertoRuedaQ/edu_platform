@@ -1,0 +1,18 @@
+<%# locals: (assignment:, url:) -%>
+<%= form_with model: assignment, url: url do |f| -%>
+  <% if assignment.errors.any? -%>
+    <%= render "shared/alert", variant: :danger, message: assignment.errors.full_messages.join(", ") %>
+  <% end -%>
+
+  <%= render "shared/field", label: "Título", name: "assignment[title]", type: "text", value: assignment.title %>
+
+  <div class="field">
+    <label class="field__label" for="assignment_instructions">Apuntes</label>
+    <textarea class="field__input" id="assignment_instructions" name="assignment[instructions]" rows="6"><%= assignment.instructions %></textarea>
+  </div>
+
+  <%= render "shared/field", label: "Vence", name: "assignment[due_date]", type: "date",
+        value: assignment.due_date&.iso8601 %>
+
+  <%= ui_button (assignment.persisted? ? "Guardar" : "Crear borrador"), type: "submit", variant: :primary %>
+<% end -%>

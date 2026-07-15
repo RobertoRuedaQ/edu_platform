@@ -18,6 +18,7 @@ module ControlPlane
       analytics_bi
       attendance
       report_cards
+      assignments
     ].freeze
   end
 end

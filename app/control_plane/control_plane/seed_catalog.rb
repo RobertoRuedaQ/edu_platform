@@ -20,7 +20,8 @@ module ControlPlane
         included_quota: 10_000, overage_unit_price_cents: 20 },
       { key: "analytics_bi", name: "Analítica y BI", monthly_fee_cents: 1_200_000 },
       { key: "attendance", name: "Asistencia", monthly_fee_cents: 300_000 },
-      { key: "report_cards", name: "Boletines", monthly_fee_cents: 400_000 }
+      { key: "report_cards", name: "Boletines", monthly_fee_cents: 400_000 },
+      { key: "assignments", name: "Tareas", monthly_fee_cents: 300_000 }
     ].freeze
 
     PLAN = {

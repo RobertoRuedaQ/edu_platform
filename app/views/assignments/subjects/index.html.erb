@@ -1,0 +1,22 @@
+<% content_for :title, "Tareas" %>
+
+<%= render "shared/page_header",
+      title: "Tareas",
+      subtitle: "Materias dentro de tu alcance." %>
+
+<% if @subjects.any? -%>
+  <%= render layout: "shared/table",
+        locals: { headers: [ "Materia", "" ] } do -%>
+    <% @subjects.each do |subject| -%>
+      <tr>
+        <td><%= subject.name %></td>
+        <td><%= link_to "Ver tareas", assignments_subject_assignments_path(subject), class: "btn btn--secondary btn--sm" %></td>
+      </tr>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state",
+        icon: "alert-circle",
+        title: "No hay materias en tu alcance",
+        description: "No ves materias fuera de las que tienes asignadas." %>
+<% end -%>

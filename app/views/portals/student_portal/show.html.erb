@@ -5,6 +5,7 @@
       subtitle: "Tu resumen.",
       actions: safe_join([
         ui_button("Anuncios", href: portal_student_announcements_path, variant: :secondary),
+        ui_button("Tareas", href: portal_student_assignments_path, variant: :secondary),
         (ui_button("Mis boletines", href: portal_student_report_cards_path, variant: :secondary) if @student)
       ].compact, " ") %>
 

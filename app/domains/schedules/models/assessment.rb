@@ -6,6 +6,10 @@ module Schedules
 
     belongs_to :institution, class_name: "Core::Institution"
     belongs_to :enrollment,  class_name: "Schedules::Enrollment", inverse_of: :assessments
+    # Additive, nullable (v1.21.0) — most rows (manual entries via
+    # GradeEntriesController, v1.14.0) have none; that's normal, not
+    # backfilled by force. Set only by Assignments::Publisher's fan-out.
+    belongs_to :assignment, class_name: "Assignments::Assignment", optional: true, inverse_of: :assessments
 
     validates :kind, :title, :term, presence: true
 

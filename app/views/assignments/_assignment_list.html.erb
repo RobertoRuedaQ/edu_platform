@@ -1,0 +1,21 @@
+<%# locals: (assignments:) -%>
+<%# Shared rendering — the student portal and the guardian portal both
+    render the SAME markup over their own Assignments::StudentView result.
+    Expects a `score_for(assignment)` helper method from the controller. -%>
+<% if assignments.any? -%>
+  <%= render layout: "shared/table", locals: { headers: [ "Materia", "Tarea", "Vence", "Nota" ] } do -%>
+    <% assignments.each do |assignment| -%>
+      <tr>
+        <td><%= assignment.subject.name %></td>
+        <td><%= assignment.title %></td>
+        <td><%= assignment.due_date %></td>
+        <td><%= score_for(assignment) || "Pendiente" %></td>
+      </tr>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state",
+        icon: "file-text",
+        title: "Sin tareas todavía",
+        description: "Cuando la institución publique una tarea, aparecerá aquí." %>
+<% end -%>

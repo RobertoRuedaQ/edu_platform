@@ -5,6 +5,7 @@
       subtitle: "Resumen de solo lectura.",
       actions: safe_join([
         ui_button("Boletines", href: portal_guardian_student_report_cards_path(@student), variant: :secondary),
+        ui_button("Tareas", href: portal_guardian_student_assignments_path(@student), variant: :secondary),
         ui_button("Estado de cuenta", href: portal_guardian_student_finance_path(@student), variant: :secondary),
         ui_button("← Volver a mis acudidos", href: portal_guardian_path, variant: :secondary)
       ], " ") %>

@@ -11,11 +11,154 @@
 
 ---
 
-## Changelog completo (v1.0.0 → v1.20.0)
+## Changelog completo (v1.0.0 → v1.21.0)
 
 > Copiado verbatim de §14 de `PROJECT_STATE.md` v1.5.0, antes de que el split editorial (v1.5.1)
 > moviera el changelog fuera del doc magro. Las entradas v1.6.0+ se escribieron directamente aquí,
 > ya con el split vigente.
+
+### v1.21.0 — 2026-07-15 — `assignments`: tareas académicas, slice 1/4 (ítem #6 del MVP)
+
+**Ítem #6 del camino crítico de `LINEAMIENTOS_MVP.md`.** El owner definió el ciclo completo de
+`assignments` (publicar → ver → entregar texto/adjunto → revisar → calificar directo o por
+rúbrica), a construir en ~4 slices. **Este slice es SOLO el #1: publicar + ver + calificar
+directo.** El roadmap completo de los slices 2–4 queda registrado en el anexo (§2 abajo), sin
+construir nada de eso.
+
+**Recon (STOP #1) — el hallazgo que reescribió el modelo de datos propuesto:**
+
+`grep -riE "assignment" db/migrate/` no devolvió ninguna tabla real — net-new confirmado, y a
+diferencia de `finance`/`communication`, **tampoco** había ni entitlement, ni `DOMAIN_KEYS`, ni nav,
+ni permisos pre-sembrados: hubo que construir el gating completo, como `attendance`/`report_cards`.
+
+El hallazgo que importó fue sobre `schedules::Assessment`: `belongs_to :enrollment` (NO
+`:subject`), y **el `score` vive directamente en esa fila** — no existe ninguna tabla de
+"grade-entries" separada; cada `Assessment` YA ES la entrada de nota de UN estudiante (vía su
+`Enrollment`, que es estudiante+materia+término). El prompt asumía `assignments.assessment_id`
+(FK singular, tarea→un Assessment) — pero eso no puede representar una tarea que aplica a un curso
+completo: un roster de 30 estudiantes necesita 30 filas `Assessment`, no una. **Corrección de
+diseño**: el FK va en la dirección OPUESTA — `assessments.assignment_id` (nullable, aditivo, mismo
+patrón que `enrollments.academic_term_id`, v1.15.0). Una `Assignment` es la PLANTILLA; publicarla
+hace *fan-out*: crea una fila `Assessment` por cada matrícula del roster, cada una con `score: nil`
+inicialmente — el mismo estado que `report_cards` (v1.17.0) ya trata como "materia sin notas, no
+cero". Calificar es un `UPDATE` sobre esa fila ya existente, nunca un `CREATE` paralelo.
+
+Segundo hallazgo, menor: `Schedules::Subject` tiene `grade_level_id` — el mecanismo de scope YA
+existente (`Authorization::Assignment::SCOPE_READERS[:grade_level]`) ya cubre recursos `Subject`
+sin inventar una dimensión de scope nueva; es el MISMO mecanismo que `Schedules::
+GradeEntriesController` ya usaba para `grades.write` (aunque nadie lo había puesto en negro sobre
+blanco hasta ahora).
+
+**Matiz sobre `ActiveTermEnrollmentScope` (a diferencia de mensajería, v1.20.0):** aquí SÍ es el
+resolver semánticamente correcto — una tarea es para los matriculados en la materia/término, que es
+exactamente lo que ese resolver resuelve. La elección de resolver sigue siendo semántica caso por
+caso (ver el guardrail correspondiente en `OPEN_PROCESS.md`), no automática por precedente — en
+mensajería no aplicaba, aquí sí.
+
+**Lo construido:**
+- Migración `20260715195639_create_assignments.rb`: tabla `assignments` (`subject_id`, `title`,
+  `instructions`, `due_date`, `status` CHECK draft/published/archived,
+  `created_by_institution_user_id` nullable+nullify) + `add_reference :assessments, :assignment`
+  (nullable, `on_delete: :nullify`). RLS `ENABLE+FORCE`+policy en `assignments`. Corrida en dev y
+  test.
+- Modelo `Assignments::Assignment`; `Schedules::Assessment` gana `belongs_to :assignment, optional:
+  true`.
+- `Assignments::Roster` (tres capas: `ActiveTermEnrollmentScope` ∩ enrollments de ESTA materia en
+  el término activo — compuesto explícitamente, el resolver no toma un parámetro de materia).
+- `Assignments::Publisher` (fan-out transaccional, idempotente por construcción — solo dispara en
+  la transición borrador→publicada).
+- `Assignments::GradeRecorder` (`UPDATE` de la fila ya fanned-out — nunca un `CREATE`; localiza la
+  fila vía `join(:enrollment).where(assignment_id:, enrollments: { student_id: })`).
+- `Assignments::StudentView` (el ÚNICO camino de lectura para el portal — mismo patrón que
+  `ReportCards::Computation`/`Communication::Inbox`: una computación, dos superficies).
+- `Assignments::SubjectScope` (molde #4, per-row `can?` sobre `Schedules::Subject`).
+- Addon-gating completo desde cero: `config/entitlements/assignments.rb`,
+  `AddonCatalog::DOMAIN_KEYS`, `SeedCatalog::ADDONS` (`metered: false`), permiso único
+  `assignment.manage` (crear/editar/publicar/archivar/calificar — mismo criterio unificado que
+  `attendance.record`, sin split como `report_card.view/publish`: no hay una acción "más sensible"
+  que lo justifique aquí), `config/navigation/assignments.rb`.
+- Supervisión: `Assignments::SubjectsController#index` → `Assignments::AssignmentsController`
+  (`index/new/create/edit/update/show/destroy` + `publish`/`archive`/`grade` como member actions —
+  grading nunca es un namespace aparte, siempre escribe al ÚNICO gradebook). `#show` renderiza el
+  roster con inputs de nota inline (mismo estilo que la toma de asistencia de `attendance`,
+  v1.16.0).
+- Portal: `Portals::StudentAssignmentsController#index` (self-scope) y `Portals::
+  GuardianAssignmentsController#index` (nested per-hijo, mismo criterio que `report_cards`/
+  `finance` — contenido sustancial por hijo). Ambos renderizan `assignments/_assignment_list`
+  (partial compartido) sobre `Assignments::StudentView`.
+
+**Caso de aceptación, verificado end-to-end:** crear una tarea la deja en `draft` sin ningún
+`Assessment` fanned-out; publicarla crea exactamente una fila `Assessment` por estudiante
+matriculado en la materia/término activo (ninguna para un estudiante NO matriculado), cada una
+`score: nil` — y esa fila ungraded NO rompe `ReportCards::Computation` (contribuye cero líneas,
+nunca un cero real); calificar escribe en ESA misma fila (`ReportCards::Computation` la lee
+inmediatamente con el valor correcto) y re-calificar actualiza en vez de duplicar; un docente
+scopeado a `grade_level_a` gestiona/califica solo materias de ese grado, 403 en materias de otro
+grado, y el índice de materias solo muestra las propias; sin `assignment.manage`, 403 y sin tile de
+nav; grading antes de publicar es rechazado silenciosamente (no hay fila que actualizar); un
+borrador se elimina de verdad, una publicada NUNCA (solo se archiva, y archivar no toca los
+`Assessment` ya fanned-out); el portal del estudiante ve la tarea publicada CON su propia nota
+(mismo origen que `report_cards`) y nunca ve un borrador; el del acudiente ve solo las de su
+propio hijo (404 al adivinar otro); sin entitlement de `assignments`, 403 con "no está habilitado";
+aislamiento cross-tenant verificado con query real bajo RLS; `due_date` persiste tal cual
+(calendar-forward, sin vista de calendario construida).
+
+**Decisión explícita, no un olvido:** `db/seeds.rb` NO se tocó — mismo alcance que las cuatro
+slices anteriores (el archivo es puramente demográfico/académico, sin ningún concepto de
+`institution_users`/RBAC/entitlements).
+
+**Resultado:** 487 runs / 0 failures / 0 errors / 1 skip preexistente (baseline 472; 15 tests
+nuevos, todos en `test/integration/assignments_test.rb`). `bin/rails zeitwerk:check` verde. Una
+migración, aplicada en dev y test.
+
+**Archivos nuevos/editados:**
+- Migración: `db/migrate/20260715195639_create_assignments.rb`.
+- Modelo: `app/domains/assignments/models/assignment.rb` (+ edit a
+  `app/domains/schedules/models/assessment.rb`).
+- Query object + servicios: `app/domains/assignments/queries/subject_scope.rb`,
+  `app/domains/assignments/services/{roster,publisher,grade_recorder,student_view}.rb`.
+- Controllers: `app/controllers/assignments/{subjects,assignments}_controller.rb`,
+  `app/controllers/portals/{student,guardian}_assignments_controller.rb`.
+- Vistas: `app/views/assignments/subjects/index.html.erb`,
+  `app/views/assignments/assignments/{index,new,edit,show,_form}.html.erb`,
+  `app/views/assignments/_assignment_list.html.erb` (compartido),
+  `app/views/portals/{student,guardian}_assignments/index.html.erb` (+ botones nuevos en
+  `student_portal/show`/`guardian_students/show`).
+- Config: `config/entitlements/assignments.rb`, `config/navigation/assignments.rb`,
+  `config/routes.rb`, `app/control_plane/control_plane/addon_catalog.rb`,
+  `app/control_plane/control_plane/seed_catalog.rb`.
+- Permisos: `app/domains/identity_access/services/seed_permissions.rb`.
+- Tests: `test/integration/assignments_test.rb`.
+- **Reestructuración editorial**: `OPEN_PROCESS.md` (nuevo — backlog + guardrails movidos desde
+  `PROJECT_STATE.md` §11/§12), `PROJECT_STATE.md` (pointer + intro actualizada).
+
+#### Anexo — roadmap completo de `assignments` (slices 2–4, SIN construir)
+
+Registrado aquí tal como lo definió el owner, para que el próximo slice de `assignments` arranque
+con el contexto completo — nada de esto existe en el código todavía.
+
+- **Slice 2 — entrega de texto del estudiante.** El estudiante escribe una respuesta de texto sobre
+  una tarea `published` desde su portal. Sin diseñar todavía: dónde vive la entrega (¿tabla propia
+  `submissions`, o un campo en algo existente?), si hay un estado de entrega (a tiempo/tarde/sin
+  entregar) visible para el docente, y si la fecha de entrega real se compara contra `due_date`.
+- **Slice 3 — adjuntos** (docx/pdf/jpg/png) + revisión en la app. **Checkpoint de diseño propio,
+  obligatorio antes de tocar código** — tres realidades a resolver ahí, no antes:
+  1. **Active Storage nunca se ha usado en este repo.** Adoptarlo es una decisión de infraestructura
+     nueva (¿qué service usa — disco local en dev, algo real en producción?), no solo "agregar
+     `has_one_attached`".
+  2. **El serving debe ser tenant-scoped**, nunca la URL pública default de Active Storage (que no
+     pasa por RLS ni por ningún gate de la app) — necesita un controller propio que resuelva el
+     adjunto a través de `authorize!`/relación antes de servir el blob, mismo espíritu que
+     "self-scope"/"RBAC" ya aplican en cualquier otro dato sensible de este repo.
+  3. **docx no se renderiza nativo en un navegador** — la app necesita convertir (¿a PDF? ¿a HTML?)
+     o limitarse a permitir la descarga sin previsualización. Decidir ahí, no asumir "se muestra
+     igual que un PDF".
+- **Slice 4 — rúbricas.** Criterios → nota equivalente a la escala 0.0–5.0 que
+  `ReportCards::Computation` ya usa. Sin diseñar todavía: si una rúbrica es reusable entre tareas o
+  se define por tarea, cómo se pondera cada criterio, y si la nota final calculada desde la rúbrica
+  sigue escribiéndose en `schedules::Assessment.score` (consistente con el guardrail de este slice
+  1: la nota vive SOLO ahí) o si la rúbrica en sí necesita su propia tabla de criterios+puntajes
+  colgando del mismo `Assessment`.
 
 ### v1.20.0 — 2026-07-15 — `communication`: mensajería (ítem #5b del MVP, subsistema B, núcleo)
 
