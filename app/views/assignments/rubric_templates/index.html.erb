@@ -1,0 +1,23 @@
+<% content_for :title, "Rúbricas" %>
+
+<%= render "shared/page_header",
+      title: "Mis rúbricas",
+      actions: ui_button("Nueva rúbrica", href: new_assignments_rubric_template_path, variant: :primary) %>
+
+<% if @templates.any? -%>
+  <%= render layout: "shared/table", locals: { headers: [ "Nombre", "Criterios", "Niveles", "" ] } do -%>
+    <% @templates.each do |template| -%>
+      <tr>
+        <td><%= link_to template.name, edit_assignments_rubric_template_path(template) %></td>
+        <td><%= template.rubric_criteria.size %></td>
+        <td><%= template.rubric_levels.size %></td>
+        <td><%= button_to "Eliminar", assignments_rubric_template_path(template), method: :delete, class: "btn btn--danger btn--sm" %></td>
+      </tr>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state",
+        icon: "clipboard",
+        title: "Aún no creas ninguna rúbrica",
+        description: "Una rúbrica es reutilizable en cualquiera de tus tareas." %>
+<% end -%>

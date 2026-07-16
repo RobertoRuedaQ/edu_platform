@@ -239,7 +239,7 @@ v1.14.0: modelos reales (`Charge`/`Payment`/`PaymentPlan`/`Installment`/`Student
    acceso (compose RBAC / bandeja-participación / responder-participación / auditoría RBAC).
    Diferidos anotados (fan-out 1:1 a todos los cuidadores, threading, tags, acudiente-inicia) — ver
    `PROJECT_STATE.md` §8.2/`HISTORIA.md`.
-6. **`assignments`** (tareas académicas) — **slices 1–3b/4 hechos.** ~~Publicar +
+6. **`assignments`** (tareas académicas) — ✅ **TRACK COMPLETO, slices 1–4/4.** ~~Publicar +
    ver + calificar directo~~ ✅ **cerrado (v1.21.0)**. ~~Entrega de texto~~ ✅ **cerrado (v1.22.0)**.
    ~~Entregas grupales~~ ✅ **cerrado (v1.23.0)**: `group_work` toggle por-tarea, `Submission`
    generalizada a estudiante XOR grupo, nota grupal = bulk-set per-student + override individual
@@ -249,9 +249,13 @@ v1.14.0: modelos reales (`Charge`/`Payment`/`PaymentPlan`/`Installment`/`Student
    Marcel, tres controllers de servicio (nunca las rutas firmadas default). ~~Materiales del
    docente~~ ✅ **cerrado (v1.25.0)**: mismo molde de tabla puente, dueño `Assignment`; escritura
    gateada por RBAC (`assignment.manage`, 403 sin permiso) en vez de relación de portal; lectura de
-   portal sin cambios (borrador/archivada inalcanzables gratis). **Solo queda slice 4 (rúbricas)** —
-   roadmap completo en `HISTORIA.md` v1.21.0–v1.25.0. **Siguiente ítem del camino crítico** (slice
-   4, o `calendar` — ver `OPEN_PROCESS.md`).
+   portal sin cambios (borrador/archivada inalcanzables gratis). ~~Rúbricas~~ ✅ **cerrado (v1.26.0)**:
+   biblioteca reutilizable normalizada, asociada vía `evaluation_method` (freeze molde `group_work`),
+   estructura congelada como snapshot jsonb al publicar (molde `price_tiers_snapshot`); calificar
+   por rúbrica calcula y escribe la nota vía `GradeRecorder`/`GroupGrader` sin cambios — la rúbrica
+   nunca almacena la nota; portal ve nivel+descriptor por criterio, sin RBAC. Roadmap completo en
+   `HISTORIA.md` v1.21.0–v1.26.0. **Siguiente ítem del camino crítico**: `calendar` (net-new) o
+   `extracurriculars` — ver `OPEN_PROCESS.md`.
 7. **`calendar`** + scope de visibilidad del cuidador (consume fechas de `assignments`, `attendance`,
    `extracurriculars`).
 8. **`extracurriculars`** (depende de matrícula/término; actividad paga = `Charge` en `finance`, de #4).

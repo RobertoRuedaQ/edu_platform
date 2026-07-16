@@ -8,3 +8,15 @@ Navigation::Registry.register(
   permission: "assignment.manage",
   position: 31
 )
+
+# v1.26.0 (slice 4) — the reusable rubric LIBRARY, a sibling entry point
+# (not nested under a subject: rubrics are docente-wide, reusable across
+# every subject/task). Same permission, capability-only check (no subject
+# resource) — see RubricTemplatesController's docstring.
+Navigation::Registry.register(
+  domain: "assignments",
+  label: "Rúbricas",
+  path: "/assignments/rubric_templates",
+  permission: "assignment.manage",
+  position: 32
+)

@@ -264,6 +264,10 @@ CREATE TABLE public.assignments (
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
     group_work boolean DEFAULT false NOT NULL,
+    evaluation_method character varying DEFAULT 'direct'::character varying NOT NULL,
+    rubric_template_id uuid,
+    rubric_snapshot jsonb,
+    CONSTRAINT assignments_evaluation_method_check CHECK (((evaluation_method)::text = ANY ((ARRAY['direct'::character varying, 'rubric'::character varying])::text[]))),
     CONSTRAINT assignments_status_check CHECK (((status)::text = ANY ((ARRAY['draft'::character varying, 'published'::character varying, 'archived'::character varying])::text[])))
 );
 
@@ -1087,6 +1091,95 @@ ALTER TABLE ONLY public.roster_import_rows FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: rubric_cell_descriptors; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.rubric_cell_descriptors (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    rubric_criterion_id uuid NOT NULL,
+    rubric_level_id uuid NOT NULL,
+    descriptor text,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+ALTER TABLE ONLY public.rubric_cell_descriptors FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: rubric_criteria; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.rubric_criteria (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    rubric_template_id uuid NOT NULL,
+    name character varying NOT NULL,
+    weight numeric(6,2) NOT NULL,
+    "position" integer DEFAULT 0 NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+ALTER TABLE ONLY public.rubric_criteria FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: rubric_evaluations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.rubric_evaluations (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    assignment_id uuid NOT NULL,
+    student_id uuid,
+    submission_group_id uuid,
+    levels_by_criterion jsonb DEFAULT '{}'::jsonb NOT NULL,
+    evaluated_by_user_id uuid,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT rubric_evaluations_identity_check CHECK ((num_nonnulls(student_id, submission_group_id) = 1))
+);
+
+ALTER TABLE ONLY public.rubric_evaluations FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: rubric_levels; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.rubric_levels (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    rubric_template_id uuid NOT NULL,
+    label character varying NOT NULL,
+    points numeric(6,2) NOT NULL,
+    "position" integer DEFAULT 0 NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+ALTER TABLE ONLY public.rubric_levels FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: rubric_templates; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.rubric_templates (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    authored_by_user_id uuid NOT NULL,
+    name character varying NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+ALTER TABLE ONLY public.rubric_templates FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: schema_migrations; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1881,6 +1974,46 @@ ALTER TABLE ONLY public.roster_import_rows
 
 
 --
+-- Name: rubric_cell_descriptors rubric_cell_descriptors_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.rubric_cell_descriptors
+    ADD CONSTRAINT rubric_cell_descriptors_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: rubric_criteria rubric_criteria_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.rubric_criteria
+    ADD CONSTRAINT rubric_criteria_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: rubric_evaluations rubric_evaluations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.rubric_evaluations
+    ADD CONSTRAINT rubric_evaluations_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: rubric_levels rubric_levels_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.rubric_levels
+    ADD CONSTRAINT rubric_levels_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: rubric_templates rubric_templates_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.rubric_templates
+    ADD CONSTRAINT rubric_templates_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: schema_migrations schema_migrations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2177,6 +2310,55 @@ CREATE INDEX idx_rp_inst_permission ON public.role_permissions USING btree (inst
 --
 
 CREATE UNIQUE INDEX idx_rp_unique ON public.role_permissions USING btree (institution_id, role_id, permission_id);
+
+
+--
+-- Name: idx_rubric_cell_descriptors_on_institution; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_rubric_cell_descriptors_on_institution ON public.rubric_cell_descriptors USING btree (institution_id);
+
+
+--
+-- Name: idx_rubric_cell_descriptors_unique_cell; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_rubric_cell_descriptors_unique_cell ON public.rubric_cell_descriptors USING btree (rubric_criterion_id, rubric_level_id);
+
+
+--
+-- Name: idx_rubric_criteria_on_institution_template; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_rubric_criteria_on_institution_template ON public.rubric_criteria USING btree (institution_id, rubric_template_id);
+
+
+--
+-- Name: idx_rubric_evaluations_unique_group; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_rubric_evaluations_unique_group ON public.rubric_evaluations USING btree (institution_id, assignment_id, submission_group_id);
+
+
+--
+-- Name: idx_rubric_evaluations_unique_student; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_rubric_evaluations_unique_student ON public.rubric_evaluations USING btree (institution_id, assignment_id, student_id);
+
+
+--
+-- Name: idx_rubric_levels_on_institution_template; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_rubric_levels_on_institution_template ON public.rubric_levels USING btree (institution_id, rubric_template_id);
+
+
+--
+-- Name: idx_rubric_templates_on_institution_author; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_rubric_templates_on_institution_author ON public.rubric_templates USING btree (institution_id, authored_by_user_id);
 
 
 --
@@ -3176,6 +3358,22 @@ ALTER TABLE ONLY public.submission_attachments
 
 
 --
+-- Name: rubric_evaluations fk_rails_05f3c0a0d9; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.rubric_evaluations
+    ADD CONSTRAINT fk_rails_05f3c0a0d9 FOREIGN KEY (submission_group_id) REFERENCES public.submission_groups(id) ON DELETE CASCADE;
+
+
+--
+-- Name: rubric_cell_descriptors fk_rails_08263dde9d; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.rubric_cell_descriptors
+    ADD CONSTRAINT fk_rails_08263dde9d FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: assessments fk_rails_0a269157fd; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3352,6 +3550,14 @@ ALTER TABLE ONLY public.plan_price_tiers
 
 
 --
+-- Name: rubric_evaluations fk_rails_2bb4cfc474; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.rubric_evaluations
+    ADD CONSTRAINT fk_rails_2bb4cfc474 FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE CASCADE;
+
+
+--
 -- Name: session_notes fk_rails_2c82ac95c1; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3413,6 +3619,14 @@ ALTER TABLE ONLY public.submissions
 
 ALTER TABLE ONLY public.audit_events
     ADD CONSTRAINT fk_rails_373d303452 FOREIGN KEY (actor_institution_user_id) REFERENCES public.institution_users(id) ON DELETE SET NULL;
+
+
+--
+-- Name: rubric_evaluations fk_rails_3840ddaa8a; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.rubric_evaluations
+    ADD CONSTRAINT fk_rails_3840ddaa8a FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
 
 
 --
@@ -3496,6 +3710,22 @@ ALTER TABLE ONLY public.invoices
 
 
 --
+-- Name: rubric_templates fk_rails_47d9a03d06; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.rubric_templates
+    ADD CONSTRAINT fk_rails_47d9a03d06 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: rubric_cell_descriptors fk_rails_4a4a422198; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.rubric_cell_descriptors
+    ADD CONSTRAINT fk_rails_4a4a422198 FOREIGN KEY (rubric_criterion_id) REFERENCES public.rubric_criteria(id) ON DELETE CASCADE;
+
+
+--
 -- Name: submission_groups fk_rails_4c975513bf; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3549,6 +3779,14 @@ ALTER TABLE ONLY public.institution_entitlements
 
 ALTER TABLE ONLY public.assignment_materials
     ADD CONSTRAINT fk_rails_54ffd64328 FOREIGN KEY (assignment_id) REFERENCES public.assignments(id) ON DELETE CASCADE;
+
+
+--
+-- Name: rubric_evaluations fk_rails_55498d8d16; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.rubric_evaluations
+    ADD CONSTRAINT fk_rails_55498d8d16 FOREIGN KEY (evaluated_by_user_id) REFERENCES public.users(id) ON DELETE SET NULL;
 
 
 --
@@ -3669,6 +3907,14 @@ ALTER TABLE ONLY public.usage_events
 
 ALTER TABLE ONLY public.institution_settings
     ADD CONSTRAINT fk_rails_693e18446a FOREIGN KEY (institution_id) REFERENCES public.institutions(id);
+
+
+--
+-- Name: rubric_criteria fk_rails_697dff3820; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.rubric_criteria
+    ADD CONSTRAINT fk_rails_697dff3820 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
 
 
 --
@@ -3840,6 +4086,14 @@ ALTER TABLE ONLY public.conversations
 
 
 --
+-- Name: rubric_criteria fk_rails_80f1e80590; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.rubric_criteria
+    ADD CONSTRAINT fk_rails_80f1e80590 FOREIGN KEY (rubric_template_id) REFERENCES public.rubric_templates(id) ON DELETE CASCADE;
+
+
+--
 -- Name: attendance_records fk_rails_828d16c97c; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3877,6 +4131,14 @@ ALTER TABLE ONLY public.guardian_students
 
 ALTER TABLE ONLY public.submission_attachments
     ADD CONSTRAINT fk_rails_903b1e71cc FOREIGN KEY (attached_by_user_id) REFERENCES public.users(id) ON DELETE SET NULL;
+
+
+--
+-- Name: rubric_levels fk_rails_917a9be109; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.rubric_levels
+    ADD CONSTRAINT fk_rails_917a9be109 FOREIGN KEY (rubric_template_id) REFERENCES public.rubric_templates(id) ON DELETE CASCADE;
 
 
 --
@@ -3965,6 +4227,14 @@ ALTER TABLE ONLY public.payments
 
 ALTER TABLE ONLY public.announcements
     ADD CONSTRAINT fk_rails_ae3a554996 FOREIGN KEY (author_institution_user_id) REFERENCES public.institution_users(id) ON DELETE SET NULL;
+
+
+--
+-- Name: assignments fk_rails_ae4a98177d; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.assignments
+    ADD CONSTRAINT fk_rails_ae4a98177d FOREIGN KEY (rubric_template_id) REFERENCES public.rubric_templates(id) ON DELETE SET NULL;
 
 
 --
@@ -4144,6 +4414,14 @@ ALTER TABLE ONLY public.teachers
 
 
 --
+-- Name: rubric_cell_descriptors fk_rails_c4fc274650; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.rubric_cell_descriptors
+    ADD CONSTRAINT fk_rails_c4fc274650 FOREIGN KEY (rubric_level_id) REFERENCES public.rubric_levels(id) ON DELETE CASCADE;
+
+
+--
 -- Name: students fk_rails_c6f327792b; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4208,6 +4486,14 @@ ALTER TABLE ONLY public.roster_import_batches
 
 
 --
+-- Name: rubric_templates fk_rails_d4ae9b7938; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.rubric_templates
+    ADD CONSTRAINT fk_rails_d4ae9b7938 FOREIGN KEY (authored_by_user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
 -- Name: conversation_participants fk_rails_d4fdd4cae0; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4232,11 +4518,27 @@ ALTER TABLE ONLY public.roster_import_rows
 
 
 --
+-- Name: rubric_levels fk_rails_da91b8ecba; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.rubric_levels
+    ADD CONSTRAINT fk_rails_da91b8ecba FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: employment_periods fk_rails_daffc2b6c8; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.employment_periods
     ADD CONSTRAINT fk_rails_daffc2b6c8 FOREIGN KEY (staff_member_id) REFERENCES public.staff_members(id) ON DELETE CASCADE;
+
+
+--
+-- Name: rubric_evaluations fk_rails_dd5889f3a1; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.rubric_evaluations
+    ADD CONSTRAINT fk_rails_dd5889f3a1 FOREIGN KEY (assignment_id) REFERENCES public.assignments(id) ON DELETE CASCADE;
 
 
 --
@@ -4836,6 +5138,71 @@ CREATE POLICY roster_import_rows_tenant_isolation ON public.roster_import_rows U
 
 
 --
+-- Name: rubric_cell_descriptors; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.rubric_cell_descriptors ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: rubric_cell_descriptors rubric_cell_descriptors_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY rubric_cell_descriptors_tenant_isolation ON public.rubric_cell_descriptors USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: rubric_criteria; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.rubric_criteria ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: rubric_criteria rubric_criteria_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY rubric_criteria_tenant_isolation ON public.rubric_criteria USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: rubric_evaluations; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.rubric_evaluations ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: rubric_evaluations rubric_evaluations_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY rubric_evaluations_tenant_isolation ON public.rubric_evaluations USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: rubric_levels; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.rubric_levels ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: rubric_levels rubric_levels_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY rubric_levels_tenant_isolation ON public.rubric_levels USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: rubric_templates; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.rubric_templates ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: rubric_templates rubric_templates_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY rubric_templates_tenant_isolation ON public.rubric_templates USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
 -- Name: sections; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -4998,6 +5365,8 @@ CREATE POLICY teaching_assignments_tenant_isolation ON public.teaching_assignmen
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260716151744'),
+('20260716151743'),
 ('20260716143401'),
 ('20260716140030'),
 ('20260716131320'),

@@ -16,6 +16,7 @@ module Assignments
       @subject = find_subject
       authorize!("assignment.manage", @subject)
       @assignment = Assignments::Assignment.new
+      @rubric_templates = own_rubric_templates
     end
 
     def create
@@ -38,6 +39,7 @@ module Assignments
       @subject = find_subject
       @assignment = find_assignment
       authorize!("assignment.manage", @subject)
+      @rubric_templates = own_rubric_templates
     end
 
     def update
@@ -62,6 +64,15 @@ module Assignments
       # submitting only make sense against a published assignment).
       @rows = @assignment.published? ? Assignments::GradingView.for(@assignment) : []
       @roster = Assignments::Roster.for_subject(@subject).order(:last_name, :first_name)
+
+      # Draft reads the LIVE template (same "draft reads live, publish
+      # freezes" split as report_cards) — published reads ONLY the frozen
+      # snapshot, never the live library again (v1.26.0).
+      if @assignment.rubric?
+        @rubric_view = @assignment.published? ? @assignment.rubric_snapshot : @assignment.rubric_template&.snapshot
+        @rubric_evaluations_by_student = Assignments::RubricEvaluation.where(assignment: @assignment)
+          .index_by { |e| e.student_id || e.submission_group_id } if @assignment.published?
+      end
 
       if @assignment.group_work? && @assignment.published?
         @groups = @assignment.submission_groups.includes(:students, :submission).order(:name)
@@ -111,10 +122,22 @@ module Assignments
         return
       end
 
-      # Group bulk-set FIRST, then per-student overrides — so a teacher who
-      # fills both a group score AND a specific student's box in the SAME
-      # submit gets the override to win (matches "calificar grupo... el
-      # docente puede luego modificar la nota de un integrante", §0.2).
+      if @assignment.rubric?
+        grade_by_rubric
+      else
+        grade_directly
+      end
+
+      redirect_to assignments_subject_assignment_path(@subject, @assignment), notice: "Notas guardadas."
+    end
+
+    private
+
+    # Group bulk-set FIRST, then per-student overrides — so a teacher who
+    # fills both a group score AND a specific student's box in the SAME
+    # submit gets the override to win (matches "calificar grupo... el
+    # docente puede luego modificar la nota de un integrante", §0.2).
+    def grade_directly
       (params[:group_scores]&.to_unsafe_h || {}).each do |group_id, score|
         next if score.blank?
 
@@ -133,11 +156,33 @@ module Assignments
 
         Assignments::GradeRecorder.call(assignment: @assignment, student: student, score: score)
       end
-
-      redirect_to assignments_subject_assignment_path(@subject, @assignment), notice: "Notas guardadas."
     end
 
-    private
+    # Same "group first, then per-student override" ordering as direct
+    # grading — a rubric evaluation for one member overrides the group's
+    # shared one exactly like a direct score override would.
+    def grade_by_rubric
+      (params[:group_rubric_evaluations]&.to_unsafe_h || {}).each do |group_id, levels_by_criterion|
+        next if levels_by_criterion.blank?
+
+        group = Assignments::SubmissionGroup.find_by(institution_id: Current.institution_id,
+          assignment_id: @assignment.id, id: group_id)
+        next if group.nil?
+
+        Assignments::GroupRubricGrader.call(assignment: @assignment, submission_group: group,
+          levels_by_criterion: levels_by_criterion, evaluated_by: Current.user)
+      end
+
+      (params[:rubric_evaluations]&.to_unsafe_h || {}).each do |student_id, levels_by_criterion|
+        next if levels_by_criterion.blank?
+
+        student = GroupManagement::Student.find_by(institution_id: Current.institution_id, id: student_id)
+        next if student.nil?
+
+        Assignments::RubricGrader.call(assignment: @assignment, student: student,
+          levels_by_criterion: levels_by_criterion, evaluated_by: Current.user)
+      end
+    end
 
     def find_subject
       subject = Schedules::Subject.find_by(institution_id: Current.institution_id, id: params[:subject_id])
@@ -155,10 +200,17 @@ module Assignments
     end
 
     def assignment_params
-      # group_work is only EVER effective while draft — Assignment's own
-      # before_validation (lock_group_work_after_publish) discards any
-      # change once published, regardless of what's submitted here.
-      params.require(:assignment).permit(:title, :instructions, :due_date, :group_work)
+      # group_work/evaluation_method/rubric_template_id are only EVER
+      # effective while draft — Assignment's own before_validations
+      # (lock_group_work_after_publish, lock_evaluation_method_after_publish)
+      # discard any change once published, regardless of what's submitted here.
+      params.require(:assignment).permit(:title, :instructions, :due_date, :group_work, :evaluation_method,
+        :rubric_template_id)
+    end
+
+    def own_rubric_templates
+      Assignments::RubricTemplate.where(institution_id: Current.institution_id, authored_by_user_id: Current.user.id)
+        .order(:name)
     end
   end
 end

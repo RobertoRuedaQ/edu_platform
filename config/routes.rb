@@ -267,6 +267,19 @@ Rails.application.routes.draw do
   # never a separate grades namespace, since the grade always writes to the
   # one gradebook (schedules::Assessment) via Assignments::GradeRecorder.
   namespace :assignments do
+    # rúbricas (v1.26.0, slice 4) — the reusable LIBRARY, top-level (never
+    # nested under a subject: a docente's rubrics are reusable across every
+    # subject/task they teach, not scoped to one). Same assignment.manage
+    # gate as the rest of this namespace; author-owned visibility enforced
+    # in the controller, not a route concern.
+    resources :rubric_templates, only: %i[index new create edit update destroy] do
+      resources :rubric_criteria, only: %i[create update destroy], controller: "rubric_criteria"
+      resources :rubric_levels, only: %i[create update destroy], controller: "rubric_levels"
+      # ONE bulk save for the whole descriptor matrix (criteria × levels) —
+      # same "hash of nested params in one POST" shape #grade already uses
+      # for scores/group_scores, not a per-cell round trip.
+      resource :cell_descriptors, only: :update, controller: "rubric_cell_descriptors"
+    end
     resources :subjects, only: :index do
       resources :assignments, only: %i[index new create edit update show destroy] do
         post :publish, on: :member

@@ -1,0 +1,28 @@
+<%# locals: (rubric_view:, field_name:, current_level_ids: {}) -%>
+<%# The interactive grading grid (v1.26.0) — tap a level per criterion, see
+    the calculated score live (Stimulus, zero round-trip per click). The
+    server (Assignments::RubricScore) is the real source of truth for the
+    persisted grade; this is display-only until the surrounding form's
+    "Guardar notas" actually submits. rubric_view is the FROZEN snapshot
+    (never the live template) once published. -%>
+<div class="rubric-grid" data-controller="rubric-grid">
+  <%= render layout: "shared/table",
+        locals: { headers: [ "Criterio" ] + rubric_view["levels"].map { |l| "#{l['label']} (#{l['points']})" } } do -%>
+    <% rubric_view["criteria"].each do |criterion| -%>
+      <tr data-rubric-grid-target="criterionRow" data-weight="<%= criterion["weight"] %>">
+        <th scope="row"><%= criterion["name"] %></th>
+        <% rubric_view["levels"].each do |level| -%>
+          <td>
+            <label class="rubric-cell" title="<%= rubric_view.dig("descriptors", criterion["id"], level["id"]) %>">
+              <input type="radio" name="<%= field_name %>[<%= criterion["id"] %>]" value="<%= level["id"] %>"
+                     data-points="<%= level["points"] %>" data-action="rubric-grid#recompute"
+                     <%= "checked" if current_level_ids[criterion["id"]] == level["id"] %>>
+              <%= level["label"] %>
+            </label>
+          </td>
+        <% end -%>
+      </tr>
+    <% end -%>
+  <% end -%>
+  <p>Nota calculada: <output data-rubric-grid-target="output">—</output></p>
+</div>

@@ -1,4 +1,4 @@
-<%# locals: (assignment:, url:) -%>
+<%# locals: (assignment:, url:, rubric_templates:) -%>
 <%= form_with model: assignment, url: url do |f| -%>
   <% if assignment.errors.any? -%>
     <%= render "shared/alert", variant: :danger, message: assignment.errors.full_messages.join(", ") %>
@@ -24,6 +24,39 @@
         <input type="checkbox" name="assignment[group_work]" value="1" <%= "checked" if assignment.group_work? %>>
         Entrega grupal
       </label>
+    </div>
+  <% end -%>
+
+  <%# evaluation_method/rubric_template_id are only settable while draft —
+      Assignment#lock_evaluation_method_after_publish discards any change
+      once published, same freeze discipline as group_work above. %>
+  <% if assignment.new_record? || assignment.draft? -%>
+    <div class="field">
+      <label class="field__label">Método de evaluación</label>
+      <label>
+        <input type="radio" name="assignment[evaluation_method]" value="direct"
+               <%= "checked" if assignment.new_record? || assignment.direct? %>>
+        Nota directa
+      </label>
+      <label>
+        <input type="radio" name="assignment[evaluation_method]" value="rubric" <%= "checked" if assignment.rubric? %>>
+        Rúbrica
+      </label>
+    </div>
+
+    <div class="field">
+      <label class="field__label" for="assignment_rubric_template_id">Plantilla de rúbrica</label>
+      <select class="field__input" id="assignment_rubric_template_id" name="assignment[rubric_template_id]">
+        <option value="">— Selecciona una plantilla —</option>
+        <% rubric_templates.each do |template| -%>
+          <option value="<%= template.id %>" <%= "selected" if assignment.rubric_template_id == template.id %>>
+            <%= template.name %>
+          </option>
+        <% end -%>
+      </select>
+      <% if rubric_templates.none? -%>
+        <p class="text-muted"><%= link_to "Crea una rúbrica primero", new_assignments_rubric_template_path %>.</p>
+      <% end -%>
     </div>
   <% end -%>
 

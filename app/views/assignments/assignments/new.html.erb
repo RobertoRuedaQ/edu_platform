@@ -2,4 +2,5 @@
 
 <%= render "shared/page_header", title: "Nueva tarea de #{@subject.name}" %>
 
-<%= render "form", assignment: @assignment, url: assignments_subject_assignments_path(@subject) %>
+<%= render "form", assignment: @assignment, url: assignments_subject_assignments_path(@subject),
+      rubric_templates: @rubric_templates %>

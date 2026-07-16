@@ -26,7 +26,14 @@ module Assignments
           enrollment.assessments.create!(institution: assignment.institution, assignment: assignment,
             kind: "tarea", title: assignment.title, term: assignment.subject.term)
         end
-        assignment.update!(status: "published", published_at: Time.current)
+
+        # The ONE moment the live rubric library is ever read for grading
+        # purposes (v1.26.0) — same freeze discipline as
+        # ControlPlane::Subscription#sign!/ReportCards::Publisher: nothing
+        # downstream re-reads rubric_template afterward, only this snapshot.
+        attrs = { status: "published", published_at: Time.current }
+        attrs[:rubric_snapshot] = assignment.rubric_template.snapshot if assignment.rubric? && assignment.rubric_template
+        assignment.update!(attrs)
       end
       assignment
     end
