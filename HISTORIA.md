@@ -11,11 +11,121 @@
 
 ---
 
-## Changelog completo (v1.0.0 → v1.23.0)
+## Changelog completo (v1.0.0 → v1.24.0)
 
 > Copiado verbatim de §14 de `PROJECT_STATE.md` v1.5.0, antes de que el split editorial (v1.5.1)
 > moviera el changelog fuera del doc magro. Las entradas v1.6.0+ se escribieron directamente aquí,
 > ya con el split vigente.
+
+### v1.24.0 — 2026-07-16 — `assignments`: adjuntos de entrega, slice 3/4 (ítem #6 del MVP)
+
+**Adjuntar/quitar/listar/servir archivos (docx/pdf/jpg/png, ≤10MB, ≤5 por entrega) sobre una
+`Assignments::Submission` YA EXISTENTE** (estudiante XOR grupo). Fuera de alcance: materiales del
+docente (slice 3b), rúbricas (slice 4), conversión de docx. No toca el fan-out de `Assessment`,
+`GradingView`, ni el eje entrega↔nota.
+
+**Recon (STOP #1 — contradicción material con la premisa del prompt):** Active Storage YA ESTABA
+instalado desde el primer commit — `active_storage_{blobs,attachments,variant_records}` en
+`db/structure.sql`, `config/storage.yml` con servicio `disk` local ya configurado, `config.
+active_storage.service` seteado en los tres entornos. El prompt asumía una instalación desde cero;
+se reportó el hallazgo y se ajustó el plan: ninguna migración de instalación, solo la tabla puente
+y el código de aplicación. Recon también corrigió el nombre real de la tabla FK: `submissions`, no
+`assignments_submissions` como asumía el prompt.
+
+**El diseño real: Active Storage como GLOBAL, sin RLS — la tabla puente es el límite de tenant.**
+`active_storage_blobs/attachments/variant_records` son tablas de Rails sin `institution_id` y sin
+RLS — adjuntar directamente ahí sería una exposición cross-tenant real, no una preferencia de
+estilo. Esta razón ya estaba documentada en el docstring de `Core::RosterImportBatch` (evitaba
+`has_one_attached` por el mismo motivo) — fue el precedente que validó todo el diseño del slice.
+`Assignments::SubmissionAttachment` es la tabla puente tenant-scoped (RLS `ENABLE+FORCE`,
+`institution_id` NOT NULL): un blob solo es alcanzable resolviendo primero SU fila, que RLS ya
+scopea. Las tablas crudas de Active Storage se dejan exactamente como Rails las entrega — nunca se
+les agrega RLS (ver guardrail nuevo en `OPEN_PROCESS.md`).
+
+**Content-type real, sin gemas nuevas:** la validación de tipo usa la detección nativa de Active
+Storage (`Marcel::MimeType.for`, basada en magic bytes vía `identify: true` por defecto) — nunca la
+extensión del archivo ni el header declarado por el cliente. No se agregó `ActiveStorageValidations`
+ni ninguna otra gema — la validación vive en un service object (`Assignments::AttachmentAdder`),
+nunca en el modelo. Tamaño se valida ANTES de adjuntar (evita la escritura a disco de un upload
+obviamente sobredimensionado); tipo se valida DESPUÉS de adjuntar (la detección de Marcel solo
+corre una vez que el blob existe) — un adjunto rechazado se purga de inmediato, nunca queda un blob
+huérfano.
+
+**Frontera de servicio: tres controllers, no uno.** El prompt sugería un único
+`Assignments::AttachmentsController#show` compartido; se decidió, siguiendo la convención ya
+establecida en communication/v1.20.0 ("nunca colapsar distintos caminos de acceso en un
+controller"), usar TRES: `Assignments::AttachmentsController` (docente, solo lectura),
+`Portals::StudentAttachmentsController` y `Portals::GuardianAttachmentsController` (create/show/
+destroy). Los tres comparten SOLO la lógica de streaming genérica vía el concern
+`AttachmentServing` — cada uno resuelve su propio scope (StudentView/GuardianScope/roster) de forma
+independiente, nunca un `SubmissionAttachment.find` crudo. Ninguno usa las rutas firmadas propias de
+Active Storage (`rails_blob_path`/`rails_representation_path`) — el archivo siempre se transmite a
+través del controller propio, después de resolver el scope.
+
+**Lo construido:**
+- Migración `20260716140030_create_submission_attachments.rb`: tabla `submission_attachments`
+  (`institution_id`, `submission_id` FK a `submissions` on_delete cascade, `attached_by_user_id` FK
+  a `users` nullable/nullify — atribución únicamente, nunca redefine de quién es el trabajo), RLS
+  `ENABLE+FORCE`+policy, índice `(institution_id, submission_id)`. Corrida en dev y test.
+- Modelo `Assignments::SubmissionAttachment` (`has_one_attached :file`, `disposition` — docx =
+  `attachment`, pdf/jpg/png = `inline`); `Assignments::Submission` gana
+  `has_many :submission_attachments, dependent: :destroy`.
+- Servicio `Assignments::AttachmentAdder` (tamaño ≤10MB, cupo ≤5 contando existentes, tipo real ∈
+  {docx, pdf, jpg, png}, bloqueado solo si la tarea está `archived` — "tardía" sigue siendo un flag
+  calculado, nunca un bloqueo).
+- Concern `AttachmentServing` (streaming + mapeo de errores, compartido por los tres controllers de
+  servicio) + `Assignments::AttachmentsController#show` (docente, RBAC `assignment.manage`),
+  `Portals::StudentAttachmentsController` y `Portals::GuardianAttachmentsController`
+  (`create`/`show`/`destroy`, misma disciplina de scope encadenado que v1.22.0/v1.23.0 — el gate de
+  lectura ES el gate de escritura; para el grupo, la fila `GroupMembership` del PROPIO actor resuelve
+  la `Submission` compartida, nunca un `group_id` del request).
+- Rutas anidadas bajo la tarea (no bajo un recurso `submission`, que no tiene ruta propia) en las
+  tres superficies.
+- Vistas: `_submission_form.html.erb` (portal, compartido) gana lista de adjuntos + formulario de
+  subida (oculto tras el cupo de 5); `assignments/show.html.erb` (docente) gana enlaces de adjunto
+  por fila/grupo vía el partial nuevo `_attachment_links.html.erb`, respetando `disposition`.
+
+**Caso de aceptación, verificado end-to-end:** un estudiante adjunta docx/pdf/jpg/png a su propia
+entrega y el docente los ve/descarga con la disposición correcta (docx = descarga, resto = inline);
+un archivo renombrado para simular un tipo permitido (bytes reales de GIF con extensión `.pdf`) se
+rechaza por el tipo REAL, nunca por el nombre; un tipo prohibido subido honestamente también se
+rechaza; el 6.º adjunto (incluso en un resubmit) se rechaza manteniendo el cupo en 5; un archivo de
+11MB se rechaza antes de tocar disco; un acudiente adjunta por su hija — la atribución queda en el
+acudiente, la propiedad de la entrega sigue siendo de la niña; un acudiente ajeno no puede adjuntar
+para un estudiante que no es su hijo (404); un integrante de un grupo adjunta y OTRO integrante ve y
+quita el mismo adjunto (misma fila compartida); un adjunto sembrado en otra institución nunca se
+filtra ni por la ruta del docente ni por la del portal del estudiante (aislamiento cross-tenant,
+verificado con query real bajo RLS, no una relectura de `current_setting()`).
+
+**Fixtures de test reales, no solo bytes de cabecera:** se generaron archivos reales en
+`test/fixtures/files/` (`attachment.{docx,pdf,jpg,png,gif}`, `fake.pdf`) — el `.docx` es un ZIP OOXML
+válido mínimo (`[Content_Types].xml`/`_rels/.rels`/`word/document.xml`) para que la detección de
+Marcel (que busca `PK\x03\x04` + `[Content_Types].xml` + `word/` cerca del inicio del archivo)
+lo reconozca de verdad como `application/vnd.openxmlformats-officedocument.wordprocessingml.
+document`, no solo por extensión; `fake.pdf` tiene bytes reales de GIF con extensión `.pdf` — Marcel
+prioriza la detección por extensión cuando el contenido no tiene una firma mágica clara (texto
+plano, por ejemplo), así que el caso de "tipo real distinto del nombre" exige un contenido con firma
+mágica propia que contradiga la extensión, no cualquier texto renombrado.
+
+**Resultado:** 519 runs / 0 failures / 0 errors / 1 skip preexistente (baseline 510; 9 tests nuevos
+en `test/integration/attachments_test.rb`). `bin/rails zeitwerk:check` verde. Una migración,
+aplicada en dev y test.
+
+**Archivos nuevos/editados:**
+- Migración: `db/migrate/20260716140030_create_submission_attachments.rb`.
+- Modelos: `app/domains/assignments/models/submission_attachment.rb` (+ edit a `submission.rb`).
+- Servicios: `app/domains/assignments/services/attachment_adder.rb`.
+- Controllers: `app/controllers/concerns/attachment_serving.rb`,
+  `app/controllers/assignments/attachments_controller.rb`,
+  `app/controllers/portals/{student,guardian}_attachments_controller.rb` (+ edits a
+  `app/controllers/portals/{student,guardian}_assignments_controller.rb`).
+- Vistas: `app/views/assignments/_attachment_links.html.erb` (+ edits a
+  `_submission_form.html.erb`, `assignments/assignments/show.html.erb`).
+- Config: `config/routes.rb`.
+- Proceso: `OPEN_PROCESS.md` (guardrail nuevo sobre Active Storage sin RLS; cierre del ítem 11
+  slice 3).
+- Tests: `test/integration/attachments_test.rb`; fixtures binarias reales en
+  `test/fixtures/files/attachment.{docx,pdf,jpg,png,gif}` y `fake.pdf`.
 
 ### v1.23.0 — 2026-07-16 — `assignments`: entregas grupales (ítem #6 del MVP)
 

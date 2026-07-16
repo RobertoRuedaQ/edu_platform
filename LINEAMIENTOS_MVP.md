@@ -239,14 +239,17 @@ v1.14.0: modelos reales (`Charge`/`Payment`/`PaymentPlan`/`Installment`/`Student
    acceso (compose RBAC / bandeja-participación / responder-participación / auditoría RBAC).
    Diferidos anotados (fan-out 1:1 a todos los cuidadores, threading, tags, acudiente-inicia) — ver
    `PROJECT_STATE.md` §8.2/`HISTORIA.md`.
-6. **`assignments`** (tareas académicas) — **slices 1–2/4 + entregas grupales hechos.** ~~Publicar +
+6. **`assignments`** (tareas académicas) — **slices 1–3/4 hechos.** ~~Publicar +
    ver + calificar directo~~ ✅ **cerrado (v1.21.0)**. ~~Entrega de texto~~ ✅ **cerrado (v1.22.0)**.
    ~~Entregas grupales~~ ✅ **cerrado (v1.23.0)**: `group_work` toggle por-tarea, `Submission`
    generalizada a estudiante XOR grupo, nota grupal = bulk-set per-student + override individual
-   (sin almacén grupal aparte), entrega compartida editable por cualquier integrante. **Slices 3–4
-   pendientes** (adjuntos, con checkpoint propio de Active Storage/serving/docx → rúbricas) —
-   roadmap completo en `HISTORIA.md` v1.21.0–v1.23.0. **Siguiente ítem del camino crítico** (slice
-   3, o `calendar` — ver `OPEN_PROCESS.md`).
+   (sin almacén grupal aparte), entrega compartida editable por cualquier integrante. ~~Adjuntos de
+   entrega~~ ✅ **cerrado (v1.24.0)**: docx/pdf/jpg/png (≤10MB, ≤5) sobre una `Submission` ya
+   existente, tabla puente tenant-scoped (Active Storage crudo sin RLS), content-type real vía
+   Marcel, tres controllers de servicio (nunca las rutas firmadas default). **Slice 3b (materiales
+   del docente) y slice 4 (rúbricas) pendientes** — roadmap completo en `HISTORIA.md`
+   v1.21.0–v1.24.0. **Siguiente ítem del camino crítico** (slice 3b, o `calendar` — ver
+   `OPEN_PROCESS.md`).
 7. **`calendar`** + scope de visibilidad del cuidador (consume fechas de `assignments`, `attendance`,
    `extracurriculars`).
 8. **`extracurriculars`** (depende de matrícula/término; actividad paga = `Charge` en `finance`, de #4).

@@ -41,5 +41,17 @@ module Portals
       portal_student_assignment_path(assignment)
     end
     helper_method :assignment_path_for
+
+    # attachments (v1.24.0) — one path covers both #show (GET, download)
+    # and #destroy (DELETE, quitar); upload is the collection route.
+    def attachment_path_for(attachment)
+      portal_student_assignment_attachment_path(attachment.submission.assignment, attachment)
+    end
+    helper_method :attachment_path_for
+
+    def attachment_upload_path_for(assignment)
+      portal_student_assignment_attachments_path(assignment)
+    end
+    helper_method :attachment_upload_path_for
   end
 end

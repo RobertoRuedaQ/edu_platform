@@ -60,6 +60,13 @@ Rails.application.routes.draw do
       # trusts params directly (see that controller's docstring).
       resources :assignments, only: %i[index show], controller: "student_assignments" do
         resource :submission, only: :create, controller: "student_submissions"
+        # attachments (v1.24.0, slice 3) — nested under the ASSIGNMENT, not
+        # a submission resource (submissions have no route of their own to
+        # nest under); the controller resolves student -> assignment ->
+        # existing submission -> attachment, same chained-scope discipline
+        # as StudentSubmissionsController. #show streams the file through
+        # this controller — NEVER Active Storage's own signed routes.
+        resources :attachments, only: %i[create show destroy], controller: "student_attachments"
       end
     end
     resource :guardian, only: :show, controller: "guardian_portal" do
@@ -86,6 +93,9 @@ Rails.application.routes.draw do
         # BEHALF of this specific already-scoped child (B1).
         resources :assignments, only: %i[index show], controller: "guardian_assignments" do
           resource :submission, only: :create, controller: "guardian_submissions"
+          # attachments (v1.24.0, slice 3) — on behalf of THIS specific
+          # already-scoped child (B1), same discipline as :submission above.
+          resources :attachments, only: %i[create show destroy], controller: "guardian_attachments"
         end
       end
       # communication (v1.19.0): org-wide, NOT per-child — a sibling of
@@ -257,6 +267,13 @@ Rails.application.routes.draw do
         # assignment (groups are never reused across tasks, §0), so this
         # nests under :assignments, not a top-level resource.
         resources :submission_groups, only: :create
+        # attachments (v1.24.0, slice 3) — teacher-side is READ-ONLY: the
+        # teacher never uploads here, only views/downloads what a student/
+        # guardian attached (§6). #show streams through
+        # Assignments::AttachmentsController, scoped by the SAME
+        # assignment.manage authorize! this whole namespace already gates —
+        # never Active Storage's own signed routes.
+        resources :attachments, only: :show
       end
     end
   end

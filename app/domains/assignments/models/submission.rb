@@ -19,6 +19,8 @@ module Assignments
     belongs_to :student, class_name: "GroupManagement::Student", optional: true
     belongs_to :submission_group, class_name: "Assignments::SubmissionGroup", optional: true
     belongs_to :submitted_by_user, class_name: "Core::User", optional: true
+    has_many :submission_attachments, class_name: "Assignments::SubmissionAttachment",
+      foreign_key: :submission_id, inverse_of: :submission, dependent: :destroy
 
     validates :body, presence: true
     validates :student_id, uniqueness: { scope: :assignment_id }, allow_nil: true

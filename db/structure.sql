@@ -1258,6 +1258,22 @@ ALTER TABLE ONLY public.subjects FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: submission_attachments; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.submission_attachments (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    submission_id uuid NOT NULL,
+    attached_by_user_id uuid,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+ALTER TABLE ONLY public.submission_attachments FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: submission_groups; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1921,6 +1937,14 @@ ALTER TABLE ONLY public.subjects
 
 
 --
+-- Name: submission_attachments submission_attachments_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.submission_attachments
+    ADD CONSTRAINT submission_attachments_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: submission_groups submission_groups_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2122,6 +2146,13 @@ CREATE INDEX idx_rp_inst_permission ON public.role_permissions USING btree (inst
 --
 
 CREATE UNIQUE INDEX idx_rp_unique ON public.role_permissions USING btree (institution_id, role_id, permission_id);
+
+
+--
+-- Name: idx_submission_attachments_on_institution_submission; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_submission_attachments_on_institution_submission ON public.submission_attachments USING btree (institution_id, submission_id);
 
 
 --
@@ -3106,6 +3137,14 @@ ALTER TABLE ONLY public.sections
 
 
 --
+-- Name: submission_attachments fk_rails_05c03d867a; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.submission_attachments
+    ADD CONSTRAINT fk_rails_05c03d867a FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: assessments fk_rails_0a269157fd; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3594,6 +3633,14 @@ ALTER TABLE ONLY public.academic_terms
 
 
 --
+-- Name: submission_attachments fk_rails_69cd53b44b; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.submission_attachments
+    ADD CONSTRAINT fk_rails_69cd53b44b FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: enrollments fk_rails_6a2ee9516d; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3767,6 +3814,14 @@ ALTER TABLE ONLY public.counseling_cases
 
 ALTER TABLE ONLY public.guardian_students
     ADD CONSTRAINT fk_rails_8a488ba66f FOREIGN KEY (guardian_user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: submission_attachments fk_rails_903b1e71cc; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.submission_attachments
+    ADD CONSTRAINT fk_rails_903b1e71cc FOREIGN KEY (attached_by_user_id) REFERENCES public.users(id) ON DELETE SET NULL;
 
 
 --
@@ -4804,6 +4859,19 @@ CREATE POLICY subjects_tenant_isolation ON public.subjects USING ((institution_i
 
 
 --
+-- Name: submission_attachments; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.submission_attachments ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: submission_attachments submission_attachments_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY submission_attachments_tenant_isolation ON public.submission_attachments USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
 -- Name: submission_groups; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -4862,6 +4930,7 @@ CREATE POLICY teaching_assignments_tenant_isolation ON public.teaching_assignmen
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260716140030'),
 ('20260716131320'),
 ('20260715203148'),
 ('20260715195639'),

@@ -27,6 +27,8 @@
           <p><%= truncate(group.submission.body, length: 120) %>
             <% if group.submission.late? -%><strong>(tardía)</strong><% end -%>
           </p>
+          <%= render "assignments/attachment_links", assignment: @assignment, subject: @subject,
+                submission: group.submission %>
         <% else -%>
           <p class="text-muted">Sin entregar</p>
         <% end -%>
@@ -77,6 +79,8 @@
               <% elsif row.submission -%>
                 <%= truncate(row.submission.body, length: 80) %>
                 <% if row.submission.late? -%><strong>(tardía)</strong><% end -%>
+                <%= render "assignments/attachment_links", assignment: @assignment, subject: @subject,
+                      submission: row.submission %>
               <% else -%>
                 <span class="text-muted">Sin entregar</span>
               <% end -%>
