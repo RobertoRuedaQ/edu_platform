@@ -1,0 +1,16 @@
+<%# locals: (rubric_view:) -%>
+<%# Read-only, draft-only preview — reads the LIVE template (never a
+    snapshot yet; nothing is frozen until publish, v1.26.0). Grading
+    itself only ever happens once published (same rule as direct grading:
+    "Solo una tarea publicada tiene notas"). -%>
+<%= render layout: "shared/table",
+      locals: { headers: [ "Criterio (peso)" ] + rubric_view["levels"].map { |l| "#{l['label']} (#{l['points']})" } } do -%>
+  <% rubric_view["criteria"].each do |criterion| -%>
+    <tr>
+      <th scope="row"><%= criterion["name"] %> (<%= criterion["weight"] %>)</th>
+      <% rubric_view["levels"].each do |level| -%>
+        <td><%= rubric_view.dig("descriptors", criterion["id"], level["id"]) %></td>
+      <% end -%>
+    </tr>
+  <% end -%>
+<% end -%>

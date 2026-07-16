@@ -1,0 +1,18 @@
+<%# locals: (assignment:, student:) -%>
+<%# Read-only, relation-gated (v1.26.0) — the transparency that answers
+    "why Bueno and not Excelente", per criterion. nil (no render) for a
+    direct-graded assignment, or a rubric one not evaluated yet — never an
+    error, same empty-state discipline as the rest of this portal. -%>
+<% breakdown = Assignments::StudentView.rubric_breakdown_for(assignment, student) -%>
+<% if breakdown -%>
+  <%= render "shared/page_header", title: "Desglose de la rúbrica" %>
+  <%= render layout: "shared/table", locals: { headers: [ "Criterio", "Nivel obtenido", "Por qué" ] } do -%>
+    <% breakdown.each do |line| -%>
+      <tr>
+        <td><%= line[:criterion_name] %></td>
+        <td><%= line[:level_label] || "Sin evaluar" %></td>
+        <td><%= line[:descriptor] %></td>
+      </tr>
+    <% end -%>
+  <% end -%>
+<% end -%>

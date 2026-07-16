@@ -1,0 +1,13 @@
+<% content_for :title, "Nueva rúbrica" %>
+
+<%= render "shared/page_header", title: "Nueva rúbrica" %>
+
+<%= form_with model: @template, url: assignments_rubric_templates_path do |f| -%>
+  <% if @template.errors.any? -%>
+    <%= render "shared/alert", variant: :danger, message: @template.errors.full_messages.join(", ") %>
+  <% end -%>
+
+  <%= render "shared/field", label: "Nombre", name: "rubric_template[name]", type: "text", value: @template.name %>
+
+  <%= ui_button "Crear", type: "submit", variant: :primary %>
+<% end -%>

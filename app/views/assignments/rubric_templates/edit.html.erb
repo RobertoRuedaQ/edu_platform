@@ -1,0 +1,85 @@
+<% content_for :title, @template.name %>
+
+<%= render "shared/page_header",
+      title: @template.name,
+      actions: button_to("Eliminar rúbrica", assignments_rubric_template_path(@template), method: :delete,
+        class: "btn btn--danger btn--md") %>
+
+<%= form_with model: @template, url: assignments_rubric_template_path(@template) do -%>
+  <%= render "shared/field", label: "Nombre", name: "rubric_template[name]", type: "text", value: @template.name %>
+  <%= ui_button "Guardar nombre", type: "submit", variant: :secondary %>
+<% end -%>
+
+<%= render "shared/page_header", title: "Criterios" %>
+
+<% if @template.rubric_criteria.any? -%>
+  <%= render layout: "shared/table", locals: { headers: [ "Nombre", "Peso", "" ] } do -%>
+    <% @template.rubric_criteria.each do |criterion| -%>
+      <tr>
+        <td><%= criterion.name %></td>
+        <td><%= criterion.weight %></td>
+        <td>
+          <%= button_to "Quitar", assignments_rubric_template_rubric_criterium_path(@template, criterion),
+                method: :delete, class: "btn btn--danger btn--sm" %>
+        </td>
+      </tr>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <p class="text-muted">Sin criterios todavía — la nota no calcula hasta agregar al menos uno.</p>
+<% end -%>
+
+<%= form_with url: assignments_rubric_template_rubric_criteria_path(@template), method: :post do -%>
+  <%= render "shared/field", label: "Nombre del criterio", name: "rubric_criterion[name]", type: "text" %>
+  <%= render "shared/field", label: "Peso (relativo, no necesita sumar 100)", name: "rubric_criterion[weight]", type: "number" %>
+  <%= ui_button "Agregar criterio", type: "submit", variant: :secondary %>
+<% end -%>
+
+<%= render "shared/page_header", title: "Niveles" %>
+
+<% if @template.rubric_levels.any? -%>
+  <%= render layout: "shared/table", locals: { headers: [ "Etiqueta", "Puntos", "" ] } do -%>
+    <% @template.rubric_levels.each do |level| -%>
+      <tr>
+        <td><%= level.label %></td>
+        <td><%= level.points %></td>
+        <td>
+          <%= button_to "Quitar", assignments_rubric_template_rubric_level_path(@template, level),
+                method: :delete, class: "btn btn--danger btn--sm" %>
+        </td>
+      </tr>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <p class="text-muted">Sin niveles todavía — son las columnas compartidas de la matriz (ej. Incompleto/Básico/Bueno/Excelente).</p>
+<% end -%>
+
+<%= form_with url: assignments_rubric_template_rubric_levels_path(@template), method: :post do -%>
+  <%= render "shared/field", label: "Etiqueta", name: "rubric_level[label]", type: "text" %>
+  <%= render "shared/field", label: "Puntos", name: "rubric_level[points]", type: "number" %>
+  <%= ui_button "Agregar nivel", type: "submit", variant: :secondary %>
+<% end -%>
+
+<% if @template.rubric_criteria.any? && @template.rubric_levels.any? -%>
+  <%= render "shared/page_header", title: "Descriptores" %>
+  <p class="text-muted">Qué distingue un nivel de otro para cada criterio — opcional, pero hace la nota defendible ante el estudiante/acudiente.</p>
+
+  <%= form_with url: assignments_rubric_template_cell_descriptors_path(@template), method: :patch do -%>
+    <%= render layout: "shared/table",
+          locals: { headers: [ "" ] + @template.rubric_levels.map { |l| "#{l.label} (#{l.points})" } } do -%>
+      <% @template.rubric_criteria.each do |criterion| -%>
+        <tr>
+          <th scope="row"><%= criterion.name %></th>
+          <% @template.rubric_levels.each do |level| -%>
+            <td>
+              <input type="text" class="field__input"
+                     name="descriptors[<%= criterion.id %>][<%= level.id %>]"
+                     value="<%= @descriptors.dig(criterion.id, level.id) %>">
+            </td>
+          <% end -%>
+        </tr>
+      <% end -%>
+    <% end -%>
+    <%= ui_button "Guardar descriptores", type: "submit", variant: :primary %>
+  <% end -%>
+<% end -%>

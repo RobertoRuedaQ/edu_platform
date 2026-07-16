@@ -86,39 +86,61 @@
 <% if @assignment.published? -%>
   <% if @rows.any? -%>
     <%= form_with url: grade_assignments_subject_assignment_path(@subject, @assignment), method: :post do -%>
-      <% if @assignment.group_work? && @groups.any? -%>
-        <p class="text-muted">Aplicar una nota a todo el grupo (se puede sobrescribir por integrante abajo):</p>
-        <% @groups.each do |group| -%>
-          <div class="field">
-            <label class="field__label" for="group_score_<%= group.id %>"><%= group.name %></label>
-            <input class="field__input" id="group_score_<%= group.id %>" type="number" step="0.1" min="0" max="5"
-                   name="group_scores[<%= group.id %>]" placeholder="Aplicar a todo el grupo">
-          </div>
+      <% if @assignment.rubric? && @rubric_view -%>
+        <% if @assignment.group_work? && @groups.any? -%>
+          <p class="text-muted">Evaluar a todo el grupo (se puede sobrescribir por integrante abajo):</p>
+          <% @groups.each do |group| -%>
+            <%= render layout: "shared/card", locals: { title: group.name } do -%>
+              <%= render "assignments/rubric_grid", rubric_view: @rubric_view,
+                    field_name: "group_rubric_evaluations[#{group.id}]",
+                    current_level_ids: @rubric_evaluations_by_student[group.id]&.levels_by_criterion || {} %>
+            <% end -%>
+          <% end -%>
         <% end -%>
-      <% end -%>
 
-      <%= render layout: "shared/table",
-            locals: { headers: [ "Estudiante", (@assignment.group_work? ? "Grupo" : "Entrega"), "Nota" ] } do -%>
         <% @rows.each do |row| -%>
-          <tr>
-            <td><%= "#{row.student.first_name} #{row.student.last_name}" %></td>
-            <td>
-              <% if @assignment.group_work? -%>
-                <%= row.submission_group&.name || "Sin grupo" %>
-              <% elsif row.submission -%>
-                <%= truncate(row.submission.body, length: 80) %>
-                <% if row.submission.late? -%><strong>(tardía)</strong><% end -%>
-                <%= render "assignments/attachment_links", assignment: @assignment, subject: @subject,
-                      submission: row.submission %>
-              <% else -%>
-                <span class="text-muted">Sin entregar</span>
-              <% end -%>
-            </td>
-            <td>
-              <input class="field__input" type="number" step="0.1" min="0" max="5"
-                     name="scores[<%= row.student.id %>]" value="<%= row.assessment&.score %>" placeholder="Pendiente">
-            </td>
-          </tr>
+          <%= render layout: "shared/card",
+                locals: { title: "#{row.student.first_name} #{row.student.last_name} — nota actual: #{row.assessment&.score || 'pendiente'}" } do -%>
+            <%= render "assignments/rubric_grid", rubric_view: @rubric_view,
+                  field_name: "rubric_evaluations[#{row.student.id}]",
+                  current_level_ids: @rubric_evaluations_by_student[row.student.id]&.levels_by_criterion || {} %>
+          <% end -%>
+        <% end -%>
+      <% else -%>
+        <% if @assignment.group_work? && @groups.any? -%>
+          <p class="text-muted">Aplicar una nota a todo el grupo (se puede sobrescribir por integrante abajo):</p>
+          <% @groups.each do |group| -%>
+            <div class="field">
+              <label class="field__label" for="group_score_<%= group.id %>"><%= group.name %></label>
+              <input class="field__input" id="group_score_<%= group.id %>" type="number" step="0.1" min="0" max="5"
+                     name="group_scores[<%= group.id %>]" placeholder="Aplicar a todo el grupo">
+            </div>
+          <% end -%>
+        <% end -%>
+
+        <%= render layout: "shared/table",
+              locals: { headers: [ "Estudiante", (@assignment.group_work? ? "Grupo" : "Entrega"), "Nota" ] } do -%>
+          <% @rows.each do |row| -%>
+            <tr>
+              <td><%= "#{row.student.first_name} #{row.student.last_name}" %></td>
+              <td>
+                <% if @assignment.group_work? -%>
+                  <%= row.submission_group&.name || "Sin grupo" %>
+                <% elsif row.submission -%>
+                  <%= truncate(row.submission.body, length: 80) %>
+                  <% if row.submission.late? -%><strong>(tardía)</strong><% end -%>
+                  <%= render "assignments/attachment_links", assignment: @assignment, subject: @subject,
+                        submission: row.submission %>
+                <% else -%>
+                  <span class="text-muted">Sin entregar</span>
+                <% end -%>
+              </td>
+              <td>
+                <input class="field__input" type="number" step="0.1" min="0" max="5"
+                       name="scores[<%= row.student.id %>]" value="<%= row.assessment&.score %>" placeholder="Pendiente">
+              </td>
+            </tr>
+          <% end -%>
         <% end -%>
       <% end -%>
       <%= ui_button "Guardar notas", type: "submit", variant: :primary %>
@@ -134,6 +156,10 @@
       <% @roster.each do |student| -%>
         <tr><td><%= "#{student.first_name} #{student.last_name}" %></td></tr>
       <% end -%>
+    <% end -%>
+    <% if @assignment.rubric? && @rubric_view -%>
+      <%= render "shared/page_header", title: "Vista previa de la rúbrica" %>
+      <%= render "assignments/rubric_structure_preview", rubric_view: @rubric_view %>
     <% end -%>
   <% else -%>
     <%= render "shared/empty_state",

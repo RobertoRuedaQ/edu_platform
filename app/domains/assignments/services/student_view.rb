@@ -56,5 +56,35 @@ module Assignments
 
       Assignments::GroupMembership.find_by(assignment_id: assignment.id, student_id: student.id)&.submission_group
     end
+
+    # Per-criterion breakdown (level obtained + its descriptor) — the
+    # transparency that answers "why Bueno and not Excelente" (v1.26.0).
+    # Reads ONLY the frozen rubric_snapshot + the evaluation row, never the
+    # live template — same discipline as score_for reading only Assessment.
+    # nil for a direct-graded assignment, or a rubric one not evaluated yet.
+    def rubric_breakdown_for(assignment, student)
+      return nil unless assignment.rubric? && assignment.rubric_snapshot.present?
+
+      evaluation = if assignment.group_work?
+        group = group_for(assignment, student)
+        return nil if group.nil?
+
+        Assignments::RubricEvaluation.find_by(assignment_id: assignment.id, submission_group_id: group.id)
+      else
+        Assignments::RubricEvaluation.find_by(assignment_id: assignment.id, student_id: student.id)
+      end
+      return nil if evaluation.nil?
+
+      snapshot = assignment.rubric_snapshot
+      picks = evaluation.levels_by_criterion
+      snapshot["criteria"].map do |criterion|
+        level = snapshot["levels"].find { |l| l["id"] == picks[criterion["id"]] }
+        {
+          criterion_name: criterion["name"],
+          level_label: level && level["label"],
+          descriptor: level && snapshot.dig("descriptors", criterion["id"], level["id"])
+        }
+      end
+    end
   end
 end

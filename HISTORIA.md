@@ -11,11 +11,128 @@
 
 ---
 
-## Changelog completo (v1.0.0 → v1.25.0)
+## Changelog completo (v1.0.0 → v1.26.0)
 
 > Copiado verbatim de §14 de `PROJECT_STATE.md` v1.5.0, antes de que el split editorial (v1.5.1)
 > moviera el changelog fuera del doc magro. Las entradas v1.6.0+ se escribieron directamente aquí,
 > ya con el split vigente.
+
+### v1.26.0 — 2026-07-16 — `assignments`: rúbricas, slice 4/4 (ítem #6 del MVP) — CIERRA el track
+
+**Biblioteca de rúbricas reutilizables del docente + asociarlas a una tarea + calificar por rúbrica
+(individual y grupal), con la nota siempre traducida a `schedules::Assessment`.** Cierra el track
+completo de `assignments` (publicar/calificar directo · entrega de texto · entregas grupales ·
+adjuntos de entrega · materiales del docente · rúbricas). Fuera de alcance: nada de adjuntos; no se
+toca el fan-out ni el emparejamiento entrega↔nota.
+
+**Recon: sin contradicciones materiales.** Confirmado contra disco: `assignment.manage` sigue siendo
+el único permiso de autoría/calificación — se reusó directamente, sin permiso nuevo (misma
+conclusión que v1.25.0). `Assignments::GradeRecorder`/`GroupGrader` (v1.21.0/v1.23.0) tienen
+exactamente la firma esperada — la rúbrica los llama tal cual, nunca los reimplementa.
+`Assignment#lock_group_work_after_publish` (v1.23.0) fue el molde EXACTO copiado para el nuevo
+`lock_evaluation_method_after_publish`. El precedente de snapshot jsonb inmutable
+(`ControlPlane::Subscription#price_tiers_snapshot`/`ReportCards#lines_snapshot`) se siguió al pie de
+la letra para `Assignment#rubric_snapshot`. `StudentView.for(student)` filtra por `Assignment.
+published` — confirma (de nuevo, como en v1.25.0) que un borrador Y una tarea archivada quedan fuera
+del scope del portal por igual, así que el desglose de rúbrica de ambos es inalcanzable gratis.
+
+**Diseño: plantilla en tablas normalizadas, snapshot en jsonb.** El lean explícito del prompt se
+confirmó correcto: `assignments` no tenía ningún precedente de jsonb propio, pero el patrón de
+snapshot-congelado-en-jsonb YA es idiomático en la casa (control_plane, report_cards) para
+"estructura editable en vivo + congelada al momento crítico" — encaja perfecto para "plantilla viva
+editable, tarea publicada inmutable". La plantilla en sí (`RubricTemplate`/`RubricCriterion`/
+`RubricLevel`/`RubricCellDescriptor`) son tablas normalizadas tenant-scoped (RLS `ENABLE+FORCE`,
+editable/greppable) — el snapshot (`Assignment#rubric_snapshot`, jsonb) es un array-de-hashes con
+IDs propios congelados, construido por `RubricTemplate#snapshot`, el ÚNICO momento en que la
+plantilla viva se lee para fines de calificación (`Assignments::Publisher`, al publicar).
+
+**La evaluación (qué nivel se marcó por criterio) es dato del dominio, la nota NUNCA se guarda ahí.**
+`Assignments::RubricEvaluation` (nueva tabla) — estudiante **XOR** grupo, mismo patrón `CHECK
+(num_nonnulls(...) = 1)` que `Assignments::Submission` (v1.23.0) — guarda `levels_by_criterion`
+(jsonb, criterio_snapshot_id → nivel_snapshot_id, keyed contra el snapshot CONGELADO, nunca la
+plantilla viva). `Assignments::RubricScore` (cálculo puro, sin escritura) computa `(Σ puntos_nivel ×
+peso) / (Σ puntos_máx × peso) × 5.0`, redondeado a 1 decimal — pesos relativos, la fórmula es una
+razón, nunca necesitan sumar 100. `Assignments::RubricGrader`/`GroupRubricGrader` (servicios nuevos)
+upsertan la evaluación y LUEGO escriben la nota vía `GradeRecorder`/`GroupGrader` — sin cambios —
+exactamente como una nota directa. Un criterio sin nivel marcado hace la evaluación `:incomplete` —
+nunca un cero fantasma.
+
+**Toggle + freeze, mismo molde que `group_work` (v1.23.0).** `evaluation_method` (`direct`/`rubric`)
+y `rubric_template_id` son settable SOLO en `draft`; `Assignment#lock_evaluation_method_after_publish`
+(`before_validation`, defensa en profundidad en el MODELO) descarta cualquier cambio una vez
+publicada, sin importar qué action lo intentó. El fan-out de `Publisher` (v1.21.0) es IDÉNTICO con o
+sin rúbrica — cada estudiante sigue recibiendo su `Assessment` con `score: nil`; la rúbrica solo
+cambia CÓMO se llena ese score, nunca el mecanismo de fan-out. Antes de publicar, la grilla de
+preview lee la plantilla VIVA (`RubricTemplate#snapshot`, el mismo builder que congela — nunca una
+segunda implementación); publicada, lee SOLO el snapshot congelado.
+
+**Vistas — la grilla de calificación es la única pieza con JS real de este slice.** Biblioteca
+(`Assignments::RubricTemplatesController`, RBAC como CAPABILITY check — sin `resource`, porque una
+rúbrica es reutilizable por el docente en cualquier materia, no scopeada a una — ver el docstring de
+`Authorization::Assignment#covers?`; visibilidad author-owned aplicada en el controller, nunca
+`default_scope`). Agregar/quitar criterios y niveles es server-round-trip simple (mismo "sin Stimulus
+para listas dinámicas" que el resto de la casa — ningún controller Stimulus existente en este repo
+maneja nested-attributes-con-JS, así que un builder cliente-side habría sido la primera abstracción
+de su tipo sin precedente real que lo respalde); los descriptores se guardan en UN bulk-save (mismo
+patrón "hash anidado en un solo POST" que `#grade` ya usa para `scores`/`group_scores`). La grilla de
+CALIFICACIÓN sí es interactiva (`rubric_grid_controller.js`, nuevo): tocar un nivel por criterio
+recalcula la nota en vivo, cero round-trips por clic — display-only, el servidor
+(`Assignments::RubricScore`) sigue siendo la única fuente de verdad para lo que persiste. Portal
+(`Assignments::StudentView.rubric_breakdown_for`, nuevo): estudiante/acudiente ven, por criterio, el
+nivel obtenido y su descriptor — la transparencia que responde "por qué Bueno y no Excelente" —
+leído SOLO del snapshot congelado + la evaluación, nunca la plantilla viva.
+
+**Caso de aceptación, verificado end-to-end:** calificar por rúbrica calcula la nota correcta a 1
+decimal (verificado con combinaciones de pesos que no suman 100) y la escribe SOLO en `Assessment`
+(cero duplicados tras re-calificar); una evaluación incompleta no escribe nota; evaluar un grupo hace
+bulk-set a cada integrante, un override individual sobrevive hasta que se re-aplica la grupal
+(reseteando a todos, incluido el override — mismo comportamiento que v1.23.0); `evaluation_method`/
+`rubric_template_id` quedan bloqueados tras publicar (verificado a nivel de MODELO, no solo vista);
+editar la plantilla-biblioteca (renombrar un criterio, cambiar su peso, agregar uno nuevo) después de
+publicar NUNCA toca el snapshot ya congelado de una tarea existente — verificado comparando el
+snapshot byte a byte antes/después de la edición; un acudiente ve nivel + descriptor por criterio de
+la tarea de su hijo; una tarea en `draft` es 404 para el portal, sin ningún chequeo extra; aislamiento
+cross-tenant de plantillas/evaluaciones verificado con RLS real; las páginas de gestión (biblioteca,
+grilla de calificación individual/grupal, preview de borrador, formulario de tarea con el picker de
+plantilla) se verificaron con requests reales, no solo lógica de servicio.
+
+**Incidente operativo durante el slice, no de producto:** un `bin/rails runner` de depuración
+(usado para diagnosticar un `institution must exist` real en `RubricCriteriaController`/
+`RubricLevelsController` — faltaba pasar `institution:` al crear vía la asociación anidada) dejó un
+`Core::User`/`Core::Institution` COMMITTED en la base de datos de test (el script no estaba envuelto
+en una transacción que revirtiera). Esto rompió dos tests preexistentes y no relacionados
+(`RosterImportsGuardiansTest`, `Core::RosterImport::Strategies::GuardiansTest`) que asumen conteos
+GLOBALES en cero — se detectó por la corrida completa de la suite, se limpiaron las filas huérfanas,
+y ambos tests volvieron a pasar. Lección operativa: cualquier `bin/rails runner` de depuración contra
+`RAILS_ENV=test` que cree datos debe envolver TODO en una transacción con rollback explícito, nunca
+asumir que el proceso deja el estado limpio por sí solo. Un segundo hallazgo real (no operativo):
+la migración original de `rubric_cell_descriptors` no tenía ningún índice liderado por
+`institution_id` — lo detectó `TenantRlsGuardTest` (el guardia automático de este invariante),
+corregido antes de cerrar el slice.
+
+**Resultado:** 540 runs / 0 failures / 0 errors / 1 skip preexistente (baseline 528; 12 tests nuevos
+en `test/integration/rubrics_test.rb`, sin fixtures binarios nuevos). `bin/rails zeitwerk:check`
+verde. Dos migraciones, aplicadas en dev y test.
+
+**Archivos nuevos/editados:**
+- Migraciones: `db/migrate/20260716151743_create_rubric_templates.rb`,
+  `db/migrate/20260716151744_add_rubric_grading_to_assignments.rb`.
+- Modelos: `app/domains/assignments/models/rubric_{template,criterion,level,cell_descriptor,
+  evaluation}.rb` (+ edits a `assignment.rb` — evaluation_method/rubric_template/rubric_snapshot/
+  lock_evaluation_method_after_publish —).
+- Servicios: `app/domains/assignments/services/{rubric_score,rubric_grader,group_rubric_grader,
+  attachment_type_check}.rb` — este último ya existía (v1.25.0), sin cambios — (+ edits a
+  `publisher.rb` — congela el snapshot al publicar — y `student_view.rb` — `rubric_breakdown_for`).
+- Controllers: `app/controllers/assignments/rubric_{templates,criteria,levels,cell_descriptors}
+  _controller.rb` (+ edit a `assignments_controller.rb` — picker de plantilla, branch de `#grade`).
+- Vistas: `app/views/assignments/rubric_templates/{index,new,edit}.html.erb`,
+  `app/views/assignments/_rubric_{grid,structure_preview,breakdown}.html.erb` (+ edits a
+  `assignments/assignments/{show,_form}.html.erb`,
+  `app/views/portals/{student,guardian}_assignments/show.html.erb`).
+- JS: `app/javascript/controllers/rubric_grid_controller.js` (nuevo, único con interactividad real).
+- Config: `config/routes.rb`, `config/navigation/assignments.rb` (entrada nueva "Rúbricas").
+- Proceso: `OPEN_PROCESS.md` (guardrail nuevo; cierre del ítem 11 — track `assignments` COMPLETO).
+- Tests: `test/integration/rubrics_test.rb`.
 
 ### v1.25.0 — 2026-07-16 — `assignments`: materiales del docente, slice 3b/4 (ítem #6 del MVP)
 

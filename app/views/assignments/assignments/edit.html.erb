@@ -2,4 +2,5 @@
 
 <%= render "shared/page_header", title: "Editar #{@assignment.title}" %>
 
-<%= render "form", assignment: @assignment, url: assignments_subject_assignment_path(@subject, @assignment) %>
+<%= render "form", assignment: @assignment, url: assignments_subject_assignment_path(@subject, @assignment),
+      rubric_templates: @rubric_templates %>
