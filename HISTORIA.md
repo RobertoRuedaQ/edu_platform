@@ -11,11 +11,235 @@
 
 ---
 
-## Changelog completo (v1.0.0 → v1.22.0)
+## Changelog completo (v1.0.0 → v1.24.0)
 
 > Copiado verbatim de §14 de `PROJECT_STATE.md` v1.5.0, antes de que el split editorial (v1.5.1)
 > moviera el changelog fuera del doc magro. Las entradas v1.6.0+ se escribieron directamente aquí,
 > ya con el split vigente.
+
+### v1.24.0 — 2026-07-16 — `assignments`: adjuntos de entrega, slice 3/4 (ítem #6 del MVP)
+
+**Adjuntar/quitar/listar/servir archivos (docx/pdf/jpg/png, ≤10MB, ≤5 por entrega) sobre una
+`Assignments::Submission` YA EXISTENTE** (estudiante XOR grupo). Fuera de alcance: materiales del
+docente (slice 3b), rúbricas (slice 4), conversión de docx. No toca el fan-out de `Assessment`,
+`GradingView`, ni el eje entrega↔nota.
+
+**Recon (STOP #1 — contradicción material con la premisa del prompt):** Active Storage YA ESTABA
+instalado desde el primer commit — `active_storage_{blobs,attachments,variant_records}` en
+`db/structure.sql`, `config/storage.yml` con servicio `disk` local ya configurado, `config.
+active_storage.service` seteado en los tres entornos. El prompt asumía una instalación desde cero;
+se reportó el hallazgo y se ajustó el plan: ninguna migración de instalación, solo la tabla puente
+y el código de aplicación. Recon también corrigió el nombre real de la tabla FK: `submissions`, no
+`assignments_submissions` como asumía el prompt.
+
+**El diseño real: Active Storage como GLOBAL, sin RLS — la tabla puente es el límite de tenant.**
+`active_storage_blobs/attachments/variant_records` son tablas de Rails sin `institution_id` y sin
+RLS — adjuntar directamente ahí sería una exposición cross-tenant real, no una preferencia de
+estilo. Esta razón ya estaba documentada en el docstring de `Core::RosterImportBatch` (evitaba
+`has_one_attached` por el mismo motivo) — fue el precedente que validó todo el diseño del slice.
+`Assignments::SubmissionAttachment` es la tabla puente tenant-scoped (RLS `ENABLE+FORCE`,
+`institution_id` NOT NULL): un blob solo es alcanzable resolviendo primero SU fila, que RLS ya
+scopea. Las tablas crudas de Active Storage se dejan exactamente como Rails las entrega — nunca se
+les agrega RLS (ver guardrail nuevo en `OPEN_PROCESS.md`).
+
+**Content-type real, sin gemas nuevas:** la validación de tipo usa la detección nativa de Active
+Storage (`Marcel::MimeType.for`, basada en magic bytes vía `identify: true` por defecto) — nunca la
+extensión del archivo ni el header declarado por el cliente. No se agregó `ActiveStorageValidations`
+ni ninguna otra gema — la validación vive en un service object (`Assignments::AttachmentAdder`),
+nunca en el modelo. Tamaño se valida ANTES de adjuntar (evita la escritura a disco de un upload
+obviamente sobredimensionado); tipo se valida DESPUÉS de adjuntar (la detección de Marcel solo
+corre una vez que el blob existe) — un adjunto rechazado se purga de inmediato, nunca queda un blob
+huérfano.
+
+**Frontera de servicio: tres controllers, no uno.** El prompt sugería un único
+`Assignments::AttachmentsController#show` compartido; se decidió, siguiendo la convención ya
+establecida en communication/v1.20.0 ("nunca colapsar distintos caminos de acceso en un
+controller"), usar TRES: `Assignments::AttachmentsController` (docente, solo lectura),
+`Portals::StudentAttachmentsController` y `Portals::GuardianAttachmentsController` (create/show/
+destroy). Los tres comparten SOLO la lógica de streaming genérica vía el concern
+`AttachmentServing` — cada uno resuelve su propio scope (StudentView/GuardianScope/roster) de forma
+independiente, nunca un `SubmissionAttachment.find` crudo. Ninguno usa las rutas firmadas propias de
+Active Storage (`rails_blob_path`/`rails_representation_path`) — el archivo siempre se transmite a
+través del controller propio, después de resolver el scope.
+
+**Lo construido:**
+- Migración `20260716140030_create_submission_attachments.rb`: tabla `submission_attachments`
+  (`institution_id`, `submission_id` FK a `submissions` on_delete cascade, `attached_by_user_id` FK
+  a `users` nullable/nullify — atribución únicamente, nunca redefine de quién es el trabajo), RLS
+  `ENABLE+FORCE`+policy, índice `(institution_id, submission_id)`. Corrida en dev y test.
+- Modelo `Assignments::SubmissionAttachment` (`has_one_attached :file`, `disposition` — docx =
+  `attachment`, pdf/jpg/png = `inline`); `Assignments::Submission` gana
+  `has_many :submission_attachments, dependent: :destroy`.
+- Servicio `Assignments::AttachmentAdder` (tamaño ≤10MB, cupo ≤5 contando existentes, tipo real ∈
+  {docx, pdf, jpg, png}, bloqueado solo si la tarea está `archived` — "tardía" sigue siendo un flag
+  calculado, nunca un bloqueo).
+- Concern `AttachmentServing` (streaming + mapeo de errores, compartido por los tres controllers de
+  servicio) + `Assignments::AttachmentsController#show` (docente, RBAC `assignment.manage`),
+  `Portals::StudentAttachmentsController` y `Portals::GuardianAttachmentsController`
+  (`create`/`show`/`destroy`, misma disciplina de scope encadenado que v1.22.0/v1.23.0 — el gate de
+  lectura ES el gate de escritura; para el grupo, la fila `GroupMembership` del PROPIO actor resuelve
+  la `Submission` compartida, nunca un `group_id` del request).
+- Rutas anidadas bajo la tarea (no bajo un recurso `submission`, que no tiene ruta propia) en las
+  tres superficies.
+- Vistas: `_submission_form.html.erb` (portal, compartido) gana lista de adjuntos + formulario de
+  subida (oculto tras el cupo de 5); `assignments/show.html.erb` (docente) gana enlaces de adjunto
+  por fila/grupo vía el partial nuevo `_attachment_links.html.erb`, respetando `disposition`.
+
+**Caso de aceptación, verificado end-to-end:** un estudiante adjunta docx/pdf/jpg/png a su propia
+entrega y el docente los ve/descarga con la disposición correcta (docx = descarga, resto = inline);
+un archivo renombrado para simular un tipo permitido (bytes reales de GIF con extensión `.pdf`) se
+rechaza por el tipo REAL, nunca por el nombre; un tipo prohibido subido honestamente también se
+rechaza; el 6.º adjunto (incluso en un resubmit) se rechaza manteniendo el cupo en 5; un archivo de
+11MB se rechaza antes de tocar disco; un acudiente adjunta por su hija — la atribución queda en el
+acudiente, la propiedad de la entrega sigue siendo de la niña; un acudiente ajeno no puede adjuntar
+para un estudiante que no es su hijo (404); un integrante de un grupo adjunta y OTRO integrante ve y
+quita el mismo adjunto (misma fila compartida); un adjunto sembrado en otra institución nunca se
+filtra ni por la ruta del docente ni por la del portal del estudiante (aislamiento cross-tenant,
+verificado con query real bajo RLS, no una relectura de `current_setting()`).
+
+**Fixtures de test reales, no solo bytes de cabecera:** se generaron archivos reales en
+`test/fixtures/files/` (`attachment.{docx,pdf,jpg,png,gif}`, `fake.pdf`) — el `.docx` es un ZIP OOXML
+válido mínimo (`[Content_Types].xml`/`_rels/.rels`/`word/document.xml`) para que la detección de
+Marcel (que busca `PK\x03\x04` + `[Content_Types].xml` + `word/` cerca del inicio del archivo)
+lo reconozca de verdad como `application/vnd.openxmlformats-officedocument.wordprocessingml.
+document`, no solo por extensión; `fake.pdf` tiene bytes reales de GIF con extensión `.pdf` — Marcel
+prioriza la detección por extensión cuando el contenido no tiene una firma mágica clara (texto
+plano, por ejemplo), así que el caso de "tipo real distinto del nombre" exige un contenido con firma
+mágica propia que contradiga la extensión, no cualquier texto renombrado.
+
+**Resultado:** 519 runs / 0 failures / 0 errors / 1 skip preexistente (baseline 510; 9 tests nuevos
+en `test/integration/attachments_test.rb`). `bin/rails zeitwerk:check` verde. Una migración,
+aplicada en dev y test.
+
+**Archivos nuevos/editados:**
+- Migración: `db/migrate/20260716140030_create_submission_attachments.rb`.
+- Modelos: `app/domains/assignments/models/submission_attachment.rb` (+ edit a `submission.rb`).
+- Servicios: `app/domains/assignments/services/attachment_adder.rb`.
+- Controllers: `app/controllers/concerns/attachment_serving.rb`,
+  `app/controllers/assignments/attachments_controller.rb`,
+  `app/controllers/portals/{student,guardian}_attachments_controller.rb` (+ edits a
+  `app/controllers/portals/{student,guardian}_assignments_controller.rb`).
+- Vistas: `app/views/assignments/_attachment_links.html.erb` (+ edits a
+  `_submission_form.html.erb`, `assignments/assignments/show.html.erb`).
+- Config: `config/routes.rb`.
+- Proceso: `OPEN_PROCESS.md` (guardrail nuevo sobre Active Storage sin RLS; cierre del ítem 11
+  slice 3).
+- Tests: `test/integration/attachments_test.rb`; fixtures binarias reales en
+  `test/fixtures/files/attachment.{docx,pdf,jpg,png,gif}` y `fake.pdf`.
+
+### v1.23.0 — 2026-07-16 — `assignments`: entregas grupales (ítem #6 del MVP)
+
+**Generaliza el modelo de v1.21.0/v1.22.0** para tareas grupales: el docente marca `group_work` al
+crear la tarea (criterio suyo, sin regla por grado), forma grupos tras publicar (el roster es
+concreto ahí), cualquier integrante entrega/edita la entrega compartida (acudiente-en-nombre sigue
+valiendo, B1), y calificar es una nota por grupo con posibilidad de override individual.
+
+**Recon (STOP #1):** leyó el modelo real de v1.21.0/v1.22.0 completo antes de tocar nada —
+`Assignments::Submission` (`(assignment_id, student_id)`, `submitted_by_user_id`),
+`Assignments::StudentView`/`GradingView`/`GradeRecorder`/`Publisher`/`Roster` — sin sorpresas
+materiales. **Corrección de un supuesto del prompt**: no existe `GroupManagement::Group` en el
+esquema — el "grupo de clase"/homeroom real siempre fue `GroupManagement::Section` (confirmado ya
+desde slices anteriores de este mismo ciclo). No había, entonces, ninguna colisión de nombres real
+que evitar; se usó igual el nombre propuesto (`Assignments::SubmissionGroup`/`GroupMembership`) por
+claridad — un dominio de trabajo por-tarea es conceptualmente distinto de un homeroom aunque no
+hubiera colisión literal que forzara el nombre.
+
+**El hallazgo que simplificó todo el slice**: el fan-out per-student de `Assignments::Publisher`
+(v1.21.0) **no necesita ningún cambio**. Publicar SIEMPRE crea una fila `schedules::Assessment` por
+estudiante del roster, sin importar `group_work` — ese mecanismo ya era per-student desde el primer
+día. Esto significa que "nota grupal" nunca es un concepto nuevo de almacenamiento: es simplemente
+`Assignments::GroupGrader` iterando los integrantes de un grupo y llamando a
+`Assignments::GradeRecorder` (ya existente, sin tocar) por cada uno — un bulk-set sobre filas que
+YA EXISTÍAN, nunca una tabla de "nota de grupo" nueva. El override individual es, literalmente, la
+MISMA llamada a `GradeRecorder` que ya existía para tareas individuales — cero código nuevo para esa
+parte.
+
+**Generalización de `Submission` — el otro punto de diseño real:** se siguió el patrón exacto que
+`conversation_participants` (v1.20.0) ya estableció para "identidad A o identidad B, nunca
+ambas/ninguna": `student_id` se volvió nullable, se agregó `submission_group_id`, y un CHECK real
+`num_nonnulls(student_id, submission_group_id) = 1`. Una sutileza que HABRÍA sido un bug si no se
+hubiera notado en recon: las validaciones `uniqueness` de Rails, a diferencia del índice único de
+Postgres, tratan por defecto DOS valores `NULL` como "iguales" (colisión) al validar un scope —
+sin `allow_nil: true` explícito en ambas validaciones (`student_id`/`submission_group_id`), la
+SEGUNDA entrega grupal de cualquier tarea habría sido rechazada por el modelo con un falso "ya
+existe", aunque la BD la hubiera aceptado sin problema. Corregido antes de que apareciera como un
+bug real en tests.
+
+**Lo construido:**
+- Migración `20260716131320_add_group_work_and_submission_groups.rb`: `assignments.group_work`
+  (boolean, default false); tablas nuevas `submission_groups`/`group_memberships` (RLS
+  `ENABLE+FORCE`+policy, único `(institution_id, assignment_id, student_id)` en memberships —
+  un estudiante en ≤1 grupo POR TAREA); generalización de `submissions` (`student_id` nullable,
+  `submission_group_id` nuevo, CHECK XOR, índice único adicional `(institution_id, assignment_id,
+  submission_group_id)` — Postgres no colisiona múltiples NULL, así que ambos índices únicos
+  coexisten sin conflicto). Corrida en dev y test.
+- Modelos `Assignments::SubmissionGroup` (`has_many :students, through: :group_memberships`,
+  `has_one :submission`), `Assignments::GroupMembership`; `Assignments::Submission` generalizado
+  (XOR + `allow_nil`); `Assignments::Assignment` gana `group_work?` y el
+  `before_validation :lock_group_work_after_publish` (descarta cualquier cambio a `group_work` una
+  vez `published`/`archived`, sin importar qué action lo intente — defensa en profundidad, no solo
+  omitir el checkbox en la vista de edición).
+- `Assignments::GroupGrader` (bulk-set reusando `GradeRecorder` por integrante).
+  `Assignments::GradingView`/`StudentView` generalizados: `GradingView::Row` gana
+  `submission_group`; `StudentView.submission_for` resuelve individual o grupal según
+  `assignment.group_work?`; `StudentView.group_for` nuevo (nil = sin grupo asignado todavía, empty
+  state, nunca error). `Assignments::SubmissionRecorder` generalizado: para una tarea grupal,
+  resuelve el `SubmissionGroup` del ACTOR vía su propia `GroupMembership` — nunca acepta un
+  `group_id` del cliente, lo que garantiza que dos integrantes distintos siempre converjan en la
+  MISMA fila sin ninguna verificación extra.
+- `Assignments::SubmissionGroupsController#create` (nested bajo la tarea, RBAC
+  `assignment.manage`) — forma un grupo desde estudiantes del roster aún sin grupo. Sin
+  `#destroy`/`#update` este slice (corregir una formación de grupos es un caso de uso separado, no
+  pedido explícitamente).
+- `AssignmentsController#show` extendido (`@groups`/`@unassigned` cuando `group_work?` y
+  publicada); `#grade` acepta `group_scores` (bulk-set, aplicado PRIMERO) además de `scores`
+  (override individual, aplicado DESPUÉS — así un submit que llena ambos en el mismo request deja
+  ganar al override, coherente con "calificar grupo... el docente puede luego modificar la nota de
+  un integrante").
+- Vistas: formulario de tarea con el toggle `group_work` (solo visible/efectivo en `draft`); vista
+  de calificación extendida con sección "Grupos" (miembros + entrega compartida) y notas grupales
+  bulk-set; portal (`_group_aware_submission` compartido entre estudiante y acudiente) con el
+  empty state de "sin grupo todavía" antes del formulario de entrega.
+
+**Caso de aceptación, verificado end-to-end:** el docente marca `group_work`, publica, y forma un
+grupo — cada estudiante queda en exactamente un grupo (el único lo garantiza); un integrante
+entrega y OTRO integrante ve esa MISMA entrega y la edita (una sola fila, verificado por conteo);
+un acudiente entrega en nombre de un integrante — mismo grupo, misma fila; una nota grupal deja la
+MISMA nota en el `Assessment` de cada integrante; un override individual cambia SOLO esa fila;
+re-aplicar la nota grupal re-setea a TODOS, incluido el que tenía override; un estudiante sin grupo
+ve el empty state y un intento de entrega da 404 (nunca 500); un estudiante de OTRO grupo de la
+misma tarea no puede tocar una entrega ajena (su propio POST siempre resuelve a SU grupo, nunca al
+otro); `group_work` intentado cambiar después de publicar no tiene ningún efecto; el CHECK de la BD
+rechaza tanto "ninguna identidad" como "ambas identidades" (SQL crudo, no solo el modelo); una tarea
+individual (`group_work: false`) sigue funcionando exactamente como v1.22.0 (test de regresión
+dedicado); aislamiento cross-tenant verificado con query real bajo RLS.
+
+**Decisión explícita, no un olvido:** `db/seeds.rb` NO se tocó — mismo alcance que las cinco slices
+anteriores del ciclo (el archivo sigue sin ningún concepto de `institution_users`/`Assignments::*`).
+
+**Resultado:** 510 runs / 0 failures / 0 errors / 1 skip preexistente (baseline 499; 11 tests
+nuevos, todos en `test/integration/group_assignments_test.rb`). `bin/rails zeitwerk:check` verde.
+Una migración, aplicada en dev y test.
+
+**Nota operativa, no de producto:** al arrancar este slice, `bin/rails generate` falló porque
+`image_processing`/`selenium-webdriver` (ya declaradas en `Gemfile`/`Gemfile.lock`, sin relación con
+este trabajo) no estaban instaladas localmente — un `bundle install` las restauró. No fue un cambio
+de dependencias, solo materializar lo que ya estaba fijado.
+
+**Archivos nuevos/editados:**
+- Migración: `db/migrate/20260716131320_add_group_work_and_submission_groups.rb`.
+- Modelos: `app/domains/assignments/models/{submission_group,group_membership}.rb` (+ edits a
+  `submission.rb`, `assignment.rb`).
+- Servicios: `app/domains/assignments/services/group_grader.rb` (+ edits a `grading_view.rb`,
+  `student_view.rb`, `submission_recorder.rb`).
+- Controllers: `app/controllers/assignments/submission_groups_controller.rb` (+ edits a
+  `assignments_controller.rb`, `app/controllers/portals/{student,guardian}_assignments_controller.rb`).
+- Vistas: `app/views/assignments/_group_aware_submission.html.erb` (compartido) (+ edits a
+  `_form.html.erb`, `assignments/show.html.erb`,
+  `app/views/portals/{student,guardian}_assignments/show.html.erb`).
+- Config: `config/routes.rb`.
+- Proceso: `OPEN_PROCESS.md` (backlog + guardrails nuevos).
+- Tests: `test/integration/group_assignments_test.rb`.
 
 ### v1.22.0 — 2026-07-15 — `assignments`: entrega de texto, slice 2/4 (ítem #6 del MVP)
 

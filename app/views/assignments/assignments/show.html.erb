@@ -4,7 +4,7 @@
 
 <%= render "shared/page_header",
       title: @assignment.title,
-      subtitle: "#{status_label} · vence #{@assignment.due_date}",
+      subtitle: "#{status_label}#{' · grupal' if @assignment.group_work?} · vence #{@assignment.due_date}",
       actions: safe_join([
         (ui_button("Editar", href: edit_assignments_subject_assignment_path(@subject, @assignment), variant: :secondary) unless @assignment.archived?),
         (button_to "Publicar", publish_assignments_subject_assignment_path(@subject, @assignment), method: :post, class: "btn btn--primary btn--md" if @assignment.draft?),
@@ -16,19 +16,71 @@
   <p><%= simple_format(@assignment.instructions) %></p>
 <% end -%>
 
+<% if @assignment.group_work? && @assignment.published? -%>
+  <%= render "shared/page_header", title: "Grupos" %>
+
+  <% if @groups.any? -%>
+    <% @groups.each do |group| -%>
+      <%= render layout: "shared/card", locals: { class: "submission-group-card", title: group.name } do -%>
+        <p><%= group.students.map { |s| "#{s.first_name} #{s.last_name}" }.join(", ") %></p>
+        <% if group.submission -%>
+          <p><%= truncate(group.submission.body, length: 120) %>
+            <% if group.submission.late? -%><strong>(tardía)</strong><% end -%>
+          </p>
+          <%= render "assignments/attachment_links", assignment: @assignment, subject: @subject,
+                submission: group.submission %>
+        <% else -%>
+          <p class="text-muted">Sin entregar</p>
+        <% end -%>
+      <% end -%>
+    <% end -%>
+  <% end -%>
+
+  <% if @unassigned.any? -%>
+    <%= form_with url: assignments_subject_assignment_submission_groups_path(@subject, @assignment), method: :post do -%>
+      <%= render "shared/field", label: "Nombre del grupo", name: "name", type: "text" %>
+      <% @unassigned.each do |student| -%>
+        <label>
+          <input type="checkbox" name="student_ids[]" value="<%= student.id %>">
+          <%= "#{student.first_name} #{student.last_name}" %>
+        </label><br>
+      <% end -%>
+      <%= ui_button "Formar grupo", type: "submit", variant: :secondary %>
+    <% end -%>
+  <% else -%>
+    <p class="text-muted">Todos los estudiantes del roster ya tienen grupo.</p>
+  <% end -%>
+<% end -%>
+
 <%= render "shared/page_header", title: (@assignment.published? ? "Calificar" : "Roster (previsualización)") %>
 
 <% if @assignment.published? -%>
   <% if @rows.any? -%>
     <%= form_with url: grade_assignments_subject_assignment_path(@subject, @assignment), method: :post do -%>
-      <%= render layout: "shared/table", locals: { headers: [ "Estudiante", "Entrega", "Nota" ] } do -%>
+      <% if @assignment.group_work? && @groups.any? -%>
+        <p class="text-muted">Aplicar una nota a todo el grupo (se puede sobrescribir por integrante abajo):</p>
+        <% @groups.each do |group| -%>
+          <div class="field">
+            <label class="field__label" for="group_score_<%= group.id %>"><%= group.name %></label>
+            <input class="field__input" id="group_score_<%= group.id %>" type="number" step="0.1" min="0" max="5"
+                   name="group_scores[<%= group.id %>]" placeholder="Aplicar a todo el grupo">
+          </div>
+        <% end -%>
+      <% end -%>
+
+      <%= render layout: "shared/table",
+            locals: { headers: [ "Estudiante", (@assignment.group_work? ? "Grupo" : "Entrega"), "Nota" ] } do -%>
         <% @rows.each do |row| -%>
           <tr>
             <td><%= "#{row.student.first_name} #{row.student.last_name}" %></td>
             <td>
-              <% if row.submission -%>
+              <% if @assignment.group_work? -%>
+                <%= row.submission_group&.name || "Sin grupo" %>
+              <% elsif row.submission -%>
                 <%= truncate(row.submission.body, length: 80) %>
                 <% if row.submission.late? -%><strong>(tardía)</strong><% end -%>
+                <%= render "assignments/attachment_links", assignment: @assignment, subject: @subject,
+                      submission: row.submission %>
               <% else -%>
                 <span class="text-muted">Sin entregar</span>
               <% end -%>

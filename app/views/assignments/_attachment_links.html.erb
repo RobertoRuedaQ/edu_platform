@@ -1,0 +1,15 @@
+<%# locals: (assignment:, subject:, submission:) -%>
+<%# Teacher-side review (v1.24.0) — read-only: view/download what a
+    student/guardian attached. docx opens as a download (disposition set
+    server-side, §6); pdf/jpg/png open in a new tab for inline preview. -%>
+<% if submission.submission_attachments.any? -%>
+  <ul class="attachment-list">
+    <% submission.submission_attachments.each do |attachment| -%>
+      <li>
+        <%= link_to attachment.file.filename.to_s,
+              assignments_subject_assignment_attachment_path(subject, assignment, attachment),
+              target: (attachment.disposition == "inline" ? "_blank" : nil) %>
+      </li>
+    <% end -%>
+  </ul>
+<% end -%>

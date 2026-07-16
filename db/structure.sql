@@ -247,6 +247,7 @@ CREATE TABLE public.assignments (
     published_at timestamp(6) without time zone,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
+    group_work boolean DEFAULT false NOT NULL,
     CONSTRAINT assignments_status_check CHECK (((status)::text = ANY ((ARRAY['draft'::character varying, 'published'::character varying, 'archived'::character varying])::text[])))
 );
 
@@ -551,6 +552,23 @@ CREATE TABLE public.grade_levels (
 );
 
 ALTER TABLE ONLY public.grade_levels FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: group_memberships; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.group_memberships (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    submission_group_id uuid NOT NULL,
+    student_id uuid NOT NULL,
+    assignment_id uuid NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+ALTER TABLE ONLY public.group_memberships FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -1240,6 +1258,38 @@ ALTER TABLE ONLY public.subjects FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: submission_attachments; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.submission_attachments (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    submission_id uuid NOT NULL,
+    attached_by_user_id uuid,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+ALTER TABLE ONLY public.submission_attachments FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: submission_groups; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.submission_groups (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    assignment_id uuid NOT NULL,
+    name character varying NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+ALTER TABLE ONLY public.submission_groups FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: submissions; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1247,12 +1297,14 @@ CREATE TABLE public.submissions (
     id uuid DEFAULT uuidv7() NOT NULL,
     institution_id uuid NOT NULL,
     assignment_id uuid NOT NULL,
-    student_id uuid NOT NULL,
+    student_id uuid,
     body text NOT NULL,
     submitted_by_user_id uuid,
     submitted_at timestamp(6) without time zone NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
-    updated_at timestamp(6) without time zone NOT NULL
+    updated_at timestamp(6) without time zone NOT NULL,
+    submission_group_id uuid,
+    CONSTRAINT submissions_identity_check CHECK ((num_nonnulls(student_id, submission_group_id) = 1))
 );
 
 ALTER TABLE ONLY public.submissions FORCE ROW LEVEL SECURITY;
@@ -1597,6 +1649,14 @@ ALTER TABLE ONLY public.grade_levels
 
 
 --
+-- Name: group_memberships group_memberships_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.group_memberships
+    ADD CONSTRAINT group_memberships_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: guardian_students guardian_students_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1877,6 +1937,22 @@ ALTER TABLE ONLY public.subjects
 
 
 --
+-- Name: submission_attachments submission_attachments_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.submission_attachments
+    ADD CONSTRAINT submission_attachments_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: submission_groups submission_groups_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.submission_groups
+    ADD CONSTRAINT submission_groups_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: submissions submissions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1944,6 +2020,20 @@ CREATE INDEX idx_assignments_on_institution_subject_status ON public.assignments
 --
 
 CREATE UNIQUE INDEX idx_charges_idempotency ON public.charges USING btree (institution_id, idempotency_key);
+
+
+--
+-- Name: idx_group_memberships_on_group; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_group_memberships_on_group ON public.group_memberships USING btree (institution_id, submission_group_id);
+
+
+--
+-- Name: idx_group_memberships_unique_student_per_assignment; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_group_memberships_unique_student_per_assignment ON public.group_memberships USING btree (institution_id, assignment_id, student_id);
 
 
 --
@@ -2056,6 +2146,27 @@ CREATE INDEX idx_rp_inst_permission ON public.role_permissions USING btree (inst
 --
 
 CREATE UNIQUE INDEX idx_rp_unique ON public.role_permissions USING btree (institution_id, role_id, permission_id);
+
+
+--
+-- Name: idx_submission_attachments_on_institution_submission; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_submission_attachments_on_institution_submission ON public.submission_attachments USING btree (institution_id, submission_id);
+
+
+--
+-- Name: idx_submission_groups_on_institution_assignment; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_submission_groups_on_institution_assignment ON public.submission_groups USING btree (institution_id, assignment_id);
+
+
+--
+-- Name: idx_submissions_unique_assignment_group; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_submissions_unique_assignment_group ON public.submissions USING btree (institution_id, assignment_id, submission_group_id);
 
 
 --
@@ -3026,6 +3137,14 @@ ALTER TABLE ONLY public.sections
 
 
 --
+-- Name: submission_attachments fk_rails_05c03d867a; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.submission_attachments
+    ADD CONSTRAINT fk_rails_05c03d867a FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: assessments fk_rails_0a269157fd; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3095,6 +3214,14 @@ ALTER TABLE ONLY public.students
 
 ALTER TABLE ONLY public.teaching_assignments
     ADD CONSTRAINT fk_rails_1535481200 FOREIGN KEY (institution_id) REFERENCES public.institutions(id);
+
+
+--
+-- Name: group_memberships fk_rails_16f363265c; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.group_memberships
+    ADD CONSTRAINT fk_rails_16f363265c FOREIGN KEY (submission_group_id) REFERENCES public.submission_groups(id) ON DELETE CASCADE;
 
 
 --
@@ -3338,6 +3465,14 @@ ALTER TABLE ONLY public.invoices
 
 
 --
+-- Name: submission_groups fk_rails_4c975513bf; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.submission_groups
+    ADD CONSTRAINT fk_rails_4c975513bf FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: institution_users fk_rails_4d086ab524; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3498,6 +3633,14 @@ ALTER TABLE ONLY public.academic_terms
 
 
 --
+-- Name: submission_attachments fk_rails_69cd53b44b; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.submission_attachments
+    ADD CONSTRAINT fk_rails_69cd53b44b FOREIGN KEY (submission_id) REFERENCES public.submissions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: enrollments fk_rails_6a2ee9516d; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3554,11 +3697,27 @@ ALTER TABLE ONLY public.sessions
 
 
 --
+-- Name: group_memberships fk_rails_75ff151c1e; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.group_memberships
+    ADD CONSTRAINT fk_rails_75ff151c1e FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: institution_entitlements fk_rails_789c0738df; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.institution_entitlements
     ADD CONSTRAINT fk_rails_789c0738df FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: submissions fk_rails_7950330b1c; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.submissions
+    ADD CONSTRAINT fk_rails_7950330b1c FOREIGN KEY (submission_group_id) REFERENCES public.submission_groups(id) ON DELETE CASCADE;
 
 
 --
@@ -3655,6 +3814,14 @@ ALTER TABLE ONLY public.counseling_cases
 
 ALTER TABLE ONLY public.guardian_students
     ADD CONSTRAINT fk_rails_8a488ba66f FOREIGN KEY (guardian_user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: submission_attachments fk_rails_903b1e71cc; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.submission_attachments
+    ADD CONSTRAINT fk_rails_903b1e71cc FOREIGN KEY (attached_by_user_id) REFERENCES public.users(id) ON DELETE SET NULL;
 
 
 --
@@ -3890,6 +4057,14 @@ ALTER TABLE ONLY public.referrals
 
 
 --
+-- Name: submission_groups fk_rails_c35f1bef68; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.submission_groups
+    ADD CONSTRAINT fk_rails_c35f1bef68 FOREIGN KEY (assignment_id) REFERENCES public.assignments(id) ON DELETE CASCADE;
+
+
+--
 -- Name: active_storage_attachments fk_rails_c3b3935057; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3951,6 +4126,22 @@ ALTER TABLE ONLY public.role_assignments
 
 ALTER TABLE ONLY public.conversation_participants
     ADD CONSTRAINT fk_rails_cd21bdc262 FOREIGN KEY (institution_user_id) REFERENCES public.institution_users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: group_memberships fk_rails_cfcf8ca0a6; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.group_memberships
+    ADD CONSTRAINT fk_rails_cfcf8ca0a6 FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE CASCADE;
+
+
+--
+-- Name: group_memberships fk_rails_d237094e0b; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.group_memberships
+    ADD CONSTRAINT fk_rails_d237094e0b FOREIGN KEY (assignment_id) REFERENCES public.assignments(id) ON DELETE CASCADE;
 
 
 --
@@ -4343,6 +4534,19 @@ CREATE POLICY grade_levels_tenant_isolation ON public.grade_levels USING ((insti
 
 
 --
+-- Name: group_memberships; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.group_memberships ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: group_memberships group_memberships_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY group_memberships_tenant_isolation ON public.group_memberships USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
 -- Name: guardian_students; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -4655,6 +4859,32 @@ CREATE POLICY subjects_tenant_isolation ON public.subjects USING ((institution_i
 
 
 --
+-- Name: submission_attachments; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.submission_attachments ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: submission_attachments submission_attachments_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY submission_attachments_tenant_isolation ON public.submission_attachments USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: submission_groups; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.submission_groups ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: submission_groups submission_groups_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY submission_groups_tenant_isolation ON public.submission_groups USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
 -- Name: submissions; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -4700,6 +4930,8 @@ CREATE POLICY teaching_assignments_tenant_isolation ON public.teaching_assignmen
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260716140030'),
+('20260716131320'),
 ('20260715203148'),
 ('20260715195639'),
 ('20260715190531'),

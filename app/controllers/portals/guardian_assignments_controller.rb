@@ -21,6 +21,7 @@ module Portals
       @student = Core::Access::GuardianScope.for(Current.user).find(params[:student_id])
       @assignment = Assignments::StudentView.for(@student).find(params[:id])
       @submission = Assignments::StudentView.submission_for(@assignment, @student)
+      @group = Assignments::StudentView.group_for(@assignment, @student)
     end
 
     def score_for(assignment)
@@ -32,5 +33,18 @@ module Portals
       portal_guardian_student_assignment_path(@student, assignment)
     end
     helper_method :assignment_path_for
+
+    # attachments (v1.24.0) — one path covers both #show (GET, download)
+    # and #destroy (DELETE, quitar); upload is the collection route. Both
+    # nest under @student, same as assignment_path_for above.
+    def attachment_path_for(attachment)
+      portal_guardian_student_assignment_attachment_path(@student, attachment.submission.assignment, attachment)
+    end
+    helper_method :attachment_path_for
+
+    def attachment_upload_path_for(assignment)
+      portal_guardian_student_assignment_attachments_path(@student, assignment)
+    end
+    helper_method :attachment_upload_path_for
   end
 end

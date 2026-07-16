@@ -14,5 +14,18 @@
   <%= render "shared/field", label: "Vence", name: "assignment[due_date]", type: "date",
         value: assignment.due_date&.iso8601 %>
 
+  <%# group_work is only settable while draft — Assignment#lock_group_work_
+      after_publish discards any change once published, so the field is
+      simply not rendered afterward (nothing to toggle). %>
+  <% if assignment.new_record? || assignment.draft? -%>
+    <div class="field">
+      <label>
+        <input type="hidden" name="assignment[group_work]" value="0">
+        <input type="checkbox" name="assignment[group_work]" value="1" <%= "checked" if assignment.group_work? %>>
+        Entrega grupal
+      </label>
+    </div>
+  <% end -%>
+
   <%= ui_button (assignment.persisted? ? "Guardar" : "Crear borrador"), type: "submit", variant: :primary %>
 <% end -%>

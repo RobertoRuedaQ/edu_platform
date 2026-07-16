@@ -6,6 +6,33 @@
     Entregado <%= submission.submitted_at.to_fs(:long) %>
     <% if submission.late? -%><strong>(tardía)</strong><% end -%>
   </p>
+
+  <%# Attachments (v1.24.0) — only on an EXISTING submission (out of scope
+      otherwise, §0); attachment_path_for/attachment_upload_path_for are
+      helper_methods on the enclosing controller (student vs guardian
+      portal), same pattern as assignment_path_for/score_for. -%>
+  <div class="field">
+    <label class="field__label">Archivos adjuntos (<%= submission.submission_attachments.size %>/5)</label>
+    <% if submission.submission_attachments.any? -%>
+      <ul>
+        <% submission.submission_attachments.each do |attachment| -%>
+          <li>
+            <%= link_to attachment.file.filename.to_s, attachment_path_for(attachment) %>
+            <%= button_to "Quitar", attachment_path_for(attachment), method: :delete, class: "btn btn--danger btn--sm" %>
+          </li>
+        <% end -%>
+      </ul>
+    <% else -%>
+      <p class="text-muted">Sin archivos adjuntos.</p>
+    <% end -%>
+
+    <% if submission.submission_attachments.size < 5 -%>
+      <%= form_with url: attachment_upload_path_for(submission.assignment), method: :post, multipart: true do -%>
+        <input type="file" name="file" accept=".docx,.pdf,.jpg,.jpeg,.png">
+        <%= ui_button "Adjuntar", type: "submit", variant: :secondary %>
+      <% end -%>
+    <% end -%>
+  </div>
 <% end -%>
 
 <%= form_with url: url, method: :post do -%>
