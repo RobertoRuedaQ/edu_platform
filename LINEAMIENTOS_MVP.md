@@ -239,14 +239,14 @@ v1.14.0: modelos reales (`Charge`/`Payment`/`PaymentPlan`/`Installment`/`Student
    acceso (compose RBAC / bandeja-participación / responder-participación / auditoría RBAC).
    Diferidos anotados (fan-out 1:1 a todos los cuidadores, threading, tags, acudiente-inicia) — ver
    `PROJECT_STATE.md` §8.2/`HISTORIA.md`.
-6. **`assignments`** (tareas académicas) — **slices 1–2/4 hechos.** ~~Publicar + ver + calificar
-   directo~~ ✅ **cerrado (v1.21.0)**: cuelga del gradebook de `schedules` por FK (fan-out a
-   `Assessment` al publicar, calificar reusa esa misma fila). ~~Entrega de texto~~ ✅ **cerrado
-   (v1.22.0)**: llave en-dominio `(assignment_id, student_id)`, ingresable por el estudiante o su
-   acudiente (B1) — primer write de portal, gateado por relación (`StudentView.for`), nunca RBAC.
-   **Slices 3–4 pendientes** (adjuntos, con checkpoint propio de Active Storage/serving/docx →
-   rúbricas) — roadmap completo en `HISTORIA.md` v1.21.0/v1.22.0. **Siguiente ítem del camino
-   crítico** (slice 3, o `calendar` — ver `OPEN_PROCESS.md`).
+6. **`assignments`** (tareas académicas) — **slices 1–2/4 + entregas grupales hechos.** ~~Publicar +
+   ver + calificar directo~~ ✅ **cerrado (v1.21.0)**. ~~Entrega de texto~~ ✅ **cerrado (v1.22.0)**.
+   ~~Entregas grupales~~ ✅ **cerrado (v1.23.0)**: `group_work` toggle por-tarea, `Submission`
+   generalizada a estudiante XOR grupo, nota grupal = bulk-set per-student + override individual
+   (sin almacén grupal aparte), entrega compartida editable por cualquier integrante. **Slices 3–4
+   pendientes** (adjuntos, con checkpoint propio de Active Storage/serving/docx → rúbricas) —
+   roadmap completo en `HISTORIA.md` v1.21.0–v1.23.0. **Siguiente ítem del camino crítico** (slice
+   3, o `calendar` — ver `OPEN_PROCESS.md`).
 7. **`calendar`** + scope de visibilidad del cuidador (consume fechas de `assignments`, `attendance`,
    `extracurriculars`).
 8. **`extracurriculars`** (depende de matrícula/término; actividad paga = `Charge` en `finance`, de #4).

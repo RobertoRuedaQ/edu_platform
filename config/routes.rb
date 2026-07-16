@@ -253,6 +253,10 @@ Rails.application.routes.draw do
         post :publish, on: :member
         post :archive, on: :member
         post :grade, on: :member
+        # group work (v1.23.0) — forming a group is scoped to ONE
+        # assignment (groups are never reused across tasks, §0), so this
+        # nests under :assignments, not a top-level resource.
+        resources :submission_groups, only: :create
       end
     end
   end

@@ -62,6 +62,12 @@ module Assignments
       # submitting only make sense against a published assignment).
       @rows = @assignment.published? ? Assignments::GradingView.for(@assignment) : []
       @roster = Assignments::Roster.for_subject(@subject).order(:last_name, :first_name)
+
+      if @assignment.group_work? && @assignment.published?
+        @groups = @assignment.submission_groups.includes(:students, :submission).order(:name)
+        grouped_ids = Assignments::GroupMembership.where(assignment_id: @assignment.id).select(:student_id)
+        @unassigned = @roster.where.not(id: grouped_ids)
+      end
     end
 
     def publish
@@ -105,7 +111,21 @@ module Assignments
         return
       end
 
-      (params[:scores] || {}).to_unsafe_h.each do |student_id, score|
+      # Group bulk-set FIRST, then per-student overrides — so a teacher who
+      # fills both a group score AND a specific student's box in the SAME
+      # submit gets the override to win (matches "calificar grupo... el
+      # docente puede luego modificar la nota de un integrante", §0.2).
+      (params[:group_scores]&.to_unsafe_h || {}).each do |group_id, score|
+        next if score.blank?
+
+        group = Assignments::SubmissionGroup.find_by(institution_id: Current.institution_id,
+          assignment_id: @assignment.id, id: group_id)
+        next if group.nil?
+
+        Assignments::GroupGrader.call(assignment: @assignment, submission_group: group, score: score)
+      end
+
+      (params[:scores]&.to_unsafe_h || {}).each do |student_id, score|
         next if score.blank?
 
         student = GroupManagement::Student.find_by(institution_id: Current.institution_id, id: student_id)
@@ -135,7 +155,10 @@ module Assignments
     end
 
     def assignment_params
-      params.require(:assignment).permit(:title, :instructions, :due_date)
+      # group_work is only EVER effective while draft — Assignment's own
+      # before_validation (lock_group_work_after_publish) discards any
+      # change once published, regardless of what's submitted here.
+      params.require(:assignment).permit(:title, :instructions, :due_date, :group_work)
     end
   end
 end

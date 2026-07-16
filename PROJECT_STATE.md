@@ -21,10 +21,10 @@
 
 | Campo | Valor |
 |---|---|
-| **Versión del documento** | `v1.22.0` |
-| **Fecha** | 2026-07-15 |
-| **Tests** | 499 runs / 0 fallos / 1 skip preexistente (suite completa, en serie — ver `OPEN_PROCESS.md`) |
-| **Estado en una línea** | Identidad real + RBAC/entitlement reales + portales de persona + autoservicio de staff + auditoría + CHECKPOINT E + #4 barrido (`teacher_management`/`group_management`/`schedules`-calificaciones/`counseling`) + matrícula por término real (`Schedules::ActiveTermEnrollmentScope`, v1.15.0) + `attendance` (v1.16.0) + `report_cards` (v1.17.0) + `finance` (v1.18.0) + `communication` completo (v1.19.0/v1.20.0) + `assignments` slice 1/4 (v1.21.0: publicar/ver/calificar) + **`assignments` slice 2/4 (ítem #6 del MVP): entrega de texto (`Assignments::Submission`, en-domain, NO anclada a `assessment_id`), ingresable por el estudiante o su acudiente en su nombre (B1) — PRIMER write de portal, gateado por la MISMA relación que ya gatea la lectura (`StudentView.for(student)`), nunca RBAC. Entrega y nota son ejes independientes, pareados solo en lectura (`Assignments::GradingView`)**. `LINEAMIENTOS_MVP.md`/`OPEN_PROCESS.md` ordenan lo que sigue (slice 3: adjuntos, con checkpoint propio de Active Storage). |
+| **Versión del documento** | `v1.23.0` |
+| **Fecha** | 2026-07-16 |
+| **Tests** | 510 runs / 0 fallos / 1 skip preexistente (suite completa, en serie — ver `OPEN_PROCESS.md`) |
+| **Estado en una línea** | Identidad real + RBAC/entitlement reales + portales de persona + autoservicio de staff + auditoría + CHECKPOINT E + #4 barrido (`teacher_management`/`group_management`/`schedules`-calificaciones/`counseling`) + matrícula por término real (`Schedules::ActiveTermEnrollmentScope`, v1.15.0) + `attendance` (v1.16.0) + `report_cards` (v1.17.0) + `finance` (v1.18.0) + `communication` completo (v1.19.0/v1.20.0) + `assignments` slices 1–2/4 (v1.21.0/v1.22.0: publicar/ver/calificar + entrega de texto) + **`assignments` entregas grupales (ítem #6 del MVP): `group_work` toggle por-tarea bloqueado tras publicar; `Assignments::Submission` generalizada a estudiante XOR grupo (CHECK real, mismo patrón que `conversation_participants` v1.20.0); grupos por-tarea (`SubmissionGroup`/`GroupMembership`, estudiante en ≤1); nota grupal = bulk-set de los MISMOS `Assessment` per-student (`GroupGrader`, reusa `GradeRecorder`) + override individual, sin almacén de nota grupal; entrega compartida editable por cualquier integrante, gateada por membresía, sin `group_id` explícito en el request**. `LINEAMIENTOS_MVP.md`/`OPEN_PROCESS.md` ordenan lo que sigue (slice 3: adjuntos, con checkpoint propio de Active Storage). |
 
 ### Convención de versionado de ESTE documento
 
@@ -148,7 +148,7 @@ El **plano de control vive FUERA de `app/domains/*`** — namespace propio `app/
 | `communication` | Hub de comunicación. Ver §8 (anexo). **Ambos subsistemas reales**: (A) anuncios (v1.19.0, `Communication::Announcement`, difusión org-wide, RBAC para publicar + lectura por membresía); (B) mensajería (v1.20.0, `Conversation`/`ConversationParticipant`/`Message`, multiparte, participante `institution_user` **o** `guardian_user` — CHECK exactamente-uno, cuatro caminos de acceso RBAC/participación/auditoría). Diferidos anotados en §8.2 (fan-out 1:1, threading, tags, acudiente-inicia). |
 | `attendance` | **Asistencia diaria por homeroom (v1.16.0, item #2 del MVP)** — dominio NET-NEW, real desde el día uno (sin fase stub). `AttendanceRecord` (`student_id`+`group_id`+`date`, único `(institution_id, student_id, date)`). Consume `Schedules::ActiveTermEnrollmentScope` (nunca re-deriva el join a término); molde #4 completo (per-row `can?`, `authorize!`, nav). Addon-gated. Por-materia diferido. |
 | `report_cards` | **Boletines (v1.17.0, item #3 del MVP)** — dominio NET-NEW, addon-gated, lee `schedules` por FK (nunca posee `Subject`/`Enrollment`/`Assessment`). `ReportCard` (`student_id`+`academic_term_id`, único `(institution_id, student_id, academic_term_id)`) — snapshot **congelado al publicar** (`lines_snapshot` jsonb + `overall_average`, nunca recomputado al leer un publicado). "Draft" es cómputo vivo sin fila (`ReportCards::Computation`, consumido tanto por el preview de supervisión como por `ReportCards::Publisher`). Dos superficies: supervisión (molde #4, `report_card.view`/`report_card.publish`) y portal (por relación, solo publicados, sin `authorize!`, fuera de `Navigation::Registry`). Consume `Schedules::ActiveTermEnrollmentScope` igual que `attendance`. Asistencia en el boletín y escala Decreto 1290 diferidos. |
-| `assignments` | **Tareas académicas, slices 1–2/4 (v1.21.0/v1.22.0, item #6 del MVP)** — dominio NET-NEW, addon-gated, cuelga del gradebook de `schedules` por FK (`Assignments::Assignment` → `subject_id`; `schedules::Assessment` gana `assignment_id` nullable, aditivo). **La nota vive SOLO en `schedules::Assessment`** — publicar hace fan-out (una fila `Assessment` por matrícula del roster, `score: nil`); calificar `UPDATE`-ea esa misma fila (`Assignments::GradeRecorder`), nunca un almacén paralelo. Roster = `Schedules::ActiveTermEnrollmentScope` ∩ la materia ∩ scope RBAC del docente (vía `grade_level_id` de `Subject`, mismo mecanismo que ya usaba `grades.write`). Supervisión (molde #4, `assignment.manage`) + portal (por relación, solo `published`, con la nota leída del mismo origen que `report_cards`). **v1.22.0**: entrega de texto (`Assignments::Submission`, en-domain `(assignment_id, student_id)`, NO anclada a `assessment_id` — pareo entrega↔nota vía `Assignments::GradingView`, un servicio de lectura), ingresable por el estudiante o su acudiente (B1) — primer write de portal, gateado por relación. Slices 3–4 (adjuntos/rúbricas) diferidos — ver `HISTORIA.md` v1.21.0/v1.22.0. |
+| `assignments` | **Tareas académicas, slices 1–2/4 + entregas grupales (v1.21.0/v1.22.0/v1.23.0, item #6 del MVP)** — dominio NET-NEW, addon-gated, cuelga del gradebook de `schedules` por FK (`Assignments::Assignment` → `subject_id`; `schedules::Assessment` gana `assignment_id` nullable, aditivo). **La nota vive SOLO en `schedules::Assessment`** — publicar hace fan-out (una fila `Assessment` por matrícula del roster, `score: nil`, SIEMPRE per-student, con o sin `group_work`); calificar `UPDATE`-ea esa misma fila (`Assignments::GradeRecorder`), nunca un almacén paralelo. Roster = `Schedules::ActiveTermEnrollmentScope` ∩ la materia ∩ scope RBAC del docente (vía `grade_level_id` de `Subject`, mismo mecanismo que ya usaba `grades.write`). Supervisión (molde #4, `assignment.manage`) + portal (por relación, solo `published`, con la nota leída del mismo origen que `report_cards`). **v1.22.0**: entrega de texto (`Assignments::Submission`, en-domain, NO anclada a `assessment_id` — pareo entrega↔nota vía `Assignments::GradingView`), ingresable por el estudiante o su acudiente (B1) — primer write de portal, gateado por relación. **v1.23.0**: `group_work` toggle por-tarea (bloqueado tras publicar); `Submission` generalizada a estudiante **XOR** `SubmissionGroup` (CHECK real, patrón de `conversation_participants` v1.20.0); grupos por-tarea (`GroupMembership`, estudiante en ≤1); nota grupal = bulk-set per-student (`GroupGrader`) + override individual, sin almacén grupal; entrega compartida editable por cualquier integrante sin `group_id` explícito. Slices 3–4 (adjuntos/rúbricas) diferidos — ver `HISTORIA.md` v1.21.0–v1.23.0. |
 
 ### Tier C — candidatos (crear SOLO bajo confirmación explícita)
 
@@ -554,7 +554,29 @@ firma del método (no acepta término de búsqueda) y con aserciones sobre la vi
 
 ## 12. Changelog
 
-El changelog completo (`v1.0.0` → `v1.22.0`) vive en **`HISTORIA.md`**. Entrada de esta versión:
+El changelog completo (`v1.0.0` → `v1.23.0`) vive en **`HISTORIA.md`**. Entrada de esta versión:
+
+- **`v1.23.0` — `assignments`: entregas grupales (ítem #6 del MVP).** Generaliza v1.22.0:
+  `group_work` toggle por-tarea (criterio del docente, sin regla por grado), settable en `draft`,
+  bloqueado tras publicar por un `before_validation` en el MODELO (defensa en profundidad, no solo
+  la vista). `Assignments::Submission` generalizada a estudiante **XOR** `Assignments::
+  SubmissionGroup` — mismo patrón `CHECK (num_nonnulls(...) = 1)` que `conversation_participants`
+  ya estableció en v1.20.0; las validaciones `uniqueness` de Rails llevan `allow_nil: true`
+  (sin eso, Rails trataría dos NULL como duplicado, a diferencia del índice único de Postgres).
+  `Assignments::SubmissionGroup`/`GroupMembership` nuevos — grupos por-tarea (nunca reutilizables
+  entre tareas), un estudiante en ≤1 grupo por asignación (único real). El fan-out per-student de
+  `Assignments::Publisher` (v1.21.0) queda **sin cambios**: cada estudiante del roster sigue
+  recibiendo su propia fila `Assessment` con o sin `group_work` — lo grupal es una conveniencia de
+  calificación/entrega encima del mismo fan-out, nunca un segundo mecanismo. Nota grupal =
+  `Assignments::GroupGrader` (bulk-set reusando `GradeRecorder` por integrante) + override
+  individual por el mismo camino de siempre; re-aplicar la grupal re-setea a todos, sin baseline
+  guardado. La entrega compartida la edita cualquier integrante SIN que el request acepte un
+  `group_id` — `SubmissionRecorder` resuelve el grupo del actor vía su propia `GroupMembership`, lo
+  que hace que dos integrantes distintos siempre converjan en la MISMA fila. Un estudiante sin
+  grupo ve el empty state (nunca error) y no puede entregar (404 si lo intenta). Confirmado por
+  recon: no existe `GroupManagement::Group` (el "grupo de clase" real es `Section`), así que
+  `Assignments::SubmissionGroup` no colisiona con nada — nombre elegido igual, por claridad. 499→510
+  tests totales (11 nuevos). Narrativa completa en `HISTORIA.md`.
 
 - **`v1.22.0` — `assignments`: entrega de texto, slice 2/4 (ítem #6 del MVP).** Recon confirmó el
   modelo real que dejó v1.21.0 sin sorpresas materiales. Tabla nueva `submissions` con llave

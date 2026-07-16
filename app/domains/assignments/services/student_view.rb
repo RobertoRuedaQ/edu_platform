@@ -29,13 +29,32 @@ module Assignments
         &.score
     end
 
-    # The student's own submission (v1.22.0), if any — nil means "not
-    # submitted yet", never an error. `for` above is THE security gate for
-    # writing one (see Assignments::SubmissionRecorder's docstring): a
-    # controller must resolve the assignment through `for(student)` before
-    # ever calling the recorder.
+    # The submission this student can see/edit: their own (individual
+    # assignment) or their group's shared one (v1.23.0). nil means "not
+    # submitted yet" (or, for a group assignment, "not grouped yet either")
+    # — never an error. `for` above is THE security gate for writing one
+    # (see Assignments::SubmissionRecorder's docstring): a controller must
+    # resolve the assignment through `for(student)` before ever calling the
+    # recorder.
     def submission_for(assignment, student)
-      Assignments::Submission.find_by(assignment_id: assignment.id, student_id: student.id)
+      if assignment.group_work?
+        group = group_for(assignment, student)
+        return nil if group.nil?
+
+        Assignments::Submission.find_by(assignment_id: assignment.id, submission_group_id: group.id)
+      else
+        Assignments::Submission.find_by(assignment_id: assignment.id, student_id: student.id)
+      end
+    end
+
+    # nil means this student hasn't been placed in a work group for this
+    # (group) assignment yet — a normal, empty-state condition (§0: "un
+    # estudiante sin grupo aún simplemente no tiene entrega todavía"), never
+    # an error. Always nil for a non-group assignment.
+    def group_for(assignment, student)
+      return nil unless assignment.group_work?
+
+      Assignments::GroupMembership.find_by(assignment_id: assignment.id, student_id: student.id)&.submission_group
     end
   end
 end

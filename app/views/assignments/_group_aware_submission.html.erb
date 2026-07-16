@@ -1,0 +1,21 @@
+<%# locals: (assignment:, group:, submission:, url:, current_student:) -%>
+<%# Shared by the student portal and the guardian portal (v1.23.0) — an
+    individual assignment always shows the plain form; a group one shows it
+    ONLY once this student has a group (§0: no group yet = empty state,
+    never an error, never a form that would 404 on submit). %>
+<% if assignment.group_work? -%>
+  <% if group -%>
+    <p>
+      Entrega en grupo: <strong><%= group.name %></strong>
+      (<%= group.students.reject { |s| s.id == current_student.id }.map { |s| "#{s.first_name} #{s.last_name}" }.join(", ") %>)
+    </p>
+    <%= render "assignments/submission_form", submission: submission, url: url %>
+  <% else -%>
+    <%= render "shared/empty_state",
+          icon: "users",
+          title: "Aún no tienes grupo asignado para esta tarea",
+          description: "La institución todavía no te asignó a un grupo — vuelve más tarde." %>
+  <% end -%>
+<% else -%>
+  <%= render "assignments/submission_form", submission: submission, url: url %>
+<% end -%>

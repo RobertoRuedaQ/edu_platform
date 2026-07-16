@@ -27,6 +27,9 @@ module Portals
 
       @assignment = Assignments::StudentView.for(@student).find(params[:id])
       @submission = Assignments::StudentView.submission_for(@assignment, @student)
+      # nil for an individual assignment, or for a group one where this
+      # student hasn't been placed yet (§0: empty state, never an error).
+      @group = Assignments::StudentView.group_for(@assignment, @student)
     end
 
     def score_for(assignment)

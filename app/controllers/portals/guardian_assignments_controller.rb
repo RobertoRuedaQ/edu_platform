@@ -21,6 +21,7 @@ module Portals
       @student = Core::Access::GuardianScope.for(Current.user).find(params[:student_id])
       @assignment = Assignments::StudentView.for(@student).find(params[:id])
       @submission = Assignments::StudentView.submission_for(@assignment, @student)
+      @group = Assignments::StudentView.group_for(@assignment, @student)
     end
 
     def score_for(assignment)

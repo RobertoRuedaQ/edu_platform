@@ -11,11 +11,125 @@
 
 ---
 
-## Changelog completo (v1.0.0 → v1.22.0)
+## Changelog completo (v1.0.0 → v1.23.0)
 
 > Copiado verbatim de §14 de `PROJECT_STATE.md` v1.5.0, antes de que el split editorial (v1.5.1)
 > moviera el changelog fuera del doc magro. Las entradas v1.6.0+ se escribieron directamente aquí,
 > ya con el split vigente.
+
+### v1.23.0 — 2026-07-16 — `assignments`: entregas grupales (ítem #6 del MVP)
+
+**Generaliza el modelo de v1.21.0/v1.22.0** para tareas grupales: el docente marca `group_work` al
+crear la tarea (criterio suyo, sin regla por grado), forma grupos tras publicar (el roster es
+concreto ahí), cualquier integrante entrega/edita la entrega compartida (acudiente-en-nombre sigue
+valiendo, B1), y calificar es una nota por grupo con posibilidad de override individual.
+
+**Recon (STOP #1):** leyó el modelo real de v1.21.0/v1.22.0 completo antes de tocar nada —
+`Assignments::Submission` (`(assignment_id, student_id)`, `submitted_by_user_id`),
+`Assignments::StudentView`/`GradingView`/`GradeRecorder`/`Publisher`/`Roster` — sin sorpresas
+materiales. **Corrección de un supuesto del prompt**: no existe `GroupManagement::Group` en el
+esquema — el "grupo de clase"/homeroom real siempre fue `GroupManagement::Section` (confirmado ya
+desde slices anteriores de este mismo ciclo). No había, entonces, ninguna colisión de nombres real
+que evitar; se usó igual el nombre propuesto (`Assignments::SubmissionGroup`/`GroupMembership`) por
+claridad — un dominio de trabajo por-tarea es conceptualmente distinto de un homeroom aunque no
+hubiera colisión literal que forzara el nombre.
+
+**El hallazgo que simplificó todo el slice**: el fan-out per-student de `Assignments::Publisher`
+(v1.21.0) **no necesita ningún cambio**. Publicar SIEMPRE crea una fila `schedules::Assessment` por
+estudiante del roster, sin importar `group_work` — ese mecanismo ya era per-student desde el primer
+día. Esto significa que "nota grupal" nunca es un concepto nuevo de almacenamiento: es simplemente
+`Assignments::GroupGrader` iterando los integrantes de un grupo y llamando a
+`Assignments::GradeRecorder` (ya existente, sin tocar) por cada uno — un bulk-set sobre filas que
+YA EXISTÍAN, nunca una tabla de "nota de grupo" nueva. El override individual es, literalmente, la
+MISMA llamada a `GradeRecorder` que ya existía para tareas individuales — cero código nuevo para esa
+parte.
+
+**Generalización de `Submission` — el otro punto de diseño real:** se siguió el patrón exacto que
+`conversation_participants` (v1.20.0) ya estableció para "identidad A o identidad B, nunca
+ambas/ninguna": `student_id` se volvió nullable, se agregó `submission_group_id`, y un CHECK real
+`num_nonnulls(student_id, submission_group_id) = 1`. Una sutileza que HABRÍA sido un bug si no se
+hubiera notado en recon: las validaciones `uniqueness` de Rails, a diferencia del índice único de
+Postgres, tratan por defecto DOS valores `NULL` como "iguales" (colisión) al validar un scope —
+sin `allow_nil: true` explícito en ambas validaciones (`student_id`/`submission_group_id`), la
+SEGUNDA entrega grupal de cualquier tarea habría sido rechazada por el modelo con un falso "ya
+existe", aunque la BD la hubiera aceptado sin problema. Corregido antes de que apareciera como un
+bug real en tests.
+
+**Lo construido:**
+- Migración `20260716131320_add_group_work_and_submission_groups.rb`: `assignments.group_work`
+  (boolean, default false); tablas nuevas `submission_groups`/`group_memberships` (RLS
+  `ENABLE+FORCE`+policy, único `(institution_id, assignment_id, student_id)` en memberships —
+  un estudiante en ≤1 grupo POR TAREA); generalización de `submissions` (`student_id` nullable,
+  `submission_group_id` nuevo, CHECK XOR, índice único adicional `(institution_id, assignment_id,
+  submission_group_id)` — Postgres no colisiona múltiples NULL, así que ambos índices únicos
+  coexisten sin conflicto). Corrida en dev y test.
+- Modelos `Assignments::SubmissionGroup` (`has_many :students, through: :group_memberships`,
+  `has_one :submission`), `Assignments::GroupMembership`; `Assignments::Submission` generalizado
+  (XOR + `allow_nil`); `Assignments::Assignment` gana `group_work?` y el
+  `before_validation :lock_group_work_after_publish` (descarta cualquier cambio a `group_work` una
+  vez `published`/`archived`, sin importar qué action lo intente — defensa en profundidad, no solo
+  omitir el checkbox en la vista de edición).
+- `Assignments::GroupGrader` (bulk-set reusando `GradeRecorder` por integrante).
+  `Assignments::GradingView`/`StudentView` generalizados: `GradingView::Row` gana
+  `submission_group`; `StudentView.submission_for` resuelve individual o grupal según
+  `assignment.group_work?`; `StudentView.group_for` nuevo (nil = sin grupo asignado todavía, empty
+  state, nunca error). `Assignments::SubmissionRecorder` generalizado: para una tarea grupal,
+  resuelve el `SubmissionGroup` del ACTOR vía su propia `GroupMembership` — nunca acepta un
+  `group_id` del cliente, lo que garantiza que dos integrantes distintos siempre converjan en la
+  MISMA fila sin ninguna verificación extra.
+- `Assignments::SubmissionGroupsController#create` (nested bajo la tarea, RBAC
+  `assignment.manage`) — forma un grupo desde estudiantes del roster aún sin grupo. Sin
+  `#destroy`/`#update` este slice (corregir una formación de grupos es un caso de uso separado, no
+  pedido explícitamente).
+- `AssignmentsController#show` extendido (`@groups`/`@unassigned` cuando `group_work?` y
+  publicada); `#grade` acepta `group_scores` (bulk-set, aplicado PRIMERO) además de `scores`
+  (override individual, aplicado DESPUÉS — así un submit que llena ambos en el mismo request deja
+  ganar al override, coherente con "calificar grupo... el docente puede luego modificar la nota de
+  un integrante").
+- Vistas: formulario de tarea con el toggle `group_work` (solo visible/efectivo en `draft`); vista
+  de calificación extendida con sección "Grupos" (miembros + entrega compartida) y notas grupales
+  bulk-set; portal (`_group_aware_submission` compartido entre estudiante y acudiente) con el
+  empty state de "sin grupo todavía" antes del formulario de entrega.
+
+**Caso de aceptación, verificado end-to-end:** el docente marca `group_work`, publica, y forma un
+grupo — cada estudiante queda en exactamente un grupo (el único lo garantiza); un integrante
+entrega y OTRO integrante ve esa MISMA entrega y la edita (una sola fila, verificado por conteo);
+un acudiente entrega en nombre de un integrante — mismo grupo, misma fila; una nota grupal deja la
+MISMA nota en el `Assessment` de cada integrante; un override individual cambia SOLO esa fila;
+re-aplicar la nota grupal re-setea a TODOS, incluido el que tenía override; un estudiante sin grupo
+ve el empty state y un intento de entrega da 404 (nunca 500); un estudiante de OTRO grupo de la
+misma tarea no puede tocar una entrega ajena (su propio POST siempre resuelve a SU grupo, nunca al
+otro); `group_work` intentado cambiar después de publicar no tiene ningún efecto; el CHECK de la BD
+rechaza tanto "ninguna identidad" como "ambas identidades" (SQL crudo, no solo el modelo); una tarea
+individual (`group_work: false`) sigue funcionando exactamente como v1.22.0 (test de regresión
+dedicado); aislamiento cross-tenant verificado con query real bajo RLS.
+
+**Decisión explícita, no un olvido:** `db/seeds.rb` NO se tocó — mismo alcance que las cinco slices
+anteriores del ciclo (el archivo sigue sin ningún concepto de `institution_users`/`Assignments::*`).
+
+**Resultado:** 510 runs / 0 failures / 0 errors / 1 skip preexistente (baseline 499; 11 tests
+nuevos, todos en `test/integration/group_assignments_test.rb`). `bin/rails zeitwerk:check` verde.
+Una migración, aplicada en dev y test.
+
+**Nota operativa, no de producto:** al arrancar este slice, `bin/rails generate` falló porque
+`image_processing`/`selenium-webdriver` (ya declaradas en `Gemfile`/`Gemfile.lock`, sin relación con
+este trabajo) no estaban instaladas localmente — un `bundle install` las restauró. No fue un cambio
+de dependencias, solo materializar lo que ya estaba fijado.
+
+**Archivos nuevos/editados:**
+- Migración: `db/migrate/20260716131320_add_group_work_and_submission_groups.rb`.
+- Modelos: `app/domains/assignments/models/{submission_group,group_membership}.rb` (+ edits a
+  `submission.rb`, `assignment.rb`).
+- Servicios: `app/domains/assignments/services/group_grader.rb` (+ edits a `grading_view.rb`,
+  `student_view.rb`, `submission_recorder.rb`).
+- Controllers: `app/controllers/assignments/submission_groups_controller.rb` (+ edits a
+  `assignments_controller.rb`, `app/controllers/portals/{student,guardian}_assignments_controller.rb`).
+- Vistas: `app/views/assignments/_group_aware_submission.html.erb` (compartido) (+ edits a
+  `_form.html.erb`, `assignments/show.html.erb`,
+  `app/views/portals/{student,guardian}_assignments/show.html.erb`).
+- Config: `config/routes.rb`.
+- Proceso: `OPEN_PROCESS.md` (backlog + guardrails nuevos).
+- Tests: `test/integration/group_assignments_test.rb`.
 
 ### v1.22.0 — 2026-07-15 — `assignments`: entrega de texto, slice 2/4 (ítem #6 del MVP)
 

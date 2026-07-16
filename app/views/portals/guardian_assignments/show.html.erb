@@ -13,5 +13,6 @@
       "Nota" => (Assignments::StudentView.score_for(@assignment, @student) || "Pendiente")
     } %>
 
-<%= render "assignments/submission_form", submission: @submission,
+<%= render "assignments/group_aware_submission", assignment: @assignment, group: @group,
+      submission: @submission, current_student: @student,
       url: portal_guardian_student_assignment_submission_path(@student, @assignment) %>
