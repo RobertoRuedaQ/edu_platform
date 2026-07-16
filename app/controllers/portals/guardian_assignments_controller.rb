@@ -46,5 +46,11 @@ module Portals
       portal_guardian_student_assignment_attachments_path(@student, assignment)
     end
     helper_method :attachment_upload_path_for
+
+    # materials (v1.25.0) — read-only here; the teacher writes these (RBAC).
+    def material_path_for(material)
+      portal_guardian_student_assignment_material_path(@student, material.assignment, material)
+    end
+    helper_method :material_path_for
   end
 end

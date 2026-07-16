@@ -16,6 +16,35 @@
   <p><%= simple_format(@assignment.instructions) %></p>
 <% end -%>
 
+<%# Materiales (v1.25.0) — el docente adjunta/quita (RBAC, no relación);
+    docx/pdf/jpg/png con la misma disposition que los adjuntos de entrega. -%>
+<%= render "shared/page_header", title: "Materiales" %>
+
+<% if @assignment.materials.any? -%>
+  <ul class="material-list">
+    <% @assignment.materials.each do |material| -%>
+      <li>
+        <%= link_to material.file.filename.to_s,
+              assignments_subject_assignment_material_path(@subject, @assignment, material),
+              target: (material.disposition == "inline" ? "_blank" : nil) %>
+        <% unless @assignment.archived? -%>
+          <%= button_to "Quitar", assignments_subject_assignment_material_path(@subject, @assignment, material),
+                method: :delete, class: "btn btn--danger btn--sm" %>
+        <% end -%>
+      </li>
+    <% end -%>
+  </ul>
+<% else -%>
+  <p class="text-muted">Sin materiales adjuntos.</p>
+<% end -%>
+
+<% unless @assignment.archived? -%>
+  <%= form_with url: assignments_subject_assignment_materials_path(@subject, @assignment), method: :post, multipart: true do -%>
+    <input type="file" name="file" accept=".docx,.pdf,.jpg,.jpeg,.png">
+    <%= ui_button "Adjuntar material", type: "submit", variant: :secondary %>
+  <% end -%>
+<% end -%>
+
 <% if @assignment.group_work? && @assignment.published? -%>
   <%= render "shared/page_header", title: "Grupos" %>
 

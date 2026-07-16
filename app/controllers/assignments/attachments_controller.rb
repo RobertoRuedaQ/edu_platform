@@ -16,7 +16,7 @@ module Assignments
         .where(institution_id: Current.institution_id, submissions: { assignment_id: assignment.id })
         .find(params[:id])
 
-      send_submission_attachment(attachment)
+      send_attachable_file(attachment)
     end
 
     private

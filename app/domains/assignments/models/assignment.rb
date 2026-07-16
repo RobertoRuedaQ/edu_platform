@@ -17,6 +17,8 @@ module Assignments
       foreign_key: :assignment_id, inverse_of: :assignment, dependent: :nullify
     has_many :submission_groups, class_name: "Assignments::SubmissionGroup",
       foreign_key: :assignment_id, inverse_of: :assignment, dependent: :destroy
+    has_many :materials, class_name: "Assignments::Material",
+      foreign_key: :assignment_id, inverse_of: :assignment, dependent: :destroy
 
     validates :title, :due_date, presence: true
     validates :status, inclusion: { in: %w[draft published archived] }

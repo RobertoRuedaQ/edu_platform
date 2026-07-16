@@ -21,7 +21,7 @@ module Portals
     end
 
     def show
-      send_submission_attachment(find_attachment)
+      send_attachable_file(find_attachment)
     end
 
     def destroy

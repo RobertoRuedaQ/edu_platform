@@ -1,0 +1,17 @@
+<%# locals: (assignment:) -%>
+<%# Read-only (v1.25.0) — shared by the student and guardian portals.
+    material_path_for is a helper_method on the enclosing controller
+    (student vs guardian), same pattern as attachment_path_for. A draft
+    assignment never reaches here — it isn't in StudentView.for(student)'s
+    scope, so this view is never even rendered for one. -%>
+<% if assignment.materials.any? -%>
+  <%= render "shared/page_header", title: "Materiales" %>
+  <ul class="material-list">
+    <% assignment.materials.each do |material| -%>
+      <li>
+        <%= link_to material.file.filename.to_s, material_path_for(material),
+              target: (material.disposition == "inline" ? "_blank" : nil) %>
+      </li>
+    <% end -%>
+  </ul>
+<% end -%>

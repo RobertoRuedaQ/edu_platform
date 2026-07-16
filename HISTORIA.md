@@ -11,11 +11,106 @@
 
 ---
 
-## Changelog completo (v1.0.0 → v1.24.0)
+## Changelog completo (v1.0.0 → v1.25.0)
 
 > Copiado verbatim de §14 de `PROJECT_STATE.md` v1.5.0, antes de que el split editorial (v1.5.1)
 > moviera el changelog fuera del doc magro. Las entradas v1.6.0+ se escribieron directamente aquí,
 > ya con el split vigente.
+
+### v1.25.0 — 2026-07-16 — `assignments`: materiales del docente, slice 3b/4 (ítem #6 del MVP)
+
+**Adjuntar/quitar/listar/servir materiales (docx/pdf/jpg/png, ≤10 MB, ≤10 por tarea) colgados de una
+`Assignment` existente.** Es el espejo de v1.24.0 (adjuntos de ENTREGA) pero con dueño distinto —
+`Assignment`, no `Submission` — y, sobre todo, una puerta de escritura distinta: RBAC del docente
+(`assignment.manage`), nunca una relación de portal. Fuera de alcance: rúbricas (slice 4); ningún
+cambio a los adjuntos de entrega ni al fan-out de notas.
+
+**Recon: sin contradicciones materiales esta vez** (a diferencia de v1.24.0, donde Active Storage ya
+estaba instalado contra la premisa del prompt). Confirmado contra disco: `assignment.manage` es el
+ÚNICO permiso que gatea crear/editar/publicar/archivar/calificar una tarea (`seed_permissions.rb`) —
+sin ningún split fino de autoría; se reusó directamente, sin inventar un permiso nuevo.
+`Assignments::StudentView.for(student)` filtra por el scope `Assignment.published` (`status:
+"published"`) — confirma que un borrador (Y, hallazgo adicional no pedido explícitamente por el
+prompt, una tarea ARCHIVADA también) desaparece por completo de ese scope, así que la visibilidad de
+materiales para estudiante/acudiente en esos dos estados cae gratis, sin ningún chequeo aparte —
+`#show` del portal ya 404 antes de llegar a resolver ningún material. `GuardianScope` encadenado con
+`StudentView.for` (hijo→tarea, dos scopes) ya estaba probado en v1.22.0/v1.24.0; se replicó igual acá
+para el nuevo `GuardianMaterialsController`.
+
+**Diseño: mismo molde de tabla puente que v1.24.0, dueño distinto.** `Assignments::Material` es la
+tabla puente tenant-scoped (RLS `ENABLE+FORCE`) — igual razón que `SubmissionAttachment`: las tablas
+crudas de Active Storage no tienen `institution_id`/RLS, así que el límite de tenant lo sostiene esta
+fila, nunca las tablas de Rails (guardrail v1.24.0, no reabierto). Nombre elegido: `Assignments::
+Material` (lenguaje de dominio — "materiales del docente"), tabla `assignment_materials` (prefijo por
+el DUEÑO, mismo patrón que `submission_attachments`/`submission_groups`/`group_memberships` — el
+namespace del dominio nunca se repite en el nombre de tabla, el dueño sí).
+
+**Un service hermano, no un dueño polimórfico — pero con un helper compartido de verdad.** Se creó
+`Assignments::MaterialAdder`, sibling de `Assignments::AttachmentAdder`, en vez de generalizar este
+último a un dueño polimórfico — cada uno tiene su propio cupo (10 vs. 5) y su propia asociación de
+dueño, y forzar un dueño genérico habría costado más indirección de la que ahorra. Lo que SÍ es
+idéntico byte a byte entre los dos — el chequeo de tipo real (Marcel) + purga-y-destroy si es
+inválido, y el chequeo de tamaño — se extrajo a `Assignments::AttachmentTypeCheck` (módulo nuevo,
+`services/`), y `AttachmentAdder` (v1.24.0) se refactorizó para usarlo también — evita que las dos
+copias de esa lógica diverjan con el tiempo. Verificado sin regresión: la suite completa de
+`attachments_test.rb`/`submissions_test.rb`/`group_assignments_test.rb` sigue en verde tras el
+refactor.
+
+**La diferencia real de este slice: RBAC en vez de relación.** El docente adjunta/quita desde
+`Assignments::MaterialsController` (nested bajo `assignments::subjects::assignments`, mismo
+`authorize!("assignment.manage", @subject)` que ya gatea el resto del namespace) — un actor sin ese
+permiso recibe **403** (el gate RBAC), nunca el 404 de relación que usan los portales. Permitido
+mientras `draft`/`published`; bloqueado en `archived` (mismo principio "archivado = congelado" que
+v1.24.0) — y, a diferencia de `report_cards`, agregar un material DESPUÉS de publicar es normal y
+esperado (un recurso aclaratorio), no rompe ningún snapshot congelado; los estudiantes ven la lista
+viva. `attached_by_user_id` = el docente (`Current.user`) que subió, atribución únicamente.
+
+**Serving: tres controllers, mismo `AttachmentServing` compartido.** `Assignments::
+MaterialsController#show` (docente, RBAC), `Portals::StudentMaterialsController#show` y
+`Portals::GuardianMaterialsController#show` (ambos read-only — el docente escribe, el portal solo
+sirve). Los tres reusan el concern `AttachmentServing` de v1.24.0 — renombrado `send_submission_
+attachment` → `send_attachable_file` porque ahora sirve DOS tipos de dueño (`SubmissionAttachment` Y
+`Material`), y el mensaje de error de `:too_many` se generalizó (ya no menciona "5" ni "por entrega"
+en el texto — cada Adder tiene su propio cupo). Ninguno de los tres usa las rutas firmadas default de
+Active Storage. Disposition idéntica a v1.24.0: docx = descarga, pdf/jpg/png = inline.
+
+**Caso de aceptación, verificado end-to-end:** un docente adjunta docx/pdf/jpg/png a la tarea y él
+mismo, el estudiante y el acudiente los ven con la disposition correcta; un acudiente ve el material
+de la tarea de su hijo por los dos scopes encadenados; un material en una tarea `draft` es 404 para
+el estudiante — tras publicar, 200, sin ningún cambio de código entre ambos momentos (la visibilidad
+la resuelve `StudentView.for` solo); un archivo renombrado con firma mágica que contradice la
+extensión se rechaza por el tipo REAL y purga el blob; el 11.º material se rechaza manteniendo el
+cupo en 10; un archivo de 11MB se rechaza antes de tocar disco; un actor sin `assignment.manage`
+recibe 403 al intentar adjuntar (nunca 404); adjuntar en una tarea `archived` se bloquea; un material
+sembrado en otra institución nunca se filtra ni por la ruta del docente ni por la del portal del
+estudiante (aislamiento cross-tenant, RLS real).
+
+**Resultado:** 528 runs / 0 failures / 0 errors / 1 skip preexistente (baseline 519; 9 tests nuevos
+en `test/integration/materials_test.rb`, reusando los fixtures binarios de v1.24.0). `bin/rails
+zeitwerk:check` verde. Una migración, aplicada en dev y test.
+
+**Archivos nuevos/editados:**
+- Migración: `db/migrate/20260716143401_create_assignment_materials.rb`.
+- Modelos: `app/domains/assignments/models/material.rb` (+ edits a `assignment.rb` — `has_many
+  :materials` —, `submission_attachment.rb` — referencia las constantes compartidas en vez de
+  redefinirlas).
+- Servicios: `app/domains/assignments/services/material_adder.rb`,
+  `app/domains/assignments/services/attachment_type_check.rb` (nuevo, compartido) (+ edit a
+  `attachment_adder.rb` para reusarlo).
+- Controllers: `app/controllers/assignments/materials_controller.rb`,
+  `app/controllers/portals/{student,guardian}_materials_controller.rb` (+ edit a
+  `app/controllers/concerns/attachment_serving.rb` — rename genérico + mensaje de error
+  generalizado —, y a `app/controllers/assignments/attachments_controller.rb`/`app/controllers/
+  portals/{student,guardian}_attachments_controller.rb` por el rename).
+- Vistas: `app/views/assignments/_materials_list.html.erb` (portal, compartido, read-only) (+ edits
+  a `assignments/assignments/show.html.erb` — lista + formulario de subida —,
+  `app/views/portals/{student,guardian}_assignments/show.html.erb` — render del partial nuevo —,
+  y helpers `material_path_for` en ambos controllers de portal).
+- Config: `config/routes.rb`.
+- Proceso: `OPEN_PROCESS.md` (guardrail nuevo: escritura RBAC vs. lectura por relación en el MISMO
+  dominio; cierre del ítem 11 slice 3b — solo queda rúbricas).
+- Tests: `test/integration/materials_test.rb` (reusa los fixtures de `test/fixtures/files/` de
+  v1.24.0, sin fixtures nuevos).
 
 ### v1.24.0 — 2026-07-16 — `assignments`: adjuntos de entrega, slice 3/4 (ítem #6 del MVP)
 
