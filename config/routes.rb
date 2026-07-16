@@ -67,6 +67,12 @@ Rails.application.routes.draw do
         # as StudentSubmissionsController. #show streams the file through
         # this controller — NEVER Active Storage's own signed routes.
         resources :attachments, only: %i[create show destroy], controller: "student_attachments"
+        # materials (v1.25.0, slice 3b) — read-only here: the TEACHER writes
+        # these (RBAC, see the assignments:: namespace below), the portal
+        # only serves them through the same StudentView.for(student) scope
+        # that already gates #show — a draft assignment's materials are
+        # unreachable for free, since the assignment itself isn't in scope.
+        resources :materials, only: :show, controller: "student_materials"
       end
     end
     resource :guardian, only: :show, controller: "guardian_portal" do
@@ -96,6 +102,9 @@ Rails.application.routes.draw do
           # attachments (v1.24.0, slice 3) — on behalf of THIS specific
           # already-scoped child (B1), same discipline as :submission above.
           resources :attachments, only: %i[create show destroy], controller: "guardian_attachments"
+          # materials (v1.25.0, slice 3b) — read-only, same chained scope
+          # (GuardianScope -> StudentView.for(this child)) as :attachments.
+          resources :materials, only: :show, controller: "guardian_materials"
         end
       end
       # communication (v1.19.0): org-wide, NOT per-child — a sibling of
@@ -274,6 +283,12 @@ Rails.application.routes.draw do
         # assignment.manage authorize! this whole namespace already gates —
         # never Active Storage's own signed routes.
         resources :attachments, only: :show
+        # materials (v1.25.0, slice 3b) — the FLIP side of :attachments:
+        # here the teacher WRITES (RBAC, same assignment.manage gate as the
+        # rest of this namespace), never a portal relation. Allowed while
+        # draft/published, blocked once archived — same "archived = frozen"
+        # rule as entrega attachments.
+        resources :materials, only: %i[create show destroy]
       end
     end
   end

@@ -232,6 +232,22 @@ ALTER TABLE ONLY public.assessments FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: assignment_materials; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.assignment_materials (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    assignment_id uuid NOT NULL,
+    attached_by_user_id uuid,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+ALTER TABLE ONLY public.assignment_materials FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: assignments; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1513,6 +1529,14 @@ ALTER TABLE ONLY public.assessments
 
 
 --
+-- Name: assignment_materials assignment_materials_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.assignment_materials
+    ADD CONSTRAINT assignment_materials_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: assignments assignments_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2006,6 +2030,13 @@ ALTER TABLE ONLY public.usage_events
 
 ALTER TABLE ONLY public.users
     ADD CONSTRAINT users_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: idx_assignment_materials_on_institution_assignment; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_assignment_materials_on_institution_assignment ON public.assignment_materials USING btree (institution_id, assignment_id);
 
 
 --
@@ -3513,6 +3544,14 @@ ALTER TABLE ONLY public.institution_entitlements
 
 
 --
+-- Name: assignment_materials fk_rails_54ffd64328; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.assignment_materials
+    ADD CONSTRAINT fk_rails_54ffd64328 FOREIGN KEY (assignment_id) REFERENCES public.assignments(id) ON DELETE CASCADE;
+
+
+--
 -- Name: email_otps fk_rails_57d2c47354; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3574,6 +3613,14 @@ ALTER TABLE ONLY public.role_permissions
 
 ALTER TABLE ONLY public.submissions
     ADD CONSTRAINT fk_rails_61cac0823d FOREIGN KEY (assignment_id) REFERENCES public.assignments(id) ON DELETE CASCADE;
+
+
+--
+-- Name: assignment_materials fk_rails_62b763c424; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.assignment_materials
+    ADD CONSTRAINT fk_rails_62b763c424 FOREIGN KEY (attached_by_user_id) REFERENCES public.users(id) ON DELETE SET NULL;
 
 
 --
@@ -3670,6 +3717,14 @@ ALTER TABLE ONLY public.invitations
 
 ALTER TABLE ONLY public.conversations
     ADD CONSTRAINT fk_rails_7024c7cecf FOREIGN KEY (closed_by_institution_user_id) REFERENCES public.institution_users(id) ON DELETE SET NULL;
+
+
+--
+-- Name: assignment_materials fk_rails_72cc164557; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.assignment_materials
+    ADD CONSTRAINT fk_rails_72cc164557 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
 
 
 --
@@ -4352,6 +4407,19 @@ CREATE POLICY assessments_tenant_isolation ON public.assessments USING ((institu
 
 
 --
+-- Name: assignment_materials; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.assignment_materials ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: assignment_materials assignment_materials_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY assignment_materials_tenant_isolation ON public.assignment_materials USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
 -- Name: assignments; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -4930,6 +4998,7 @@ CREATE POLICY teaching_assignments_tenant_isolation ON public.teaching_assignmen
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260716143401'),
 ('20260716140030'),
 ('20260716131320'),
 ('20260715203148'),

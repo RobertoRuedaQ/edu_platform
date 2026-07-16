@@ -9,7 +9,6 @@ module Assignments
   # the blob exists. A rejected attachment is purged immediately — never
   # left as an orphaned blob on disk.
   class AttachmentAdder
-    MAX_BYTES = 10.megabytes
     MAX_ATTACHMENTS = 5
 
     Result = Data.define(:attachment, :error)
@@ -28,17 +27,14 @@ module Assignments
       return Result.new(attachment: nil, error: :assignment_closed) if submission.assignment.archived?
       return Result.new(attachment: nil, error: :no_file) if file.blank?
       return Result.new(attachment: nil, error: :too_many) if submission.submission_attachments.count >= MAX_ATTACHMENTS
-      return Result.new(attachment: nil, error: :too_large) if file.size > MAX_BYTES
+      return Result.new(attachment: nil, error: :too_large) if Assignments::AttachmentTypeCheck.too_large?(file)
 
       attachment = submission.submission_attachments.create!(institution: submission.institution,
         attached_by: attached_by)
       attachment.file.attach(file)
 
-      unless Assignments::SubmissionAttachment::ALLOWED_CONTENT_TYPES.include?(attachment.file.content_type)
-        attachment.file.purge
-        attachment.destroy!
-        return Result.new(attachment: nil, error: :invalid_type)
-      end
+      error = Assignments::AttachmentTypeCheck.reject_if_invalid_type!(attachment)
+      return Result.new(attachment: nil, error: error) if error
 
       Result.new(attachment: attachment, error: nil)
     end

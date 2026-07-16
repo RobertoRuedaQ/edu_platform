@@ -12,13 +12,8 @@ module Assignments
   class SubmissionAttachment < ApplicationRecord
     self.table_name = "submission_attachments"
 
-    DOCX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    ALLOWED_CONTENT_TYPES = [
-      DOCX_CONTENT_TYPE,
-      "application/pdf",
-      "image/jpeg",
-      "image/png"
-    ].freeze
+    DOCX_CONTENT_TYPE = Assignments::AttachmentTypeCheck::DOCX_CONTENT_TYPE
+    ALLOWED_CONTENT_TYPES = Assignments::AttachmentTypeCheck::ALLOWED_CONTENT_TYPES
 
     belongs_to :institution, class_name: "Core::Institution"
     belongs_to :submission, class_name: "Assignments::Submission"

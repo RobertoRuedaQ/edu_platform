@@ -9,6 +9,8 @@
   <p><%= simple_format(@assignment.instructions) %></p>
 <% end -%>
 
+<%= render "assignments/materials_list", assignment: @assignment %>
+
 <%= render "shared/detail_list", items: {
       "Nota" => (Assignments::StudentView.score_for(@assignment, @student) || "Pendiente")
     } %>
