@@ -17,6 +17,10 @@ module Counseling
       authorize!("counseling.read", @case)
       @session_notes = @case.session_notes.order(occurred_at: :desc)
       @referrals = @case.referrals.order(created_at: :desc)
+      # Lens 5 (Slice 3): the abstract care-aura projections this counselor
+      # published for the student — read through the sanctioned analytics_bi
+      # seam (never AnalyticsBi::CareAura directly).
+      @care_auras = AnalyticsBi::Aura::CounselorScope.new(student: @case.student).resolve
     end
   end
 end

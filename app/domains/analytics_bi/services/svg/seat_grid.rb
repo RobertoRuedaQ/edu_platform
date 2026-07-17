@@ -89,7 +89,8 @@ module AnalyticsBi
           tag.rect(class: "seat__pad", x: x, y: y, width: SEAT, height: SEAT, rx: 8),
           content_tag(:text, initials(seat.student), class: "seat__initials",
             x: x + SEAT / 2, y: y + SEAT / 2, "text-anchor" => "middle", "dominant-baseline" => "central"),
-          attention_marker(x, y, heat)
+          attention_marker(x, y, heat),
+          aura_marker(x, y, seat)
         ].compact),
           class: "seat",
           style: "--heat: #{heat.hsl};",
@@ -105,6 +106,32 @@ module AnalyticsBi
         return nil unless heat.needs_attention
 
         content_tag(:text, "!", class: "seat__flag", x: x + SEAT - 10, y: y + 16, "text-anchor" => "middle")
+      end
+
+      # Lens 5 (§5.7, Slice 3): a discrete abstract aura badge over the seat —
+      # ONLY the projection (kind label + counselor guidance), NEVER anything
+      # clinical. Empty when the observer lacks hps.aura.view (seat.auras == []),
+      # so the plain grid is unchanged. AA: never color-alone — the badge is a
+      # visible "♥" glyph with an <title> (SVG tooltip) + aria-label carrying
+      # the kind + guidance, and the hidden table mirrors it.
+      def aura_marker(x, y, seat)
+        return nil unless seat.auras?
+
+        content_tag(:g, safe_join([
+          content_tag(:title, aura_summary(seat)),
+          content_tag(:circle, nil, class: "seat__aura-dot", cx: x + 12, cy: y + 12, r: 9),
+          content_tag(:text, "♥", class: "seat__aura-glyph", x: x + 12, y: y + 12,
+            "text-anchor" => "middle", "dominant-baseline" => "central")
+        ]),
+          class: "seat__aura",
+          role: "img",
+          "aria-label": "Aura de cuidado: #{aura_summary(seat)}")
+      end
+
+      def aura_summary(seat)
+        seat.auras.map { |aura|
+          "#{AnalyticsBi::CareAura.kind_label(aura.kind)} — #{aura.guidance}"
+        }.join(" · ")
       end
 
       def board
@@ -173,23 +200,31 @@ module AnalyticsBi
       end
 
       # Non-visual, accessible mirror of every seated student — so the meaning
-      # never depends on reading the color.
+      # never depends on reading the color. The "Aura de cuidado" column only
+      # appears when the observer is authorized (some seat carries an aura), so
+      # the plain grid's table is unchanged.
       def hidden_table
         content_tag(:table, class: "visually-hidden") do
           safe_join([
             content_tag(:caption, "Estudiantes por asiento en #{classroom.section.name}"),
             content_tag(:thead, content_tag(:tr, safe_join([
               content_tag(:th, "Estudiante", scope: "col"),
-              content_tag(:th, "Estado", scope: "col")
-            ]))),
+              content_tag(:th, "Estado", scope: "col"),
+              (content_tag(:th, "Aura de cuidado", scope: "col") if any_auras?)
+            ].compact))),
             content_tag(:tbody, safe_join(classroom.seats.map { |seat|
               content_tag(:tr, safe_join([
                 content_tag(:td, "#{seat.student.first_name} #{seat.student.last_name}"),
-                content_tag(:td, seat_label(seat).split(" — ").last)
-              ]))
+                content_tag(:td, seat_label(seat).split(" — ").last),
+                (content_tag(:td, seat.auras? ? aura_summary(seat) : "—") if any_auras?)
+              ].compact))
             }))
           ])
         end
+      end
+
+      def any_auras?
+        classroom.respond_to?(:aura_count) && classroom.aura_count.positive?
       end
     end
   end

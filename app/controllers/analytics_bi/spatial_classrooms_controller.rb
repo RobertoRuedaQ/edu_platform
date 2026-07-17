@@ -15,7 +15,14 @@ module AnalyticsBi
       raise ActiveRecord::RecordNotFound if @section.nil?
 
       authorize!("hps.classroom.view", @section)
-      @classroom = AnalyticsBi::Lens::SpatialClassroom.for(section: @section)
+      # Lens 5 (Slice 3): the aura overlay is ADDITIVE and gated by a SECOND
+      # permission. An observer with hps.classroom.view but NOT hps.aura.view
+      # sees the plain Slice-2 grid unchanged; with hps.aura.view (scoped to
+      # this section) they also see the discrete aura badges. can? here is the
+      # correct gate — it is the one thing that decides whether the care_auras
+      # table is queried at all (see SpatialClassroom#auras_for).
+      @shows_auras = can?("hps.aura.view", @section)
+      @classroom = AnalyticsBi::Lens::SpatialClassroom.for(section: @section, with_auras: @shows_auras)
     end
   end
 end

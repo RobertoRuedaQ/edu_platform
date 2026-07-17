@@ -719,6 +719,13 @@
   .seat--empty { fill: none; stroke: var(--color-border); stroke-dasharray: 3 3; }
   .seat__initials { fill: #fff; font-size: 15px; font-weight: var(--weight-semibold); }
   .seat__flag { fill: #fff; font-size: 15px; font-weight: var(--weight-bold); }
+  /* Lens 5 aura badge (v1.37.0): a discrete abstract marker over a seat when
+     the observer holds hps.aura.view. Never color-alone — it carries a glyph +
+     accessible label; the projection detail lives in the SVG <title> and the
+     hidden table. */
+  .seat__aura { cursor: help; }
+  .seat__aura-dot { fill: var(--color-surface); stroke: var(--color-primary); stroke-width: 1.5; }
+  .seat__aura-glyph { fill: var(--color-primary); font-size: 11px; font-weight: var(--weight-bold); }
   /* Dimming: applied by spatial_map_controller.js to stable seats when the
      filter is on — attenuate opacity/saturation, never remove (AA: meaning is
      also carried by the "!" marker + label, never color alone). */

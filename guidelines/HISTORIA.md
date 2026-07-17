@@ -11,11 +11,127 @@
 
 ---
 
-## Changelog completo (v1.0.0 → v1.36.0)
+## Changelog completo (v1.0.0 → v1.37.0)
 
 > Copiado verbatim de §14 de `PROJECT_STATE.md` v1.5.0, antes de que el split editorial (v1.5.1)
 > moviera el changelog fuera del doc magro. Las entradas v1.6.0+ se escribieron directamente aquí,
 > ya con el split vigente.
+
+### v1.37.0 — 2026-07-17 — `analytics_bi`: Lente 5 "Auras de Cuidado" (Slice 3 de `BI_DOCUMENT.md`)
+
+**Octavo slice post-MVP, tercero guiado por `guidelines/BI_DOCUMENT.md`, y el más SENSIBLE del dominio
+hasta ahora (Clase S).** Construye la Lente 5: la proyección que preserva el **aislamiento clínico**
+(no-negociable §1.1.5). El diagnóstico psicopedagógico vive y **se queda** en `counseling` (tier T3);
+lo único que cruza la frontera es una **proyección abstracta** — un enum cerrado de "instrucción de
+trato" + un texto de guía redactado por el orientador, con cero PII clínica — que el docente lee como
+un ícono discreto sobre el pupitre en la Lente 1. Este slice valida la frontera clínica **antes** de
+que lleguen los slices de mayor tensión NNA (instrumento de carácter, ficha, núcleo familiar).
+
+**Recon-first (§12):** `grep create_table :care_auras` → no existía (confirma §5.0). Se leyó el
+dominio `counseling` real en disco ANTES de tocar nada cerca (`Case`/`SessionNote`/`Referral`,
+`CaseScope`, `CasesController` read-only, `counseling.read`/`counseling.write` en el catálogo — la
+segunda **existía sin ningún consumidor**, descrita como "Registrar notas de orientación"). Hallazgo
+clave del recon: `counseling.write` es el key EXISTENTE para autoría en el dominio — no se inventó uno
+nuevo para autorizar la publicación del aura (el prompt lo pedía explícitamente: "don't invent a new
+key if one already fits").
+
+**`AnalyticsBi::CareAura` (`care_auras`), tabla net-new de `analytics_bi`** (la proyección la POSEE
+`analytics_bi`, §5.7 — a diferencia de la geometría de Slice 2, que es de `group_management`).
+Tenant-scoped (RLS `ENABLE+FORCE`, `uuidv7()`, índice líder `institution_id`, efectivo-fechada, sin
+dinero):
+
+- `student_id` FK → `students`; `academic_term_id` FK → `academic_terms` (**decisión A7 resuelta:
+  acoplada a términos**; el `Projector` toma `Core::AcademicTerm.active`).
+- `authored_by_counselor_id` FK → **`institution_users`** (`ON DELETE RESTRICT` — identidad + misma
+  postura de accountability que `counseling_cases.opened_by`/`session_notes.author`). **Es un FK de
+  identidad pura: el modelo NO declara NINGUNA asociación a `Counseling::*`.**
+- `aura_kind` `string` + CHECK (set cerrado `private_or_oral_evaluation`/
+  `positive_reinforcement_public`/`extra_time`/`quiet_space`). **Desviación documentada del ERD**
+  (§5.7 esbozaba `smallint`): el molde de la casa para un enum cerrado es `string`+CHECK
+  (`extracurriculars.kind`), más greppable. Las etiquetas humanas viven en
+  `AnalyticsBi::CareAura::KIND_LABELS` (única fuente, compartida por la autoría y el badge del docente).
+- `guidance_text` (texto del orientable, apto para el docente); `effective_from`/`effective_until`.
+
+**Decisión de concurrencia (§5.7 la dejó abierta, el prompt exigía decidir y documentar): un
+estudiante PUEDE tener varias auras activas de kinds DISTINTOS** (puede necesitar `extra_time` Y
+`quiet_space` a la vez), **pero nunca dos activas del MISMO kind** — hecho cumplir con un índice único
+PARCIAL `(institution, student, aura_kind) WHERE effective_until IS NULL` (molde `extracurriculars`
+v1.27.0), **no un `EXCLUDE gist`** (§5.7 dice saltárselo salvo invariante real; el índice parcial es
+más simple y suficiente cuando la regla es "una activa a la vez" y no "no solapamiento de rangos
+históricos").
+
+**El único seam de escritura cross-dominio: `AnalyticsBi::Aura::Projector`**, invocado DESDE
+`counseling` (`Counseling::CareAurasController`). Append-only (molde `SeatAssigner`/`Subscription#end!`):
+republicar un kind cierra la activa (`effective_until = Date.current`, rangos adyacentes `[)`) y abre
+la nueva; `Projector.retire` cierra una activa (idempotente). `requires_new: true` (SAVEPOINT) por si
+dos publicaciones del mismo kind corren en carrera contra el índice parcial. `counseling` lee la
+proyección vía `AnalyticsBi::Aura::CounselorScope`, **nunca `AnalyticsBi::CareAura` directo** — y
+`analytics_bi` NUNCA lee tablas de `counseling`. Esas son las dos únicas direcciones sancionadas del
+cruce.
+
+**Dos lados, dos permisos (el split del §4):**
+
+- **Autoría (orientador) en `counseling`, gate `counseling.write` (el key EXISTENTE).** La superficie
+  vive anidada bajo el caso (`/counseling/:case_id/care_auras`, `new`/`create`/`destroy`) — el
+  orientador ve el `Case` que motiva el aura (§5.7), y se alcanza por la tile "Orientación" ya
+  existente (regla de 3 clics), **sin entrada de nav nueva**. El show del caso lista las auras activas
+  del estudiante con botón "Retirar" (`can?` cosmético). `counseling.read` solo NO puede publicar
+  (403).
+- **Lectura (docente) en `analytics_bi`, gate `hps.aura.view` (permiso NUEVO — la 2ª mitad del
+  split).** ADITIVO sobre la Lente 1 de Slice 2: `SpatialClassroomsController#show` decide
+  `with_auras: can?("hps.aura.view", @section)` — con `hps.classroom.view` pero SIN `hps.aura.view`,
+  el mapa de Slice 2 queda BYTE-POR-BYTE igual (ni siquiera se consulta `care_auras`;
+  `SpatialClassroom#auras_for` retorna `{}`). El `SeatGrid` (Slice 2) ganó `aura_marker` (un «♥» +
+  `<title>` + `aria-label`, **AA nunca color-solo**) y una columna "Aura de cuidado" en su tabla
+  `visually-hidden` (solo cuando hay auras). `hps.aura.view` es un permiso NORMAL per-institución
+  (`institution_admin` lo hereda por bootstrap como cualquiera salvo `cross_tenant_reports.view`) — NO
+  cross-tenant.
+
+**Disciplina de serializador (§6.2): la lectura del docente devuelve un `Data` de 4 campos, jamás el
+AR model.** `AnalyticsBi::Lens::AuraScope` mapea cada fila a un
+`Aura(kind, guidance, effective_from, effective_until)` — así el SVG solo puede interpolar esos cuatro
+campos nombrados (allowlist por construcción), sin ninguna posibilidad de traversar `:student` u otra
+asociación, ni de un `to_json` crudo. El docente ve ÚNICAMENTE la proyección.
+
+**Aislamiento clínico probado a nivel de MODELO (no solo HTTP) — el caso de aceptación Clase S que
+el prompt exigía:** (1) un **SQL tap** (`ActiveSupport::Notifications.subscribed("sql.active_record")`)
+sobre el camino de lectura del docente (`AnalyticsBi::Lens::SpatialClassroom.for(with_auras: true)`,
+llamado directo bajo el GUC, no por HTTP) afirma que NINGUNA query toca
+`counseling_cases`/`session_notes`/`referrals` — y que SÍ lee `care_auras` (prueba que el tap
+funciona, no un falso verde); (2) una aserción estructural de que
+`AnalyticsBi::CareAura.reflect_on_all_associations` no apunta a ningún `Counseling::*`; (3)
+`AuraScope` devuelve solo el `Data` de 4 campos. Grep de cierre: `analytics_bi` menciona "counseling"
+ÚNICAMENTE en comentarios, jamás en código/queries. El caso María (§6.4) se replica además a nivel
+HTTP: `hps.aura.view` surface el badge con solo enum+texto, sin él el grid plano sin fuga, SQL tap
+sobre la request real, 403 fuera de scope, 404 cross-tenant.
+
+**Entitlement:** el lado docente cuelga del addon `analytics_bi` (namespace `analytics_bi/*`, ya
+gateado por `Entitlement::Controller`); el lado autoría cuelga del addon `counseling` (namespace
+`counseling/*`, ya gateado). Un colegio con `counseling` pero sin `analytics_bi` publica auras que el
+orientador ve en el caso pero ningún docente ve en un mapa — borde aceptado, no un gap.
+
+**Tests (20 nuevos, suite completa 626 → 646 runs / 0 fallos / 1 skip preexistente, en serie
+`PARALLEL_WORKERS=1`):**
+- Modelo/servicio (`test/models/analytics_bi/care_aura_test.rb`): publicación por el `Projector`,
+  enum cerrado (validación + CHECK), concurrencia (kinds distintos coexisten; misma-kind activa
+  duplicada lanza `RecordNotUnique`), append-only (republicar cierra+abre), retire idempotente,
+  `group_id` delegado, + **los dos tests de aislamiento clínico a nivel de modelo** (SQL tap +
+  estructura de asociaciones) + el `Data` de 4 campos de `AuraScope`.
+- Autoría (`test/integration/counseling_care_aura_authoring_test.rb`): `counseling.read` solo NO
+  publica (403 en `new` y `create`), `counseling.write` publica vía el `Projector`, aparece en el show
+  del caso, append-only, retire.
+- Aceptación de seguridad del docente (`test/integration/analytics_bi_care_aura_test.rb`, espíritu
+  María §6.4): `hps.aura.view` surface el badge (enum+texto), sin él el grid plano sin fuga, SQL tap
+  sobre la request real (cero counseling), 403 fuera de scope, 404 cross-tenant.
+- Sin SimpleCov en el repo (Minitest sin gema de cobertura, igual que Slice 2) — la cobertura se
+  sostiene por los tests de modelo/servicio/controller (happy + fallo) descritos.
+
+**Migración:** `bin/migrate` en dev y test (nunca `rails db:migrate`); `bin/rails zeitwerk:check`
+verde (constantes colapsadas correctas: `AnalyticsBi::Aura::{Projector,CounselorScope}`,
+`AnalyticsBi::Lens::AuraScope`, `AnalyticsBi::CareAura`). `TenantRlsGuardTest` verde (RLS
+`ENABLE+FORCE` + índice líder `institution_id` en `care_auras`).
+
+Ver `BI_DOCUMENT.md` §14 (v0.4.0) y `OPEN_PROCESS.md` ítem #22 + guardrails v1.37.0 para el detalle.
 
 ### v1.36.0 — 2026-07-17 — `analytics_bi`: Lente 1 "Mapa de Empatía Espacial" (Slice 2 de `BI_DOCUMENT.md`)
 

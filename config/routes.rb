@@ -205,7 +205,15 @@ Rails.application.routes.draw do
   # bullet — the real Case/SessionNote/Referral models live in this separate,
   # more-sensitive domain (see app/domains/counseling/README.md).
   namespace :counseling do
-    resources :cases, only: %i[index show], path: ""
+    # care_auras (Lente 5, BI_DOCUMENT.md Slice 3) is authored FROM counseling
+    # (where the counselor sees the Case that motivates it, §5.7), nested under
+    # the case. Write is gated by counseling.write (the existing authorship
+    # key); the projection itself is an analytics_bi table written via
+    # AnalyticsBi::Aura::Projector. No index route — the case show lists the
+    # student's active auras. new/create publish; destroy retires (append-only).
+    resources :cases, only: %i[index show], path: "" do
+      resources :care_auras, only: %i[new create destroy]
+    end
   end
 
   # --- student_support (domain views, Prompt Unificado) ---------------------

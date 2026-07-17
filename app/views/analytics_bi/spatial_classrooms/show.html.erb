@@ -16,7 +16,17 @@
     <p><span class="seat-grid__swatch seat-grid__swatch--calm" aria-hidden="true"></span> Estable</p>
     <p><span class="seat-grid__swatch seat-grid__swatch--hot" aria-hidden="true"></span> Necesita atención (marcado con «!»)</p>
     <p><span class="seat-grid__swatch seat-grid__swatch--unknown" aria-hidden="true"></span> Sin datos suficientes</p>
+    <% if @shows_auras -%>
+      <p><span aria-hidden="true">♥</span> Aura de cuidado (indicación de trato de orientación)</p>
+    <% end -%>
   </div>
+
+  <% if @shows_auras -%>
+    <p class="text-muted">
+      El «♥» sobre un pupitre es una <strong>indicación abstracta de trato</strong> que orientación
+      publicó para este estudiante — nunca un diagnóstico. Pasa el cursor por el ícono para ver la guía.
+    </p>
+  <% end -%>
 
   <p class="text-muted">
     El calor se deriva en el servidor de notas (<code>Schedules::Assessment</code>) y asistencia

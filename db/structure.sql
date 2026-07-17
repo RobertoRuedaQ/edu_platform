@@ -402,6 +402,29 @@ ALTER TABLE ONLY public.calendar_events FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: care_auras; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.care_auras (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    student_id uuid NOT NULL,
+    academic_term_id uuid NOT NULL,
+    authored_by_counselor_id uuid NOT NULL,
+    aura_kind character varying NOT NULL,
+    guidance_text text NOT NULL,
+    effective_from date NOT NULL,
+    effective_until date,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT care_auras_aura_kind_check CHECK (((aura_kind)::text = ANY ((ARRAY['private_or_oral_evaluation'::character varying, 'positive_reinforcement_public'::character varying, 'extra_time'::character varying, 'quiet_space'::character varying])::text[]))),
+    CONSTRAINT care_auras_effective_range_check CHECK (((effective_until IS NULL) OR (effective_until >= effective_from)))
+);
+
+ALTER TABLE ONLY public.care_auras FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: charges; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1817,6 +1840,14 @@ ALTER TABLE ONLY public.calendar_events
 
 
 --
+-- Name: care_auras care_auras_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.care_auras
+    ADD CONSTRAINT care_auras_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: charges charges_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2431,6 +2462,20 @@ CREATE INDEX idx_assignment_materials_on_institution_assignment ON public.assign
 --
 
 CREATE INDEX idx_assignments_on_institution_subject_status ON public.assignments USING btree (institution_id, subject_id, status);
+
+
+--
+-- Name: idx_care_auras_on_inst_student_from; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_care_auras_on_inst_student_from ON public.care_auras USING btree (institution_id, student_id, effective_from);
+
+
+--
+-- Name: idx_care_auras_one_active_per_student_kind; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_care_auras_one_active_per_student_kind ON public.care_auras USING btree (institution_id, student_id, aura_kind) WHERE (effective_until IS NULL);
 
 
 --
@@ -4575,6 +4620,14 @@ ALTER TABLE ONLY public.classroom_layouts
 
 
 --
+-- Name: care_auras fk_rails_a974033225; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.care_auras
+    ADD CONSTRAINT fk_rails_a974033225 FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE CASCADE;
+
+
+--
 -- Name: payments fk_rails_a9b0755c20; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4668,6 +4721,14 @@ ALTER TABLE ONLY public.teaching_assignments
 
 ALTER TABLE ONLY public.roster_import_batches
     ADD CONSTRAINT fk_rails_b8dabed25c FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: care_auras fk_rails_b9314c8338; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.care_auras
+    ADD CONSTRAINT fk_rails_b9314c8338 FOREIGN KEY (authored_by_counselor_id) REFERENCES public.institution_users(id) ON DELETE RESTRICT;
 
 
 --
@@ -4836,6 +4897,14 @@ ALTER TABLE ONLY public.student_guardians
 
 ALTER TABLE ONLY public.role_assignments
     ADD CONSTRAINT fk_rails_c81e0ed360 FOREIGN KEY (institution_user_id) REFERENCES public.institution_users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: care_auras fk_rails_cb00545723; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.care_auras
+    ADD CONSTRAINT fk_rails_cb00545723 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
 
 
 --
@@ -5055,6 +5124,14 @@ ALTER TABLE ONLY public.teachers
 
 
 --
+-- Name: care_auras fk_rails_f15a82bef7; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.care_auras
+    ADD CONSTRAINT fk_rails_f15a82bef7 FOREIGN KEY (academic_term_id) REFERENCES public.academic_terms(id) ON DELETE CASCADE;
+
+
+--
 -- Name: report_cards fk_rails_f2bae774b9; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -5222,6 +5299,19 @@ ALTER TABLE public.calendar_events ENABLE ROW LEVEL SECURITY;
 --
 
 CREATE POLICY calendar_events_tenant_isolation ON public.calendar_events USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: care_auras; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.care_auras ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: care_auras care_auras_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY care_auras_tenant_isolation ON public.care_auras USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
 
 
 --
@@ -5855,6 +5945,7 @@ CREATE POLICY teaching_assignments_tenant_isolation ON public.teaching_assignmen
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260717213000'),
 ('20260717210303'),
 ('20260717161248'),
 ('20260717155106'),

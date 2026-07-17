@@ -109,7 +109,18 @@ module IdentityAccess
       # other key EXCEPT cross_tenant_reports.view) — it is NOT cross-tenant.
       # Reconfiguring the layout itself is a WRITE gated by groups.manage
       # (group_management owns the tables, decision A2), not by this key.
-      "hps.classroom.view" => "Ver el mapa espacial del aula (Lente 1 del HPS)"
+      "hps.classroom.view" => "Ver el mapa espacial del aula (Lente 1 del HPS)",
+      # analytics_bi HPS Lens 5 (v1.37.0, BI_DOCUMENT.md Slice 3): "Auras de
+      # Cuidado", the TEACHER side of the two-sided permission split (§4). The
+      # counselor side authoring the projection reuses the EXISTING
+      # counseling.write ("Registrar notas de orientación") — no new write key.
+      # This grants a teacher the ABSTRACT aura badge overlaid on the Lens 1
+      # seat grid (aura_kind + guidance_text + dates ONLY) — never anything from
+      # counseling's tables. SUPERVISION, scope group_id (same as
+      # hps.classroom.view). hps.* is a NORMAL per-institution permission
+      # (institution_admin inherits it via bootstrap, like every key EXCEPT
+      # cross_tenant_reports.view) — it is NOT cross-tenant.
+      "hps.aura.view" => "Ver auras de cuidado sobre el mapa del aula (Lente 5 del HPS, proyección abstracta)"
     }.freeze
 
     def self.call
