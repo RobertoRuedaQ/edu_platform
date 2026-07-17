@@ -1,0 +1,12 @@
+<%#
+  Persistent logout affordance for every authenticated shell (staff header +
+  both portal layouts) — SessionsController#destroy requires authentication
+  already (not in allow_unauthenticated_access), so this is the only gate
+  that matters; no authorize!/entitlement check applies to ending your own
+  session. A plain <a> with turbo_method (same idiom as
+  identity_access/roster_imports#show), NOT button_to — this renders in the
+  layout header on every page, and a <form> there would collide with pages
+  that assert "no form on this read-only surface" (e.g. finance/assignments
+  portal specs).
+-%>
+<%= link_to "Cerrar sesión", session_path, data: { turbo_method: :delete }, class: "self-service-link" %>

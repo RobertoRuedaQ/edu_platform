@@ -261,9 +261,11 @@ v1.14.0: modelos reales (`Charge`/`Payment`/`PaymentPlan`/`Installment`/`Student
    grado/grupo, sin `kind`), tres ramas de `authorize!` sobre `calendar.manage`, merge de los `due_date`
    de `assignments` SOLO en el portal (`Calendar::Timeline`). `attendance`/`extracurriculars` como fuentes
    de fecha quedan diferidos (assignments es el único consumo real hoy). Ver `HISTORIA.md` v1.27.0.
-8. **`extracurriculars`** (depende de matrícula/término; actividad paga = `Charge` en `finance`, de #4).
-9. **Portal del cuidador ampliado** (colgar notas, asistencia, actividades, calendario, asignaciones,
-   mensajes) — pequeño porque `GuardianScope` ya existe.
+8. ~~**`extracurriculars`**~~ ✅ **cerrado (v1.27.0)** — ver `OPEN_PROCESS.md`/`HISTORIA.md`.
+9. ~~**Portal del cuidador ampliado**~~ ✅ **cerrado (v1.28.0)**: un recon confirmó que
+   notas/actividades/calendario/asignaciones/mensajes ya colgaban reales del portal desde sus propios
+   slices (v1.17.0–v1.27.0) — el único hueco real era `attendance` (v1.16.0), cerrado con
+   `Attendance::StudentView` + los controllers de portal correspondientes. Ver `HISTORIA.md` v1.28.0.
 10. **Provisioning de instituciones** + proveedor de correo real (habilitan el alta del colegio piloto).
 
 > Cada uno es un slice con recon-first; los dominios net-new (`attendance`, `assignments`, `calendar`,

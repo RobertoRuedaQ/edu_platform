@@ -1,0 +1,8 @@
+<% content_for :title, "Asistencia de #{@student.first_name}" %>
+
+<%= render "shared/page_header",
+      title: "Asistencia de #{@student.first_name} #{@student.last_name}",
+      subtitle: "Historial de asistencia diaria.",
+      actions: ui_button("← Volver", href: portal_guardian_student_path(@student), variant: :secondary) %>
+
+<%= render "attendance/history", records: @records %>

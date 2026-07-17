@@ -1,0 +1,7 @@
+<% content_for :title, "Mi asistencia" %>
+
+<%= render "shared/page_header",
+      title: "Mi asistencia",
+      subtitle: "Historial de asistencia diaria." %>
+
+<%= render "attendance/history", records: @records %>
