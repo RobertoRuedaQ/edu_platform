@@ -57,6 +57,10 @@ Rails.application.routes.draw do
       # Navigation::Registry. Singular (one timeline per student), like
       # cafeteria/transport, not plural like assignments.
       resource :calendar, only: :show, controller: "student_calendar"
+      # attendance (v1.28.0): the student's own attendance history — self
+      # scope, no authorize!, outside Navigation::Registry. Singular (one
+      # history per student), like calendar/cafeteria/transport.
+      resource :attendance, only: :show, controller: "student_attendance"
       # assignments (v1.21.0, slice 1/4; #show + #submission v1.22.0):
       # published-only, by self-scope, own grade read from the same
       # schedules::Assessment row report_cards reads. No authorize!, outside
@@ -121,6 +125,10 @@ Rails.application.routes.draw do
         # report_cards), resolved through GuardianScope. No authorize!,
         # outside Navigation::Registry.
         resource :calendar, only: :show, controller: "guardian_calendar"
+        # attendance (v1.28.0): this child's attendance history — per-child
+        # (like finance/report_cards/calendar), resolved through
+        # GuardianScope. No authorize!, outside Navigation::Registry.
+        resource :attendance, only: :show, controller: "guardian_attendance"
         # extracurriculars (v1.27.0): lectura + ESCRITURA per-child. index/show
         # listan las actividades del hijo + el catálogo inscribible; la
         # inscripción anida bajo la actividad (resource singular: un hijo tiene

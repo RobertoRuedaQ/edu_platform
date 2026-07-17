@@ -1,0 +1,18 @@
+<%# locals: (records:) -%>
+<% if records.any? -%>
+  <%= render layout: "shared/table", locals: { headers: [ "Fecha", "Grupo", "Estado", "Nota" ] } do -%>
+    <% records.each do |record| -%>
+      <tr>
+        <td><%= record.date.to_fs(:long) %></td>
+        <td><%= record.group.name %></td>
+        <td><%= attendance_status_badge(record.status) %></td>
+        <td><%= record.note.presence || "—" %></td>
+      </tr>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state",
+        icon: "check-square",
+        title: "Sin registros de asistencia",
+        description: "Cuando el colegio tome asistencia, aparecerá aquí." %>
+<% end -%>

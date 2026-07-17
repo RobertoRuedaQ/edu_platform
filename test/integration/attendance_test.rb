@@ -23,6 +23,14 @@ class AttendanceTest < ActionDispatch::IntegrationTest
 
   # Enrolls the student in a subject for the institution's active term — the
   # ONLY real signal Schedules::ActiveTermEnrollmentScope reads.
+  def link_as_guardian!(institution, student:, email:, name:)
+    user = Core::User.create!(email: email, name: name, password: "password-123456")
+    institution.memberships.create!(user: user)
+    Core::GuardianStudent.create!(institution: institution, guardian_user_id: user.id, student: student,
+      relationship: "parent", status: "active")
+    user
+  end
+
   def enroll_in_active_term!(institution, student:, active_term:)
     subject = Schedules::Subject.find_or_create_by!(institution: institution, code: "MAT-ATT") do |s|
       s.name = "Álgebra"
@@ -181,6 +189,60 @@ class AttendanceTest < ActionDispatch::IntegrationTest
     within_tenant(@institution) do
       assert_empty GroupManagement::Section.where(institution_id: other_institution.id, name: "9°A Otro Colegio")
     end
+  end
+
+  # Portal (v1.28.0, item #9 of the MVP critical path): the guardian's own
+  # history, most-recent-first, never another child's.
+  test "portal (guardian): sees only their own child's attendance history, most recent first" do
+    within_tenant(@institution) do
+      Attendance::AttendanceRecord.create!(institution: @institution, student: @student_in_term,
+        group: @section_a, date: Date.new(2026, 3, 5), status: "present")
+      Attendance::AttendanceRecord.create!(institution: @institution, student: @student_in_term,
+        group: @section_a, date: Date.new(2026, 3, 10), status: "absent")
+      Attendance::AttendanceRecord.create!(institution: @institution, student: @student_in_b,
+        group: @section_b, date: Date.new(2026, 3, 10), status: "late")
+    end
+
+    guardian = within_tenant(@institution) do
+      link_as_guardian!(@institution, student: @student_in_term, email: "guardian-#{SecureRandom.hex(4)}@member.test", name: "Acudiente")
+    end
+    sign_in_as(guardian, institution: @institution, password: "password-123456")
+
+    get portal_guardian_student_attendance_path(@student_in_term)
+    assert_response :success
+    assert_match(/Ausente/, response.body)
+    assert_match(/Presente/, response.body)
+    assert_no_match(/Tarde/, response.body) # @student_in_b's record never leaks
+
+    # Most-recent-first: the 03/10 "Ausente" row renders before the 03/05
+    # "Presente" row.
+    assert_operator response.body.index("Ausente"), :<, response.body.index("Presente")
+
+    # A child outside this guardian's own active links 404s (GuardianScope
+    # gate) — never renders @student_in_b's history.
+    get portal_guardian_student_attendance_path(@student_in_b)
+    assert_response :not_found
+  end
+
+  # Portal (v1.28.0): the student's own self-scoped history.
+  test "portal (student): sees their own attendance history" do
+    within_tenant(@institution) do
+      Attendance::AttendanceRecord.create!(institution: @institution, student: @student_in_term,
+        group: @section_a, date: Date.new(2026, 3, 10), status: "excused")
+    end
+
+    student_user = within_tenant(@institution) do
+      user = Core::User.create!(email: "student-#{SecureRandom.hex(4)}@member.test", name: "Valentina",
+        password: "password-123456")
+      @institution.memberships.create!(user: user)
+      @student_in_term.update!(user: user)
+      user
+    end
+    sign_in_as(student_user, institution: @institution, password: "password-123456")
+
+    get portal_student_attendance_path
+    assert_response :success
+    assert_match(/Justificada/, response.body)
   end
 
   # Regression: confirm this slice never touched the headcount source or

@@ -11,11 +11,87 @@
 
 ---
 
-## Changelog completo (v1.0.0 → v1.27.0)
+## Changelog completo (v1.0.0 → v1.28.0)
 
 > Copiado verbatim de §14 de `PROJECT_STATE.md` v1.5.0, antes de que el split editorial (v1.5.1)
 > moviera el changelog fuera del doc magro. Las entradas v1.6.0+ se escribieron directamente aquí,
 > ya con el split vigente.
+
+### v1.28.0 — 2026-07-17 — Portal del cuidador ampliado: asistencia + hallazgos de recon (ítem #9 del MVP)
+
+**Ítem #9 del camino crítico de `LINEAMIENTOS_MVP.md`** — "colgar notas, asistencia, actividades,
+calendario, asignaciones y mensajes" en el portal del acudiente. **Recon-first cambió el tamaño real
+del slice**: un recon exhaustivo (controllers de `app/controllers/portals/`, `config/routes.rb`,
+`Core::Access::GuardianScope`) confirmó que cinco de seis superficies YA colgaban reales del
+namespace `/portal` — `report_cards` (v1.17.0), `finance` (v1.18.0), `communication` (v1.19.0/
+v1.20.0), `assignments` (v1.21.0+), `calendar` (v1.27.0) y `extracurriculars` (v1.27.0) ya reusan
+`GuardianScope`/`StudentSelfScope` sin RBAC, fuera de `Navigation::Registry`. El único hueco real:
+`attendance` (v1.16.0) nunca tuvo ninguna superficie de portal — confirmado que su checkpoint de
+diseño original (v1.16.0) nunca decidió portal, no fue un olvido de ese slice.
+
+**Lo construido (attendance → portal):**
+- `Attendance::StudentView.for(student:, institution:)` — query object nuevo (`queries/
+  student_view.rb`), el único camino de lectura, mismo molde "una computación, N superficies" que
+  `Finance::AccountStatement`/`ReportCards::Computation`/`Calendar::Timeline`. `AttendanceRecord`
+  del estudiante, más reciente primero.
+- `Portals::GuardianAttendanceController#show` — `GuardianScope.for(user).find(student_id)` primero
+  (un hijo fuera del scope 404), luego `StudentView.for`. Mismo molde exacto que
+  `GuardianCalendarController`.
+- `Portals::StudentAttendanceController#show` — `StudentSelfScope.for(user)`, mismo molde que
+  `StudentCalendarController` (sin estudiante vinculado ⇒ `.none`, nunca error).
+- Rutas anidadas: `resource :attendance` bajo `portal/guardian/students/:student_id` y bajo
+  `portal/student`, mismo estilo singular que `:calendar`.
+- Vista compartida `attendance/_history` (una tabla fecha/grupo/estado/nota) + `AttendanceHelper`
+  (`attendance_status_badge`, mismo molde `CounselingHelper#counseling_case_status_badge`) —
+  reusada por ambas superficies de portal, ninguna duplica el markup.
+
+**Dos hallazgos de recon, cerrados en el mismo slice (no eran parte del pedido original, pero
+directamente servían "portal ampliado" = discoverability):**
+1. Los hubs del portal (`guardian_students#show`, home del estudiante) enlazaban Boletines/Tareas/
+   Estado de cuenta, pero NUNCA Calendario ni Actividades — ambos construidos en v1.27.0 sin cablear
+   su link desde el hub. Un olvido de nav de ese slice, no una decisión documentada en ningún lado.
+   Cerrado agregando los tres botones (Asistencia + los dos que faltaban) a ambos hubs.
+2. **No existía NINGÚN enlace de cierre de sesión en toda la aplicación** — ni el shell de staff
+   (`layouts/application.html.erb`) ni el portal (`layouts/portal.html.erb`) tenían forma de llegar a
+   `SessionsController#destroy`, que siempre existió y funcionaba (ruta `DELETE /session`, ya
+   protegida — no está en `allow_unauthenticated_access`). `shared/_logout_link` (un `link_to` +
+   `data: { turbo_method: :delete }`, mismo idioma que `identity_access/roster_imports#show`) ahora
+   vive en ambos layouts, un solo partial. **Deliberadamente NO `button_to`**: un `<form>` en un
+   layout compartido aparece en CADA página bajo ese layout — el primer intento con `button_to` rompió
+   dos tests preexistentes (`finance_test.rb`/`group_assignments_test.rb`) que aseveran "cero forms"
+   en una superficie de solo lectura del portal, sin ningún scope a `main#main`. Corregido cambiando
+   la implementación, no los tests preexistentes — el invariante que esos tests protegen (ninguna
+   acción de escritura en una vista de solo lectura) sigue vigente; el logout no es una acción del
+   dominio de esa página.
+
+**Caso de aceptación, verificado end-to-end:** un acudiente ve solo el historial de su propio hijo
+(otro hijo con registro el mismo día nunca aparece), ordenado más-reciente-primero; un hijo fuera de
+sus vínculos activos 404 en `/portal/guardian/students/:id/attendance` (mismo gate de relación que
+`GuardianStudentsController`); un estudiante ve su propio historial por self-scope; el logout
+efectivamente termina la sesión (`DELETE /session` seguido de un request protegido vuelve a
+redirigir a login).
+
+**Resultado:** 578 runs / 2425 assertions / 0 failures / 0 errors / 1 skip preexistente (baseline
+573; 5 tests nuevos: 2 en `attendance_test.rb`, 1 en `authentication_test.rb`, más los dos ajustes en
+tests existentes descritos arriba). `bin/rails zeitwerk:check` verde. Sin migraciones — ninguna tabla
+nueva, este slice es puramente capa de portal sobre un dominio ya real.
+
+**Archivos nuevos/editados:**
+- Query object: `app/domains/attendance/queries/student_view.rb`.
+- Controllers: `app/controllers/portals/{guardian,student}_attendance_controller.rb`.
+- Rutas: `config/routes.rb` (dos `resource :attendance` nuevos).
+- Vistas: `app/views/portals/guardian_attendance/show.html.erb`,
+  `app/views/portals/student_attendance/show.html.erb`, `app/views/attendance/_history.html.erb`,
+  `app/views/shared/_logout_link.html.erb`.
+- Helper: `app/helpers/attendance_helper.rb`.
+- Hubs actualizados: `app/views/portals/guardian_students/show.html.erb`,
+  `app/views/portals/student_portal/show.html.erb`.
+- Layouts: `app/views/layouts/application.html.erb`, `app/views/layouts/portal.html.erb`.
+- Tests: `test/integration/attendance_test.rb` (portal), `test/integration/authentication_test.rb`
+  (logout) — `finance_test.rb`/`group_assignments_test.rb` NO se tocaron; el `button_to` inicial que
+  los rompió se descartó a favor de `link_to`+`turbo_method` antes de tocar ningún test.
+- Doc: `PROJECT_STATE.md` (backfill de la fila de dominio `extracurriculars` que faltaba desde
+  v1.27.0, además del cierre de este ítem), `OPEN_PROCESS.md` (ítem #13 + tres guardrails nuevos).
 
 ### v1.27.0 — 2026-07-16 — `extracurriculars`: actividades + inscripción del acudiente (ítem #8 del MVP)
 

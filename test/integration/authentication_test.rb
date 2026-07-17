@@ -78,7 +78,26 @@ class AuthenticationTest < ActionDispatch::IntegrationTest
     assert_redirected_to new_session_path
   end
 
+  test "the authenticated shell shows a logout affordance, and using it ends the session" do
+    full_login!
+
+    get root_path
+    assert_response :success
+    assert_select "a[href=?][data-turbo-method=delete]", session_path, text: "Cerrar sesión"
+
+    delete session_path
+    assert_redirected_to new_session_path
+
+    get root_path
+    assert_redirected_to new_session_path
+  end
+
   private
+
+  def full_login!
+    perform_enqueued_jobs { post session_path, params: { email: @user.email, password: PASSWORD } }
+    post email_otp_path, params: { code: last_otp_code }
+  end
 
   def within_tenant(institution)
     ActiveRecord::Base.transaction do
