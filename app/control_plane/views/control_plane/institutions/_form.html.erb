@@ -1,0 +1,27 @@
+<%# locals: (institution:, url:, admin_email: nil, admin_name: nil) -%>
+<%= form_with model: institution, url: url, scope: :institution do |f| %>
+  <% if institution.errors.any? -%>
+    <%= render "shared/alert", variant: :danger,
+          message: institution.errors.full_messages.to_sentence %>
+  <% end -%>
+
+  <%= render "shared/field", label: "Nombre", name: "institution[name]", value: institution.name, required: true %>
+  <%= render "shared/field", label: "Slug", name: "institution[slug]", value: institution.slug, required: true,
+        hint: "Subdominio de acceso, p. ej. colegio-nuevo → colegio-nuevo.tudominio.com. Solo minúsculas, números y guiones." %>
+  <%= render "shared/field", label: "Código", name: "institution[code]", value: institution.code, required: true,
+        hint: "Identificador de negocio, único." %>
+  <%= render "shared/field", label: "Tipo", name: "institution[kind]", value: institution.kind || "school",
+        hint: "school o university." %>
+
+  <h2>Primer administrador</h2>
+  <p class="field__hint">
+    Se crea, se le asigna el rol <code>institution_admin</code> (todos los permisos) y se le envía
+    una invitación real por correo — el mismo flujo que usa cualquier alta de persona.
+  </p>
+  <%= render "shared/field", label: "Nombre del administrador", name: "institution[admin_name]",
+        value: admin_name, required: true %>
+  <%= render "shared/field", label: "Correo del administrador", name: "institution[admin_email]",
+        value: admin_email, type: "email", required: true %>
+
+  <%= ui_button "Crear institución", type: "submit", variant: :primary %>
+<% end %>

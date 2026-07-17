@@ -1,0 +1,7 @@
+<% content_for :title, "Nueva institución" %>
+
+<%= render "shared/page_header", title: "Nueva institución",
+      subtitle: "Provisiona el colegio/universidad y su primer administrador en un solo paso." %>
+
+<%= render "form", institution: @institution, admin_email: @admin_email, admin_name: @admin_name,
+      url: control_plane_institutions_path %>

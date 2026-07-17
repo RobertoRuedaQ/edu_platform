@@ -452,7 +452,9 @@ Rails.application.routes.draw do
       end
     end
 
-    resources :institutions, only: %i[index show] do
+    # new/create (v1.29.0, MVP item #10): Provisioning::ProvisionInstitution
+    # is the ONLY writer — no edit/destroy, see InstitutionsController.
+    resources :institutions, only: %i[index show new create] do
       # S2a: subscriptions nested under their institution, same shape as
       # price_tiers nested under plans below. No index/edit — "history" is
       # shown on the institution's own show page; the snapshot is immutable.
