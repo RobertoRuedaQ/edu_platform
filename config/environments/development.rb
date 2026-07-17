@@ -34,6 +34,16 @@ Rails.application.configure do
   # Don't care if the mailer can't send.
   config.action_mailer.raise_delivery_errors = false
 
+  # Write every outgoing email to tmp/mails/ instead of silently discarding it
+  # (the previous default: no delivery_method set here falls through to
+  # ActionMailer's :smtp-against-localhost:25 default, which errors out
+  # quietly since raise_delivery_errors is false above). `:file` ships in the
+  # `mail` gem ActionMailer already depends on — zero new gems, and it means
+  # `bin/rails "qa:otp[...]"` (lib/tasks/qa_seed.rake) is now a shortcut, not
+  # the only way to see a code: open the newest file under tmp/mails/.
+  config.action_mailer.delivery_method = :file
+  config.action_mailer.file_settings = { location: Rails.root.join("tmp/mails") }
+
   # Make template changes take effect immediately.
   config.action_mailer.perform_caching = false
 

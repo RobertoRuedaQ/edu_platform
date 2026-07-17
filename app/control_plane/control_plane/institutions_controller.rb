@@ -1,18 +1,19 @@
 # frozen_string_literal: true
 
 module ControlPlane
-  # Screen 2 — Institutions: list + detail, READ-ONLY (no new/create/edit/
-  # destroy — provisioning an institution is out of scope). The detail is the
-  # hub for subscription + entitlements (S2a), headcount + usage rollups
-  # (S3a, read-only — those enter via push/ingestion/job, never a form here),
-  # and now invoices (S4 — the ONE section here with real actions: generate/
-  # finalize/void/re-cut, all under ControlPlane::InvoicesController).
+  # Screen 2 — Institutions: list + detail + provisioning (v1.29.0, MVP item
+  # #10 — new/create only, no edit/destroy: an institution's identity fields
+  # don't change once it exists, and there's no product need to un-provision
+  # one yet). The detail is the hub for subscription + entitlements (S2a),
+  # headcount + usage rollups (S3a, read-only — those enter via push/
+  # ingestion/job, never a form here), and invoices (S4 — generate/finalize/
+  # void/re-cut, all under ControlPlane::InvoicesController).
   # `institution_id` is a global FK here, never an RLS scope.
   #
-  # Does NOT touch app/domains/* beyond reading Core::Institution — no
-  # association was added there; every query here goes through
-  # ControlPlane::Subscription/Entitlement/StudentHeadcountSnapshot/
-  # UsageDailyRollup/Invoice directly.
+  # #create delegates ALL business logic to Provisioning::ProvisionInstitution
+  # (lib/provisioning/) — this controller only translates form params <->
+  # that one call + the platform audit log; no association was added to
+  # Core::Institution for this.
   class InstitutionsController < BaseController
     def index
       @institutions = Core::Institution.order(:name)
@@ -34,6 +35,39 @@ module ControlPlane
         .most_recent_first.limit(20)
 
       @invoices = Invoice.for_institution(@institution).most_recent_first.limit(10)
+    end
+
+    def new
+      @institution = Core::Institution.new(kind: "school")
+    end
+
+    def create
+      @institution = Core::Institution.new(institution_params)
+      @admin_email = params[:institution][:admin_email].to_s.strip
+      @admin_name = params[:institution][:admin_name].to_s.strip
+
+      if @admin_email.blank? || @admin_name.blank?
+        @institution.errors.add(:base, "El nombre y el correo del primer administrador son obligatorios.")
+        return render :new, status: :unprocessable_entity
+      end
+
+      result = ::Provisioning::ProvisionInstitution.call(
+        name: @institution.name, slug: @institution.slug, code: @institution.code, kind: @institution.kind,
+        admin_email: @admin_email, admin_name: @admin_name
+      )
+      ControlPlane::Audit.log(action: "institution.provisioned", platform_admin: current_platform_admin,
+        target: result.institution, metadata: { admin_email: result.admin_user.email }, ip_address: request.remote_ip)
+      redirect_to control_plane_institution_path(result.institution),
+        notice: "Institución creada. Invitamos a #{result.admin_user.email} como administrador."
+    rescue ActiveRecord::RecordInvalid => e
+      @institution.errors.add(:base, e.record.errors.full_messages.to_sentence)
+      render :new, status: :unprocessable_entity
+    end
+
+    private
+
+    def institution_params
+      params.require(:institution).permit(:name, :slug, :code, :kind)
     end
   end
 end

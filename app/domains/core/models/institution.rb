@@ -10,6 +10,14 @@ module Core
             foreign_key: :institution_id, inverse_of: :institution, dependent: :destroy
 
     validates :name, :slug, :code, presence: true
+    # Only the unique DB index enforced these before v1.29.0 — a duplicate
+    # slug/code raised a raw ActiveRecord::RecordNotUnique from a form, not a
+    # clean validation error (see ControlPlane::InstitutionsController#create).
+    validates :slug, uniqueness: true,
+      format: { with: /\A[a-z0-9-]+\z/, message: "solo minúsculas, números y guiones" },
+      exclusion: { in: Tenant::Resolver::SubdomainStrategy::RESERVED, message: "es un subdominio reservado" }
+    validates :code, uniqueness: true
+    validates :kind, inclusion: { in: %w[school university] }
 
     # Gate #1 of the two serial gates (§7.1): "does THIS institution have
     # addon_key active right now?" Delegates entirely to the control plane's

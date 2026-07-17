@@ -11,11 +11,101 @@
 
 ---
 
-## Changelog completo (v1.0.0 → v1.28.0)
+## Changelog completo (v1.0.0 → v1.29.0)
 
 > Copiado verbatim de §14 de `PROJECT_STATE.md` v1.5.0, antes de que el split editorial (v1.5.1)
 > moviera el changelog fuera del doc magro. Las entradas v1.6.0+ se escribieron directamente aquí,
 > ya con el split vigente.
+
+### v1.29.0 — 2026-07-17 — Provisioning de instituciones + correo real (ítem #10 del MVP) — CAMINO CRÍTICO DEL MVP COMPLETO
+
+**Último ítem del camino crítico de `LINEAMIENTOS_MVP.md`.** Dos decisiones cerradas con el owner
+ANTES de codear (mismo checkpoint-first que todo dominio net-new de este track): (1) bootstrap del
+primer admin en UN solo flujo, no dos pasos separados; (2) SMTP genérico vía credentials/ENV, no un
+proveedor de API específico.
+
+**Recon (STOP #1) — el hallazgo que cambió el diseño real:** `Provisioning::CreateInstitution`
+(`lib/provisioning/`) YA EXISTÍA y ya la usaba `db/seeds.rb` para las dos instituciones demo — el
+"provisioning" no era construir un servicio de dominio desde cero, era exponerlo vía HTTP. Pero un
+recon más profundo encontró un chicken-and-egg REAL, sin resolver en ningún camino de producción:
+`IdentityAccess::PeopleController#create` (cómo se une CUALQUIER persona a una institución) exige
+`authorize!("people.manage")`, que exige un `RoleAssignment` YA EXISTENTE — y ningún flujo de
+producción sembraba el primero. Solo pasaba en `test_helper.rb#grant_role!` (tests) y en
+`lib/tasks/qa_seed.rake` (rake QA-only, `Rails.env.development?` obligatorio). Ni siquiera las
+instituciones demo de `db/seeds.rb` tienen un `institution_admin` real hoy — confirmado, fuera de
+alcance de este slice arreglarlo (`db/seeds.rb` no se tocó).
+
+**Diseño construido:**
+- `IdentityAccess::Bootstrap::FirstAdmin` (`services/bootstrap/first_admin.rb`) — el ÚNICO lugar
+  autorizado a crear un `RoleAssignment` sin que ya exista uno previo. Corre `SeedPermissions.call`
+  (idempotente, catálogo global), siembra el rol `institution_admin` con **TODO el catálogo de
+  permisos EXCEPTO `cross_tenant_reports.view`** (ese key sigue reservado a `bi_auditor`/
+  `edu_bi_reader`, nunca a un rol de institución — mismo guardrail de siempre; la lista se deriva de
+  `CATALOG.keys`, nunca se hardcodea aparte, así que una permission nueva futura la hereda gratis),
+  resuelve/crea la persona vía `Core::People::Resolver` (el MISMO resolver que usa el roster de
+  estudiantes/acudientes, no uno nuevo) y la invita vía `IdentityAccess::Invitations::Issuer` (el
+  MISMO camino que `PeopleController#create` — un email real, no un atajo con password directa).
+- `Provisioning::ProvisionInstitution` (`lib/provisioning/`) — orquestador nuevo, UN solo flujo/UNA
+  transacción: compone `CreateInstitution` (sin tocarla) + `Bootstrap::FirstAdmin`. Si cualquier paso
+  falla, todo revierte — nunca queda una institución a medias sin quién la administre.
+- `ControlPlane::InstitutionsController#new/#create` — molde exacto de `PlansController` (`create!`
+  + `ControlPlane::Audit.log`); valida presencia de `admin_name`/`admin_email` en el boundary del
+  form ANTES de llamar al servicio, deja que `ActiveRecord::RecordInvalid` burbujee a un único
+  `rescue` (mismo molde que `PeopleController#create`). Solo `new`/`create` — sin `edit`/`destroy`:
+  los campos de identidad de una institución no cambian una vez creada, y no hay necesidad de
+  producto de des-provisionar una todavía.
+- `Core::Institution` ganó `validates :slug/:code, uniqueness:` + `:kind, inclusion:` + `:slug`
+  excluye los subdominios reservados de `Tenant::Resolver::SubdomainStrategy::RESERVED` (`www`,
+  `app`, `admin`, `api`) — antes de este slice SOLO el índice único de Postgres los protegía, así
+  que un duplicado explotaba como `ActiveRecord::RecordNotUnique`/`PG::CheckViolation` crudo frente
+  a un formulario web, no un error de validación limpio.
+- **Correo real**: los tres entornos estaban sin transporte configurado — ninguna gema, ninguna
+  credencial, ningún proveedor decidido en ningún doc (`production.rb` seguía con el boilerplate
+  `example.com`/SMTP comentado de `rails new`; `development.rb` no fijaba `delivery_method` en
+  ningún lado, cayendo al default `:smtp` contra `localhost:25`, que se pierde en silencio con
+  `raise_delivery_errors = false`). `production.rb` ahora usa SMTP genérico —
+  `Rails.application.credentials.dig(:smtp, ...)` con fallback a `ENV["SMTP_*"]` (env gana cuando
+  ambos están seteados) — funciona con CUALQUIER proveedor (Postmark/SendGrid/SES/Mailgun/un buzón
+  propio) sin gema de proveedor, y `raise_delivery_errors = true` (un SMTP mal configurado debe
+  fallar ruidoso, nunca perder un OTP/invitación en silencio). `development.rb` usa
+  `delivery_method: :file` (`Mail::FileDelivery`, nativo de la gema `mail` que ActionMailer ya
+  trae — CERO gemas nuevas), escribiendo a `tmp/mails/`; `bin/rails "qa:otp[...]"`
+  (`lib/tasks/qa_seed.rake`) sigue vivo como atajo más rápido, ya no como el único camino (su
+  comentario, que decía "el envío de correo no está configurado en development", se corrigió).
+  `ApplicationMailer#from` pasó de `"from@example.com"` (placeholder sin editar) a
+  `ENV.fetch("MAILER_FROM", "no-reply@edu-platform.test")`.
+
+**Caso de aceptación, verificado end-to-end:** provisionar una institución vía
+`POST /control_plane/institutions` crea la fila global + su `institution_settings` 1:1 + un
+`IdentityAccess::Role` "institution_admin" con exactamente `CATALOG.keys - cross_tenant_reports.view`
+(comparado el set completo, no una muestra) + un `RoleAssignment` institución-wide + una
+`IdentityAccess::Invitation` real con `status: "sent"` + un correo entregado (verificado con
+`ActionMailer::Base.deliveries`, el mismo camino de `PeopleController#create`); un slug duplicado da
+un error de validación limpio (nunca una excepción cruda de BD); un `kind` inválido igual; sin
+`admin_name`/`admin_email` nunca se crea NADA (ni la institución) — la transacción entera revierte.
+
+**Resultado:** 581 runs / 2448 assertions / 0 failures / 0 errors / 1 skip preexistente (baseline
+578; 4 tests nuevos, todos en `test/integration/control_plane/institutions_test.rb` — reemplazando
+el test obsoleto "no hay ruta para crear una institución", cuya premisa este slice invalidó a
+propósito). `bin/rails zeitwerk:check` verde. Sin migraciones — ninguna tabla nueva.
+
+**Archivos nuevos/editados:**
+- Servicios: `app/domains/identity_access/services/bootstrap/first_admin.rb`,
+  `lib/provisioning/provision_institution.rb`.
+- Modelo: `app/domains/core/models/institution.rb` (validaciones).
+- Controller: `app/control_plane/control_plane/institutions_controller.rb` (`new`/`create`).
+- Rutas: `config/routes.rb`.
+- Vistas: `app/control_plane/views/control_plane/institutions/{new,_form}.html.erb`,
+  `.../institutions/index.html.erb` (botón "Nueva institución").
+- Mail: `config/environments/{development,production}.rb`, `app/mailers/application_mailer.rb`,
+  `lib/tasks/qa_seed.rake` (comentario corregido).
+- Tests: `test/integration/control_plane/institutions_test.rb`.
+
+**Con esto se cierra el camino crítico completo de `LINEAMIENTOS_MVP.md` §7 (ítems #1–#10).** Lo que
+queda documentado como diferido post-MVP (asistencia por materia, timetabling real, tiempo real en
+`communication`/`transportation`, pasarela de pago, `student_support`/`counseling`/`cafeteria`/
+`transportation` reales para este perfil) sigue exactamente igual — nada de esto lo reabre este
+slice.
 
 ### v1.28.0 — 2026-07-17 — Portal del cuidador ampliado: asistencia + hallazgos de recon (ítem #9 del MVP)
 

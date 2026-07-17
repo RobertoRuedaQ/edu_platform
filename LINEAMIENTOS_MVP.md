@@ -266,7 +266,11 @@ v1.14.0: modelos reales (`Charge`/`Payment`/`PaymentPlan`/`Installment`/`Student
    notas/actividades/calendario/asignaciones/mensajes ya colgaban reales del portal desde sus propios
    slices (v1.17.0–v1.27.0) — el único hueco real era `attendance` (v1.16.0), cerrado con
    `Attendance::StudentView` + los controllers de portal correspondientes. Ver `HISTORIA.md` v1.28.0.
-10. **Provisioning de instituciones** + proveedor de correo real (habilitan el alta del colegio piloto).
+10. ~~**Provisioning de instituciones** + proveedor de correo real (habilitan el alta del colegio piloto).~~
+    ✅ **cerrado (v1.29.0) — CAMINO CRÍTICO DEL MVP COMPLETO.** `Provisioning::ProvisionInstitution`
+    (un solo flujo) crea la institución Y bootstrapea su primer `institution_admin` real
+    (`IdentityAccess::Bootstrap::FirstAdmin`); correo real vía SMTP genérico (credentials/ENV, sin
+    gema de proveedor). Ver `HISTORIA.md` v1.29.0.
 
 > Cada uno es un slice con recon-first; los dominios net-new (`attendance`, `assignments`, `calendar`,
 > `extracurriculars`), con checkpoint de diseño (como CHECKPOINT E). Los sensibles siguen aparte.

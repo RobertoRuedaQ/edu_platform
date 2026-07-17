@@ -165,9 +165,10 @@ namespace :qa do
       ## Flujo de login (dos pasos, obligatorio para TODOS los roles)
 
       1. Entra con email + password de la tabla.
-      2. La app pedirá un código OTP de 6 dígitos por correo — el envío de correo
-         no está configurado en development (se descarta en silencio), así que
-         en otra terminal corre:
+      2. La app pedirá un código OTP de 6 dígitos por correo — en development
+         los correos se escriben a `tmp/mails/` (delivery_method :file, v1.29.0)
+         en vez de perderse; abre el archivo más reciente ahí, o para no andar
+         buscando en el filesystem corre en otra terminal:
 
          ```
          bin/rails "qa:otp[<email>]"
