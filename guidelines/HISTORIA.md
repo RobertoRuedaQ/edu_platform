@@ -11,11 +11,86 @@
 
 ---
 
-## Changelog completo (v1.0.0 → v1.34.0)
+## Changelog completo (v1.0.0 → v1.35.0)
 
 > Copiado verbatim de §14 de `PROJECT_STATE.md` v1.5.0, antes de que el split editorial (v1.5.1)
 > moviera el changelog fuera del doc magro. Las entradas v1.6.0+ se escribieron directamente aquí,
 > ya con el split vigente.
+
+### v1.35.0 — 2026-07-17 — `analytics_bi`: `CrossTenantReportRoster` real (mitad cross-tenant, Slice 1 de `BI_DOCUMENT.md`)
+
+**Sexto slice post-MVP**, primero guiado por `guidelines/BI_DOCUMENT.md` (nuevo documento maestro del
+dominio, HPS/BI Empático). Cierra la mitad que v1.34.0 dejó deliberadamente en stub: el reporte
+cross-tenant, primera conexión REAL de la app como el rol Postgres `edu_bi_reader` (`BYPASSRLS`).
+
+**Recon:** `edu_bi_reader` YA EXISTÍA en el clúster local con `BYPASSRLS` y `SELECT` ya otorgado en
+dev y test (`lib/tasks/roles.rake`, corrido en algún momento anterior) — solo la contraseña era
+desconocida (`EDU_BI_READER_PASSWORD` no estaba en `.env`). Reseteada vía `psql` con el superusuario
+del SO (mismo mecanismo ya documentado para `EDU_MIGRATOR_PASSWORD` cuando se pierde), cluster-wide
+— un solo `ALTER ROLE` cubre dev y test.
+
+**Diseño construido:**
+- `AnalyticsBi::BiReaderRecord` (nuevo) — la ÚNICA clase que conecta como `edu_bi_reader`: un pool de
+  conexión SEPARADO, nunca reconfigura el primario de `edu_app_runtime`. `establish_connection` vía
+  `ActiveRecord::Base.configurations.configs_for(env_name:, name: "primary").configuration_hash.merge(
+  username: "edu_bi_reader", password: ENV["EDU_BI_READER_PASSWORD"])` — `configs_for` parsea
+  `database.yml` sin necesitar una conexión ya abierta (seguro en tiempo de autoload). Contraseña
+  SIN `.fetch` (nil válido, igual que `EDU_DB_PASSWORD` del primario): Postgres local confía
+  conexiones TCP de localhost sin importar el rol — confirmado empíricamente
+  (`AnalyticsBi::BiReaderRecord.connection.select_value("SELECT current_user")` devuelve
+  `"edu_bi_reader"` sin ninguna variable de entorno seteada); un deployment real sí necesita la
+  variable real.
+- `AnalyticsBi::BiReader::{Institution,Student,Assessment}` (nuevos) — clases lectoras DEDICADAS bajo
+  esa conexión. Nunca se reusan `Core::Institution`/`GroupManagement::Student`/`Schedules::Assessment`
+  (heredan de `ApplicationRecord`, atadas para siempre al pool primario).
+- `AnalyticsBi::CrossTenantReportRoster.all` reemplaza el stub — agrega estudiantes activos y nota
+  promedio, SIEMPRE `.group(:institution_id)` explícito (el "doble filtro a nivel de aplicación" de
+  `BI_DOCUMENT.md §6.1.2`: una vez bypasseado RLS, el `GROUP BY` de la app es la ÚNICA defensa contra
+  mezclar tenants — nunca un agregado sin agrupar). Solo agregados por institución salen del método,
+  cero fila/PII de estudiante cruza la frontera.
+- `cross_tenant_report_accessed` nuevo en `IdentityAccess::AuditEventIndex::ACTIONS`, logueado desde
+  `CrossTenantReportsController#index` bajo la institución del propio `bi_auditor` (NO
+  `ControlPlane::Audit` — el actor es staff de tenant con el permiso, no un `platform_admin`).
+
+**Hallazgo de testing crítico (el verdadero riesgo de este slice, no el código de producción):**
+`CrossTenantReportRoster` corre en una conexión de BD GENUINAMENTE separada — nunca ve la
+transacción abierta-y-nunca-comiteada de un test transaccional normal de Rails. El primer intento de
+test, con `self.use_transactional_tests = false` pero SIN teardown, llamó `grant_full_entitlements`
+(crea los ~13 `Addon` de catálogo, GLOBALES, PARA TODOS LOS DOMINIOS, de verdad) — esas filas,
+comiteadas de verdad, chocaron (violación de índice único `key`) con decenas de tests no
+relacionados más adelante en la MISMA corrida completa de la suite (nunca visible corriendo solo el
+archivo nuevo). Corregido: (a) el test otorga SOLO el addon `analytics_bi` que necesita, nunca el
+helper de "todos los dominios"; (b) un `teardown` explícito borra TODO en orden seguro de FK
+(entitlement → role_assignment/role_permission/role → institution_user → institución; usuario
+primero, cascada sus `sessions`). Un segundo hallazgo menor: sin el wrapper transaccional, el GUC ya
+no "gotea hacia adelante" entre sentencias como en un test normal (el commit real de cada
+`within_tenant` limpia el GUC de verdad, a diferencia de un savepoint) — `with_grants`/`grant_role!`
+necesitan el GUC fijado explícitamente justo antes de llamarlos. Nuevo archivo dedicado,
+`test/integration/analytics_bi_cross_tenant_test.rb`, separado de `analytics_bi_test.rb` (que sigue
+100% transaccional) por esta única razón.
+
+**Caso de aceptación, verificado end-to-end:** dos instituciones con 2 y 1 estudiante activo
+respectivamente aparecen con sus conteos CORRECTOS y separados (nunca 3 para ambas, nunca 0 para
+ninguna) en el reporte; cada acceso queda auditado bajo la institución del `bi_auditor`. Verificado
+también que la suite COMPLETA (no solo el archivo nuevo) sigue en 0 pollution tras el fix — la
+lección concreta de por qué el checklist de cierre siempre corre la suite entera.
+
+**Resultado:** 608 runs / 2581 assertions / 0 failures / 0 errors / 1 skip preexistente (baseline
+607; 1 test nuevo en `analytics_bi_cross_tenant_test.rb`, ajuste de aserción en
+`analytics_bi_test.rb` para no depender de nombres de institución fuera de su propia transacción).
+`bin/rails zeitwerk:check` verde. Sin migraciones — solo una contraseña de rol reseteada.
+
+**Archivos nuevos/editados:**
+- Modelos: `app/domains/analytics_bi/models/bi_reader_record.rb`,
+  `app/domains/analytics_bi/models/bi_reader/{institution,student,assessment}.rb` (todos nuevos).
+- Servicio: `app/domains/analytics_bi/services/cross_tenant_report_roster.rb`.
+- Controller: `app/controllers/analytics_bi/cross_tenant_reports_controller.rb`.
+- Vista: `app/views/analytics_bi/cross_tenant_reports/index.html.erb`.
+- `app/domains/identity_access/services/audit_event_index.rb` (nueva acción en `ACTIONS`).
+- Tests: `test/integration/analytics_bi_cross_tenant_test.rb` (nuevo),
+  `test/integration/analytics_bi_test.rb`.
+- Doc: `guidelines/BI_DOCUMENT.md` (nuevo, v0.2.0 — documento maestro del dominio).
+- `.env`: `EDU_BI_READER_PASSWORD` agregado (referencia local; innecesario en dev/test por trust auth).
 
 ### v1.34.0 — 2026-07-17 — `analytics_bi`: `InstitutionDashboard` real (mitad tenant-scoped)
 
