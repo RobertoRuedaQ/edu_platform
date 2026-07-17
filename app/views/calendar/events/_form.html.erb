@@ -1,0 +1,57 @@
+<%# locals: (event:, url:, grade_levels:, groups:) -%>
+<% current_audience = event.scope_group_id ? "group" : (event.scope_grade_level_id ? "grade_level" : "institution") -%>
+<%= form_with model: event, url: url do |f| -%>
+  <% if event.errors.any? -%>
+    <%= render "shared/alert", variant: :danger, message: event.errors.full_messages.join(", ") %>
+  <% end -%>
+
+  <%= render "shared/field", label: "Título", name: "event[title]", type: "text", value: event.title %>
+
+  <div class="field">
+    <label class="field__label" for="event_description">Descripción</label>
+    <textarea class="field__input" id="event_description" name="event[description]" rows="4"><%= event.description %></textarea>
+  </div>
+
+  <%= render "shared/field", label: "Inicio", name: "event[starts_at]", type: "datetime-local",
+        value: event.starts_at&.strftime("%Y-%m-%dT%H:%M") %>
+  <%= render "shared/field", label: "Fin", name: "event[ends_at]", type: "datetime-local",
+        value: event.ends_at&.strftime("%Y-%m-%dT%H:%M") %>
+
+  <fieldset class="field">
+    <legend class="field__label">Audiencia</legend>
+    <label>
+      <input type="radio" name="audience" value="institution" <%= "checked" if current_audience == "institution" %>>
+      Toda la institución
+    </label>
+    <label>
+      <input type="radio" name="audience" value="grade_level" <%= "checked" if current_audience == "grade_level" %>>
+      Un grado
+    </label>
+    <label>
+      <input type="radio" name="audience" value="group" <%= "checked" if current_audience == "group" %>>
+      Un grupo
+    </label>
+  </fieldset>
+
+  <div class="field">
+    <label class="field__label" for="scope_grade_level_id">Grado (si aplica)</label>
+    <select class="field__input" id="scope_grade_level_id" name="scope_grade_level_id">
+      <option value="">— Selecciona un grado —</option>
+      <% grade_levels.each do |grade| -%>
+        <option value="<%= grade.id %>" <%= "selected" if event.scope_grade_level_id == grade.id %>><%= grade.name %></option>
+      <% end -%>
+    </select>
+  </div>
+
+  <div class="field">
+    <label class="field__label" for="scope_group_id">Grupo (si aplica)</label>
+    <select class="field__input" id="scope_group_id" name="scope_group_id">
+      <option value="">— Selecciona un grupo —</option>
+      <% groups.each do |group| -%>
+        <option value="<%= group.id %>" <%= "selected" if event.scope_group_id == group.id %>><%= group.name %></option>
+      <% end -%>
+    </select>
+  </div>
+
+  <%= ui_button (event.persisted? ? "Guardar" : "Crear evento"), type: "submit", variant: :primary %>
+<% end -%>

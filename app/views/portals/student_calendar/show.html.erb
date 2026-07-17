@@ -1,0 +1,15 @@
+<% content_for :title, "Mi calendario" %>
+
+<%= render "shared/page_header",
+      title: "Mi calendario",
+      subtitle: "Eventos del colegio y vencimientos de tus tareas.",
+      actions: ui_button("← Volver", href: portal_student_path, variant: :secondary) %>
+
+<% if @student -%>
+  <%= render "calendar/timeline", entries: @entries %>
+<% else -%>
+  <%= render "shared/empty_state",
+        icon: "user",
+        title: "Tu cuenta aún no está vinculada a un registro de estudiante",
+        description: "Si esto no es lo esperado, contacta a tu institución." %>
+<% end -%>

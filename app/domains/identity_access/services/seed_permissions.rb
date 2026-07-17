@@ -93,7 +93,14 @@ module IdentityAccess
       # duplicarla. Inscribir/desinscribir es de AMBAS vías (colegio y
       # acudiente); el acudiente lo hace por RELACIÓN en el portal, sin permiso.
       "activity.manage"   => "Gestionar todo el catálogo de extracurriculares e inscribir en cualquiera",
-      "activity.instruct" => "Acceder a extracurriculares y gestionar el roster de las actividades propias"
+      "activity.instruct" => "Acceder a extracurriculares y gestionar el roster de las actividades propias",
+      # calendar (v1.27.0): un solo permiso con scope (crear/editar/eliminar
+      # eventos), mismo criterio unificado que attendance.record/assignment.
+      # manage. El scope se ejerce eligiendo la audiencia del evento (grupo/
+      # grado/institución-wide), que decide el resource pasado a authorize! —
+      # ver Calendar::EventsController. Leer desde el portal NO usa permiso:
+      # es relación (Calendar::VisibleScope/Timeline), ver Guardrails.
+      "calendar.manage" => "Crear y gestionar eventos del calendario (con alcance)"
     }.freeze
 
     def self.call

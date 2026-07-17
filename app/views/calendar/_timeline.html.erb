@@ -1,0 +1,23 @@
+<%# locals: (entries:) -%>
+<% if entries.any? -%>
+  <%= render layout: "shared/table", locals: { headers: [ "Fecha", "Título", "Tipo" ] } do -%>
+    <% entries.each do |entry| -%>
+      <tr>
+        <td><%= entry.starts_at.to_date.to_fs(:long) %></td>
+        <td><%= entry.title %></td>
+        <td>
+          <% if entry.assignment_deadline? -%>
+            <span class="badge badge--warning">Vencimiento de tarea</span>
+          <% else -%>
+            <span class="badge badge--info">Evento</span>
+          <% end -%>
+        </td>
+      </tr>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state",
+        icon: "calendar",
+        title: "Sin eventos próximos",
+        description: "Aquí verás los eventos del colegio y los vencimientos de las tareas." %>
+<% end -%>

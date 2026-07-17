@@ -1,0 +1,12 @@
+<% content_for :title, "Editar evento" %>
+
+<%= render "shared/page_header",
+      title: "Editar evento",
+      subtitle: @event.title,
+      actions: ui_button("← Volver", href: calendar_events_path, variant: :secondary) %>
+
+<%= render "calendar/events/form", event: @event, url: calendar_event_path(@event),
+      grade_levels: @grade_levels, groups: @groups %>
+
+<%= button_to "Eliminar evento", calendar_event_path(@event), method: :delete,
+      class: "btn btn--danger", form: { data: { turbo_confirm: "¿Eliminar este evento?" } } %>

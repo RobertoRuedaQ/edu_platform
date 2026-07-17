@@ -52,6 +52,11 @@ Rails.application.routes.draw do
       # communication (v1.19.0): org-wide, NOT per-self-scope — membership
       # read surface, same shared feed the staff/guardian surfaces use.
       resources :announcements, only: :index, controller: "student_announcements"
+      # calendar (v1.27.0): the student's own merged timeline (real events +
+      # published-assignment deadlines) — self-scope, no authorize!, outside
+      # Navigation::Registry. Singular (one timeline per student), like
+      # cafeteria/transport, not plural like assignments.
+      resource :calendar, only: :show, controller: "student_calendar"
       # assignments (v1.21.0, slice 1/4; #show + #submission v1.22.0):
       # published-only, by self-scope, own grade read from the same
       # schedules::Assessment row report_cards reads. No authorize!, outside
@@ -111,6 +116,11 @@ Rails.application.routes.draw do
           # (GuardianScope -> StudentView.for(this child)) as :attachments.
           resources :materials, only: :show, controller: "guardian_materials"
         end
+        # calendar (v1.27.0): this child's merged timeline (real events +
+        # their published-assignment deadlines) — per-child (like finance/
+        # report_cards), resolved through GuardianScope. No authorize!,
+        # outside Navigation::Registry.
+        resource :calendar, only: :show, controller: "guardian_calendar"
         # extracurriculars (v1.27.0): lectura + ESCRITURA per-child. index/show
         # listan las actividades del hijo + el catálogo inscribible; la
         # inscripción anida bajo la actividad (resource singular: un hijo tiene
@@ -319,6 +329,16 @@ Rails.application.routes.draw do
         resources :materials, only: %i[create show destroy]
       end
     end
+  end
+
+  # --- calendar (net-new domain, v1.27.0, MVP critical path item #7) --------
+  # Shared calendar with caregivers. events#index lists real events within the
+  # actor's scope (calendar.manage); new/create/edit/update/destroy manage
+  # them. The audience picked on the form decides the resource passed to
+  # authorize! (see Calendar::EventsController). Portal timelines are wired in
+  # the portals block above (relation-gated, no authorize!), NOT here.
+  namespace :calendar do
+    resources :events, only: %i[index new create edit update destroy]
   end
 
   # --- extracurriculars (net-new addon domain, v1.27.0, MVP item #8) --------

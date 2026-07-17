@@ -10,5 +10,16 @@ module GroupManagement
              foreign_key: :grade_level_id, inverse_of: :grade_level
 
     validates :name, :level_number, presence: true
+
+    # Scope-covering descriptor (same trick as GroupManagement::Section#group_id
+    # and StaffManagement::Department#department_id) — a grade level IS its own
+    # :grade_level scope id. calendar (v1.27.0) is the FIRST real consumer of
+    # role_assignments.scope_grade_level_id outside PermissionCheck itself:
+    # Calendar::EventsController passes a GradeLevel to authorize!("calendar.
+    # manage", grade_level), and Authorization::Assignment::SCOPE_READERS
+    # [:grade_level] reads exactly this method to decide covers?.
+    def grade_level_id
+      id
+    end
   end
 end

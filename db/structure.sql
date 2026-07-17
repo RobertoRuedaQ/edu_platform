@@ -365,6 +365,29 @@ ALTER TABLE ONLY public.audit_events FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: calendar_events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.calendar_events (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    title character varying NOT NULL,
+    description text,
+    starts_at timestamp(6) without time zone NOT NULL,
+    ends_at timestamp(6) without time zone NOT NULL,
+    scope_grade_level_id uuid,
+    scope_group_id uuid,
+    created_by_institution_user_id uuid,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT calendar_events_scope_exclusive_check CHECK ((NOT ((scope_grade_level_id IS NOT NULL) AND (scope_group_id IS NOT NULL)))),
+    CONSTRAINT calendar_events_time_order_check CHECK ((ends_at >= starts_at))
+);
+
+ALTER TABLE ONLY public.calendar_events FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: charges; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1720,6 +1743,14 @@ ALTER TABLE ONLY public.audit_events
 
 
 --
+-- Name: calendar_events calendar_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.calendar_events
+    ADD CONSTRAINT calendar_events_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: charges charges_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2614,6 +2645,27 @@ CREATE INDEX index_audit_events_on_institution_and_created_at ON public.audit_ev
 --
 
 CREATE INDEX index_audit_events_on_institution_and_target ON public.audit_events USING btree (institution_id, target_type, target_id);
+
+
+--
+-- Name: index_calendar_events_on_institution_and_starts_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_calendar_events_on_institution_and_starts_at ON public.calendar_events USING btree (institution_id, starts_at);
+
+
+--
+-- Name: index_calendar_events_on_scope_grade_level_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_calendar_events_on_scope_grade_level_id ON public.calendar_events USING btree (scope_grade_level_id);
+
+
+--
+-- Name: index_calendar_events_on_scope_group_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_calendar_events_on_scope_group_id ON public.calendar_events USING btree (scope_group_id);
 
 
 --
@@ -4267,6 +4319,14 @@ ALTER TABLE ONLY public.rubric_levels
 
 
 --
+-- Name: calendar_events fk_rails_919af76751; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.calendar_events
+    ADD CONSTRAINT fk_rails_919af76751 FOREIGN KEY (created_by_institution_user_id) REFERENCES public.institution_users(id) ON DELETE SET NULL;
+
+
+--
 -- Name: installments fk_rails_91c63f70fd; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4312,6 +4372,14 @@ ALTER TABLE ONLY public.active_storage_variant_records
 
 ALTER TABLE ONLY public.usage_daily_rollups
     ADD CONSTRAINT fk_rails_9acf8873cf FOREIGN KEY (addon_id) REFERENCES public.addons(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: calendar_events fk_rails_a13b118c67; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.calendar_events
+    ADD CONSTRAINT fk_rails_a13b118c67 FOREIGN KEY (scope_group_id) REFERENCES public.sections(id) ON DELETE CASCADE;
 
 
 --
@@ -4707,6 +4775,14 @@ ALTER TABLE ONLY public.student_headcount_snapshots
 
 
 --
+-- Name: calendar_events fk_rails_e21d958b99; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.calendar_events
+    ADD CONSTRAINT fk_rails_e21d958b99 FOREIGN KEY (scope_grade_level_id) REFERENCES public.grade_levels(id) ON DELETE CASCADE;
+
+
+--
 -- Name: session_notes fk_rails_e2a774b8c8; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4808,6 +4884,14 @@ ALTER TABLE ONLY public.report_cards
 
 ALTER TABLE ONLY public.role_assignments
     ADD CONSTRAINT fk_rails_f2c879ee03 FOREIGN KEY (scope_group_id) REFERENCES public.sections(id) ON DELETE CASCADE;
+
+
+--
+-- Name: calendar_events fk_rails_f872036c76; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.calendar_events
+    ADD CONSTRAINT fk_rails_f872036c76 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
 
 
 --
@@ -4941,6 +5025,19 @@ ALTER TABLE public.audit_events ENABLE ROW LEVEL SECURITY;
 --
 
 CREATE POLICY audit_events_tenant_isolation ON public.audit_events USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: calendar_events; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.calendar_events ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: calendar_events calendar_events_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY calendar_events_tenant_isolation ON public.calendar_events USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
 
 
 --
@@ -5549,6 +5646,7 @@ SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
 ('20260716203439'),
+('20260716153456'),
 ('20260716151744'),
 ('20260716151743'),
 ('20260716143401'),
