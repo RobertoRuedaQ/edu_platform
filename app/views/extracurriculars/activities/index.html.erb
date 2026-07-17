@@ -1,0 +1,31 @@
+<% content_for :title, "Extracurriculares" %>
+
+<%= render "shared/page_header",
+      title: "Extracurriculares",
+      subtitle: "Actividades dentro de tu alcance." %>
+
+<% if can?("activity.manage") -%>
+  <p><%= link_to "Nueva actividad", new_extracurriculars_activity_path, class: "btn btn--primary btn--sm" %></p>
+<% end -%>
+
+<% if @activities.any? -%>
+  <%= render layout: "shared/table",
+        locals: { headers: [ "Actividad", "Tipo", "Término", "Inscritos", "Instructor", "Estado", "" ] } do -%>
+    <% @activities.each do |activity| -%>
+      <tr>
+        <td><%= activity.name %></td>
+        <td><%= activity.kind_label %></td>
+        <td><%= activity.academic_term.name %></td>
+        <td><%= @active_counts[activity.id] || 0 %> / <%= activity.capacity %></td>
+        <td><%= activity.instructor_staff_member&.name || "—" %></td>
+        <td><%= activity.status_label %></td>
+        <td><%= link_to "Ver", extracurriculars_activity_path(activity), class: "btn btn--secondary btn--sm" %></td>
+      </tr>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state",
+        icon: "calendar",
+        title: "No hay actividades en tu alcance",
+        description: "El coordinador crea actividades; el instructor ve solo las suyas." %>
+<% end -%>

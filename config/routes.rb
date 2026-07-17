@@ -52,6 +52,11 @@ Rails.application.routes.draw do
       # communication (v1.19.0): org-wide, NOT per-self-scope — membership
       # read surface, same shared feed the staff/guardian surfaces use.
       resources :announcements, only: :index, controller: "student_announcements"
+      # calendar (v1.27.0): the student's own merged timeline (real events +
+      # published-assignment deadlines) — self-scope, no authorize!, outside
+      # Navigation::Registry. Singular (one timeline per student), like
+      # cafeteria/transport, not plural like assignments.
+      resource :calendar, only: :show, controller: "student_calendar"
       # assignments (v1.21.0, slice 1/4; #show + #submission v1.22.0):
       # published-only, by self-scope, own grade read from the same
       # schedules::Assessment row report_cards reads. No authorize!, outside
@@ -74,6 +79,11 @@ Rails.application.routes.draw do
         # unreachable for free, since the assignment itself isn't in scope.
         resources :materials, only: :show, controller: "student_materials"
       end
+      # extracurriculars (v1.27.0): solo lectura — "mis actividades" (las
+      # inscripciones activas del propio estudiante), por self-scope. La
+      # escritura es del acudiente, no del estudiante. Sin authorize!, fuera
+      # de Navigation::Registry (§7).
+      resources :activities, only: %i[index show], controller: "student_activities"
     end
     resource :guardian, only: :show, controller: "guardian_portal" do
       # Per-child read-only summary (v1.9.0) — resolved through
@@ -105,6 +115,21 @@ Rails.application.routes.draw do
           # materials (v1.25.0, slice 3b) — read-only, same chained scope
           # (GuardianScope -> StudentView.for(this child)) as :attachments.
           resources :materials, only: :show, controller: "guardian_materials"
+        end
+        # calendar (v1.27.0): this child's merged timeline (real events +
+        # their published-assignment deadlines) — per-child (like finance/
+        # report_cards), resolved through GuardianScope. No authorize!,
+        # outside Navigation::Registry.
+        resource :calendar, only: :show, controller: "guardian_calendar"
+        # extracurriculars (v1.27.0): lectura + ESCRITURA per-child. index/show
+        # listan las actividades del hijo + el catálogo inscribible; la
+        # inscripción anida bajo la actividad (resource singular: un hijo tiene
+        # a lo sumo UNA inscripción activa por actividad, resuelta por relación,
+        # sin :id). Inscribir/desinscribir EN NOMBRE de este hijo ya scopeado
+        # (B1), misma disciplina que :submission. Sin authorize!, fuera de
+        # Navigation::Registry.
+        resources :activities, only: %i[index show], controller: "guardian_activities" do
+          resource :enrollment, only: %i[create destroy], controller: "guardian_activity_enrollments"
         end
       end
       # communication (v1.19.0): org-wide, NOT per-child — a sibling of
@@ -303,6 +328,34 @@ Rails.application.routes.draw do
         # rule as entrega attachments.
         resources :materials, only: %i[create show destroy]
       end
+    end
+  end
+
+  # --- calendar (net-new domain, v1.27.0, MVP critical path item #7) --------
+  # Shared calendar with caregivers. events#index lists real events within the
+  # actor's scope (calendar.manage); new/create/edit/update/destroy manage
+  # them. The audience picked on the form decides the resource passed to
+  # authorize! (see Calendar::EventsController). Portal timelines are wired in
+  # the portals block above (relation-gated, no authorize!), NOT here.
+  namespace :calendar do
+    resources :events, only: %i[index new create edit update destroy]
+  end
+
+  # --- extracurriculars (net-new addon domain, v1.27.0, MVP item #8) --------
+  # activities#index lista el catálogo dentro del alcance del actor
+  # (Extracurriculars::ActivityScope: coordinador todas, instructor solo las
+  # suyas por PROPIEDAD de fila — NO un scope de rol nuevo). enrollments anida
+  # bajo una actividad: inscribir/desinscribir desde supervisión (la OTRA vía,
+  # junto con la del acudiente en el portal). Sin activities#destroy — una
+  # actividad se archiva (append), nunca se borra; publish/archive son
+  # transiciones de estado en la misma fila (gate activity.manage).
+  namespace :extracurriculars do
+    resources :activities, except: %i[destroy] do
+      member do
+        post :publish
+        post :archive
+      end
+      resources :enrollments, only: %i[create destroy]
     end
   end
 

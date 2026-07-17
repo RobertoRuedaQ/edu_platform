@@ -148,6 +148,56 @@ ALTER SEQUENCE public.active_storage_variant_records_id_seq OWNED BY public.acti
 
 
 --
+-- Name: activities; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.activities (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    academic_term_id uuid NOT NULL,
+    instructor_staff_member_id uuid,
+    kind character varying NOT NULL,
+    name character varying NOT NULL,
+    capacity integer NOT NULL,
+    fee_cents bigint,
+    location character varying,
+    schedule_info character varying,
+    status character varying DEFAULT 'draft'::character varying NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT activities_capacity_positive_check CHECK ((capacity > 0)),
+    CONSTRAINT activities_fee_cents_nonneg_check CHECK (((fee_cents IS NULL) OR (fee_cents >= 0))),
+    CONSTRAINT activities_kind_check CHECK (((kind)::text = ANY ((ARRAY['sport'::character varying, 'art'::character varying, 'tutoring'::character varying])::text[]))),
+    CONSTRAINT activities_status_check CHECK (((status)::text = ANY ((ARRAY['draft'::character varying, 'published'::character varying, 'archived'::character varying])::text[])))
+);
+
+ALTER TABLE ONLY public.activities FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: activity_enrollments; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.activity_enrollments (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    activity_id uuid NOT NULL,
+    student_id uuid NOT NULL,
+    status character varying DEFAULT 'active'::character varying NOT NULL,
+    enrolled_at timestamp(6) without time zone NOT NULL,
+    withdrawn_at timestamp(6) without time zone,
+    enrolled_via character varying NOT NULL,
+    enrolled_by_user_id uuid,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT activity_enrollments_enrolled_via_check CHECK (((enrolled_via)::text = ANY ((ARRAY['staff'::character varying, 'guardian'::character varying])::text[]))),
+    CONSTRAINT activity_enrollments_status_check CHECK (((status)::text = ANY ((ARRAY['active'::character varying, 'withdrawn'::character varying])::text[])))
+);
+
+ALTER TABLE ONLY public.activity_enrollments FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: addons; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -312,6 +362,29 @@ CREATE TABLE public.audit_events (
 );
 
 ALTER TABLE ONLY public.audit_events FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: calendar_events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.calendar_events (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    title character varying NOT NULL,
+    description text,
+    starts_at timestamp(6) without time zone NOT NULL,
+    ends_at timestamp(6) without time zone NOT NULL,
+    scope_grade_level_id uuid,
+    scope_group_id uuid,
+    created_by_institution_user_id uuid,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT calendar_events_scope_exclusive_check CHECK ((NOT ((scope_grade_level_id IS NOT NULL) AND (scope_group_id IS NOT NULL)))),
+    CONSTRAINT calendar_events_time_order_check CHECK ((ends_at >= starts_at))
+);
+
+ALTER TABLE ONLY public.calendar_events FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -1590,6 +1663,22 @@ ALTER TABLE ONLY public.active_storage_variant_records
 
 
 --
+-- Name: activities activities_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.activities
+    ADD CONSTRAINT activities_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: activity_enrollments activity_enrollments_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.activity_enrollments
+    ADD CONSTRAINT activity_enrollments_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: addons addons_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1651,6 +1740,14 @@ ALTER TABLE ONLY public.attendance_records
 
 ALTER TABLE ONLY public.audit_events
     ADD CONSTRAINT audit_events_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: calendar_events calendar_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.calendar_events
+    ADD CONSTRAINT calendar_events_pkey PRIMARY KEY (id);
 
 
 --
@@ -2166,6 +2263,41 @@ ALTER TABLE ONLY public.users
 
 
 --
+-- Name: idx_activities_on_institution_instructor; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_activities_on_institution_instructor ON public.activities USING btree (institution_id, instructor_staff_member_id);
+
+
+--
+-- Name: idx_activities_on_institution_term_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_activities_on_institution_term_status ON public.activities USING btree (institution_id, academic_term_id, status);
+
+
+--
+-- Name: idx_activity_enrollments_active_unique; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_activity_enrollments_active_unique ON public.activity_enrollments USING btree (institution_id, activity_id, student_id) WHERE ((status)::text = 'active'::text);
+
+
+--
+-- Name: idx_activity_enrollments_on_institution_activity; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_activity_enrollments_on_institution_activity ON public.activity_enrollments USING btree (institution_id, activity_id);
+
+
+--
+-- Name: idx_activity_enrollments_on_institution_student; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_activity_enrollments_on_institution_student ON public.activity_enrollments USING btree (institution_id, student_id);
+
+
+--
 -- Name: idx_assignment_materials_on_institution_assignment; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2513,6 +2645,27 @@ CREATE INDEX index_audit_events_on_institution_and_created_at ON public.audit_ev
 --
 
 CREATE INDEX index_audit_events_on_institution_and_target ON public.audit_events USING btree (institution_id, target_type, target_id);
+
+
+--
+-- Name: index_calendar_events_on_institution_and_starts_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_calendar_events_on_institution_and_starts_at ON public.calendar_events USING btree (institution_id, starts_at);
+
+
+--
+-- Name: index_calendar_events_on_scope_grade_level_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_calendar_events_on_scope_grade_level_id ON public.calendar_events USING btree (scope_grade_level_id);
+
+
+--
+-- Name: index_calendar_events_on_scope_group_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_calendar_events_on_scope_group_id ON public.calendar_events USING btree (scope_group_id);
 
 
 --
@@ -3550,6 +3703,14 @@ ALTER TABLE ONLY public.plan_price_tiers
 
 
 --
+-- Name: activity_enrollments fk_rails_2ad3fa68c2; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.activity_enrollments
+    ADD CONSTRAINT fk_rails_2ad3fa68c2 FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE CASCADE;
+
+
+--
 -- Name: rubric_evaluations fk_rails_2bb4cfc474; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3691,6 +3852,14 @@ ALTER TABLE ONLY public.role_assignments
 
 ALTER TABLE ONLY public.audit_events
     ADD CONSTRAINT fk_rails_41272af5ee FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: activity_enrollments fk_rails_414ce4a0c6; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.activity_enrollments
+    ADD CONSTRAINT fk_rails_414ce4a0c6 FOREIGN KEY (enrolled_by_user_id) REFERENCES public.users(id) ON DELETE SET NULL;
 
 
 --
@@ -3851,6 +4020,14 @@ ALTER TABLE ONLY public.role_permissions
 
 ALTER TABLE ONLY public.submissions
     ADD CONSTRAINT fk_rails_61cac0823d FOREIGN KEY (assignment_id) REFERENCES public.assignments(id) ON DELETE CASCADE;
+
+
+--
+-- Name: activities fk_rails_62052ad23c; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.activities
+    ADD CONSTRAINT fk_rails_62052ad23c FOREIGN KEY (instructor_staff_member_id) REFERENCES public.staff_members(id) ON DELETE SET NULL;
 
 
 --
@@ -4142,6 +4319,14 @@ ALTER TABLE ONLY public.rubric_levels
 
 
 --
+-- Name: calendar_events fk_rails_919af76751; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.calendar_events
+    ADD CONSTRAINT fk_rails_919af76751 FOREIGN KEY (created_by_institution_user_id) REFERENCES public.institution_users(id) ON DELETE SET NULL;
+
+
+--
 -- Name: installments fk_rails_91c63f70fd; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4187,6 +4372,14 @@ ALTER TABLE ONLY public.active_storage_variant_records
 
 ALTER TABLE ONLY public.usage_daily_rollups
     ADD CONSTRAINT fk_rails_9acf8873cf FOREIGN KEY (addon_id) REFERENCES public.addons(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: calendar_events fk_rails_a13b118c67; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.calendar_events
+    ADD CONSTRAINT fk_rails_a13b118c67 FOREIGN KEY (scope_group_id) REFERENCES public.sections(id) ON DELETE CASCADE;
 
 
 --
@@ -4310,6 +4503,14 @@ ALTER TABLE ONLY public.roster_import_batches
 
 
 --
+-- Name: activity_enrollments fk_rails_bb8b57ebab; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.activity_enrollments
+    ADD CONSTRAINT fk_rails_bb8b57ebab FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: report_cards fk_rails_bbed8eb10a; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4331,6 +4532,14 @@ ALTER TABLE ONLY public.usage_events
 
 ALTER TABLE ONLY public.dietary_restrictions
     ADD CONSTRAINT fk_rails_bc8b5d9bbf FOREIGN KEY (student_id) REFERENCES public.students(id);
+
+
+--
+-- Name: activities fk_rails_be32e7f3a9; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.activities
+    ADD CONSTRAINT fk_rails_be32e7f3a9 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
 
 
 --
@@ -4414,6 +4623,14 @@ ALTER TABLE ONLY public.teachers
 
 
 --
+-- Name: activities fk_rails_c444820378; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.activities
+    ADD CONSTRAINT fk_rails_c444820378 FOREIGN KEY (academic_term_id) REFERENCES public.academic_terms(id) ON DELETE CASCADE;
+
+
+--
 -- Name: rubric_cell_descriptors fk_rails_c4fc274650; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4475,6 +4692,14 @@ ALTER TABLE ONLY public.group_memberships
 
 ALTER TABLE ONLY public.group_memberships
     ADD CONSTRAINT fk_rails_d237094e0b FOREIGN KEY (assignment_id) REFERENCES public.assignments(id) ON DELETE CASCADE;
+
+
+--
+-- Name: activity_enrollments fk_rails_d2c4aaceb3; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.activity_enrollments
+    ADD CONSTRAINT fk_rails_d2c4aaceb3 FOREIGN KEY (activity_id) REFERENCES public.activities(id) ON DELETE CASCADE;
 
 
 --
@@ -4547,6 +4772,14 @@ ALTER TABLE ONLY public.rubric_evaluations
 
 ALTER TABLE ONLY public.student_headcount_snapshots
     ADD CONSTRAINT fk_rails_dfadb12276 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: calendar_events fk_rails_e21d958b99; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.calendar_events
+    ADD CONSTRAINT fk_rails_e21d958b99 FOREIGN KEY (scope_grade_level_id) REFERENCES public.grade_levels(id) ON DELETE CASCADE;
 
 
 --
@@ -4654,6 +4887,14 @@ ALTER TABLE ONLY public.role_assignments
 
 
 --
+-- Name: calendar_events fk_rails_f872036c76; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.calendar_events
+    ADD CONSTRAINT fk_rails_f872036c76 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: subjects fk_rails_fba2424889; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4680,6 +4921,32 @@ ALTER TABLE public.academic_terms ENABLE ROW LEVEL SECURITY;
 --
 
 CREATE POLICY academic_terms_tenant_isolation ON public.academic_terms USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: activities; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.activities ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: activities activities_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY activities_tenant_isolation ON public.activities USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: activity_enrollments; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.activity_enrollments ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: activity_enrollments activity_enrollments_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY activity_enrollments_tenant_isolation ON public.activity_enrollments USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
 
 
 --
@@ -4758,6 +5025,19 @@ ALTER TABLE public.audit_events ENABLE ROW LEVEL SECURITY;
 --
 
 CREATE POLICY audit_events_tenant_isolation ON public.audit_events USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: calendar_events; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.calendar_events ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: calendar_events calendar_events_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY calendar_events_tenant_isolation ON public.calendar_events USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
 
 
 --
@@ -5365,6 +5645,8 @@ CREATE POLICY teaching_assignments_tenant_isolation ON public.teaching_assignmen
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260716203439'),
+('20260716153456'),
 ('20260716151744'),
 ('20260716151743'),
 ('20260716143401'),

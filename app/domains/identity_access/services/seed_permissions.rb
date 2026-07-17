@@ -78,7 +78,29 @@ module IdentityAccess
       # partirlo, a diferencia de report_card.view/publish). Ver la propia
       # tarea desde el portal NO usa permiso: es relación (StudentSelfScope/
       # GuardianScope), ver Guardrails.
-      "assignment.manage" => "Crear, editar, publicar, archivar y calificar tareas"
+      "assignment.manage" => "Crear, editar, publicar, archivar y calificar tareas",
+      # extracurriculars (v1.27.0): split manage/instruct — pero NO por
+      # confidencialidad (como report_card.view/publish) sino por ALCANCE de
+      # PROPIEDAD. activity.manage es institución-wide (el coordinador ve/edita
+      # TODO el catálogo e inscribe en cualquier actividad). activity.instruct
+      # es el piso de acceso a la superficie Y el roster de las actividades
+      # PROPIAS del instructor (activities.instructor_staff_member_id == su
+      # StaffMember) — la propiedad se resuelve por FK en
+      # Extracurriculars::ActivityScope, NO por un scope_type nuevo en
+      # role_assignments/covers? (relación de identidad, no de jerarquía). El
+      # rol activity_coordinator se siembra con AMBOS (manage + instruct): así
+      # una sola tile de nav, gateada por instruct, sirve a los dos roles sin
+      # duplicarla. Inscribir/desinscribir es de AMBAS vías (colegio y
+      # acudiente); el acudiente lo hace por RELACIÓN en el portal, sin permiso.
+      "activity.manage"   => "Gestionar todo el catálogo de extracurriculares e inscribir en cualquiera",
+      "activity.instruct" => "Acceder a extracurriculares y gestionar el roster de las actividades propias",
+      # calendar (v1.27.0): un solo permiso con scope (crear/editar/eliminar
+      # eventos), mismo criterio unificado que attendance.record/assignment.
+      # manage. El scope se ejerce eligiendo la audiencia del evento (grupo/
+      # grado/institución-wide), que decide el resource pasado a authorize! —
+      # ver Calendar::EventsController. Leer desde el portal NO usa permiso:
+      # es relación (Calendar::VisibleScope/Timeline), ver Guardrails.
+      "calendar.manage" => "Crear y gestionar eventos del calendario (con alcance)"
     }.freeze
 
     def self.call

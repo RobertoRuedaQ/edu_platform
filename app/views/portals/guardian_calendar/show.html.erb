@@ -1,0 +1,8 @@
+<% content_for :title, "Calendario de #{@student.first_name}" %>
+
+<%= render "shared/page_header",
+      title: "Calendario de #{@student.first_name} #{@student.last_name}",
+      subtitle: "Eventos del colegio y vencimientos de sus tareas.",
+      actions: ui_button("← Volver", href: portal_guardian_student_path(@student), variant: :secondary) %>
+
+<%= render "calendar/timeline", entries: @entries %>

@@ -1,0 +1,26 @@
+<% content_for :title, "Mis actividades" %>
+
+<%= render "shared/page_header",
+      title: "Mis actividades",
+      subtitle: "Actividades extracurriculares en las que estás inscrito." %>
+
+<% if @enrollments.any? -%>
+  <%= render layout: "shared/table",
+        locals: { headers: [ "Actividad", "Tipo", "Horario", "Instructor", "" ] } do -%>
+    <% @enrollments.each do |enrollment| -%>
+      <% activity = enrollment.activity -%>
+      <tr>
+        <td><%= activity.name %></td>
+        <td><%= activity.kind_label %></td>
+        <td><%= activity.schedule_info.presence || "—" %></td>
+        <td><%= activity.instructor_staff_member&.name || "—" %></td>
+        <td><%= link_to "Ver", portal_student_activity_path(activity), class: "btn btn--secondary btn--sm" %></td>
+      </tr>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state",
+        icon: "calendar",
+        title: "Aún no estás inscrito en actividades",
+        description: "Tu acudiente puede inscribirte desde su portal." %>
+<% end -%>

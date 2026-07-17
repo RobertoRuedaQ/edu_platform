@@ -1,0 +1,9 @@
+<% content_for :title, "Nuevo evento" %>
+
+<%= render "shared/page_header",
+      title: "Nuevo evento",
+      subtitle: "Elige la audiencia dentro de tu alcance.",
+      actions: ui_button("← Volver", href: calendar_events_path, variant: :secondary) %>
+
+<%= render "calendar/events/form", event: @event, url: calendar_events_path,
+      grade_levels: @grade_levels, groups: @groups %>

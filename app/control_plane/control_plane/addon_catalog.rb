@@ -19,6 +19,8 @@ module ControlPlane
       attendance
       report_cards
       assignments
+      calendar
+      extracurriculars
     ].freeze
   end
 end

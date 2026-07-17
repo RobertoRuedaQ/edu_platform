@@ -1,0 +1,66 @@
+<% content_for :title, @activity.name %>
+
+<%= render "shared/page_header",
+      title: @activity.name,
+      subtitle: "#{@activity.kind_label} · #{@activity.academic_term.name} · #{@activity.status_label}" %>
+
+<dl class="stack">
+  <div><dt>Cupo</dt><dd><%= @enrollments.size %> / <%= @activity.capacity %> inscritos</dd></div>
+  <div><dt>Costo</dt><dd><%= @activity.fee_label %></dd></div>
+  <div><dt>Instructor</dt><dd><%= @activity.instructor_staff_member&.name || "Sin asignar" %></dd></div>
+  <div><dt>Lugar</dt><dd><%= @activity.location.presence || "—" %></dd></div>
+  <div><dt>Horario</dt><dd><%= @activity.schedule_info.presence || "—" %></dd></div>
+</dl>
+
+<% if can?("activity.manage") -%>
+  <p class="cluster">
+    <%= link_to "Editar", edit_extracurriculars_activity_path(@activity), class: "btn btn--secondary btn--sm" %>
+    <% if @activity.draft? -%>
+      <%= button_to "Publicar", publish_extracurriculars_activity_path(@activity), class: "btn btn--primary btn--sm" %>
+    <% end -%>
+    <% unless @activity.archived? -%>
+      <%= button_to "Archivar", archive_extracurriculars_activity_path(@activity), class: "btn btn--secondary btn--sm" %>
+    <% end -%>
+  </p>
+<% end -%>
+
+<%= render "shared/page_header", title: "Roster", subtitle: "Inscripciones activas." %>
+
+<% if @enrollments.any? -%>
+  <%= render layout: "shared/table",
+        locals: { headers: [ "Estudiante", "Inscrito por", "Desde", "" ] } do -%>
+    <% @enrollments.each do |enrollment| -%>
+      <tr>
+        <td><%= enrollment.student.first_name %> <%= enrollment.student.last_name %></td>
+        <td><%= enrollment.enrolled_via == "guardian" ? "Acudiente" : "Colegio" %></td>
+        <td><%= enrollment.enrolled_at.to_date.to_fs(:long) %></td>
+        <td>
+          <%= button_to "Retirar",
+                extracurriculars_activity_enrollment_path(@activity, enrollment),
+                method: :delete, class: "btn btn--danger btn--sm" %>
+        </td>
+      </tr>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state",
+        icon: "users",
+        title: "Aún no hay inscritos",
+        description: "Inscribe estudiantes desde el formulario de abajo." %>
+<% end -%>
+
+<% if @eligible_students.any? -%>
+  <%= render "shared/page_header", title: "Inscribir estudiante", subtitle: nil %>
+  <%= form_with url: extracurriculars_activity_enrollments_path(@activity), method: :post do -%>
+    <%= hidden_field_tag :idempotency_key, @idempotency_key %>
+    <div class="field">
+      <label class="field__label" for="enrollment_student_id">Estudiante</label>
+      <select class="field__input" id="enrollment_student_id" name="student_id" required>
+        <% @eligible_students.each do |student| -%>
+          <option value="<%= student.id %>"><%= student.last_name %>, <%= student.first_name %></option>
+        <% end -%>
+      </select>
+    </div>
+    <%= ui_button "Inscribir", type: "submit", variant: :primary %>
+  <% end -%>
+<% end -%>

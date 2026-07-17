@@ -254,10 +254,13 @@ v1.14.0: modelos reales (`Charge`/`Payment`/`PaymentPlan`/`Installment`/`Student
    estructura congelada como snapshot jsonb al publicar (molde `price_tiers_snapshot`); calificar
    por rúbrica calcula y escribe la nota vía `GradeRecorder`/`GroupGrader` sin cambios — la rúbrica
    nunca almacena la nota; portal ve nivel+descriptor por criterio, sin RBAC. Roadmap completo en
-   `HISTORIA.md` v1.21.0–v1.26.0. **Siguiente ítem del camino crítico**: `calendar` (net-new) o
-   `extracurriculars` — ver `OPEN_PROCESS.md`.
-7. **`calendar`** + scope de visibilidad del cuidador (consume fechas de `assignments`, `attendance`,
-   `extracurriculars`).
+   `HISTORIA.md` v1.21.0–v1.26.0. ~~**Siguiente ítem del camino crítico**: `calendar` (net-new) o
+   `extracurriculars`~~ → `calendar` **✅ cerrado (v1.27.0)**; sigue `extracurriculars` — ver `OPEN_PROCESS.md`.
+7. ~~**`calendar`** + scope de visibilidad del cuidador (consume fechas de `assignments`, `attendance`,
+   `extracurriculars`).~~ ✅ **cerrado (v1.27.0)** — audiencia por dos columnas de scope (institución-wide/
+   grado/grupo, sin `kind`), tres ramas de `authorize!` sobre `calendar.manage`, merge de los `due_date`
+   de `assignments` SOLO en el portal (`Calendar::Timeline`). `attendance`/`extracurriculars` como fuentes
+   de fecha quedan diferidos (assignments es el único consumo real hoy). Ver `HISTORIA.md` v1.27.0.
 8. **`extracurriculars`** (depende de matrícula/término; actividad paga = `Charge` en `finance`, de #4).
 9. **Portal del cuidador ampliado** (colgar notas, asistencia, actividades, calendario, asignaciones,
    mensajes) — pequeño porque `GuardianScope` ya existe.
