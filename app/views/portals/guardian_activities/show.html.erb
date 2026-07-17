@@ -1,0 +1,26 @@
+<% content_for :title, @activity.name %>
+
+<%= render "shared/page_header",
+      title: @activity.name,
+      subtitle: "#{@activity.kind_label} · #{@activity.academic_term.name}" %>
+
+<dl class="stack">
+  <div><dt>Costo</dt><dd><%= @activity.fee_label %></dd></div>
+  <div><dt>Cupo</dt><dd><%= @activity.capacity %></dd></div>
+  <div><dt>Instructor</dt><dd><%= @activity.instructor_staff_member&.name || "Sin asignar" %></dd></div>
+  <div><dt>Lugar</dt><dd><%= @activity.location.presence || "—" %></dd></div>
+  <div><dt>Horario</dt><dd><%= @activity.schedule_info.presence || "—" %></dd></div>
+</dl>
+
+<% if @enrollment -%>
+  <p><%= button_to "Retirar inscripción",
+        portal_guardian_student_activity_enrollment_path(@student, @activity),
+        method: :delete, class: "btn btn--danger" %></p>
+<% else -%>
+  <%= button_to "Inscribir a #{@student.first_name}",
+        portal_guardian_student_activity_enrollment_path(@student, @activity),
+        method: :post, params: { idempotency_key: @idempotency_key },
+        class: "btn btn--primary" %>
+<% end -%>
+
+<p><%= link_to "Volver", portal_guardian_student_activities_path(@student), class: "btn btn--secondary btn--sm" %></p>

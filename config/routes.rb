@@ -74,6 +74,11 @@ Rails.application.routes.draw do
         # unreachable for free, since the assignment itself isn't in scope.
         resources :materials, only: :show, controller: "student_materials"
       end
+      # extracurriculars (v1.27.0): solo lectura — "mis actividades" (las
+      # inscripciones activas del propio estudiante), por self-scope. La
+      # escritura es del acudiente, no del estudiante. Sin authorize!, fuera
+      # de Navigation::Registry (§7).
+      resources :activities, only: %i[index show], controller: "student_activities"
     end
     resource :guardian, only: :show, controller: "guardian_portal" do
       # Per-child read-only summary (v1.9.0) — resolved through
@@ -105,6 +110,16 @@ Rails.application.routes.draw do
           # materials (v1.25.0, slice 3b) — read-only, same chained scope
           # (GuardianScope -> StudentView.for(this child)) as :attachments.
           resources :materials, only: :show, controller: "guardian_materials"
+        end
+        # extracurriculars (v1.27.0): lectura + ESCRITURA per-child. index/show
+        # listan las actividades del hijo + el catálogo inscribible; la
+        # inscripción anida bajo la actividad (resource singular: un hijo tiene
+        # a lo sumo UNA inscripción activa por actividad, resuelta por relación,
+        # sin :id). Inscribir/desinscribir EN NOMBRE de este hijo ya scopeado
+        # (B1), misma disciplina que :submission. Sin authorize!, fuera de
+        # Navigation::Registry.
+        resources :activities, only: %i[index show], controller: "guardian_activities" do
+          resource :enrollment, only: %i[create destroy], controller: "guardian_activity_enrollments"
         end
       end
       # communication (v1.19.0): org-wide, NOT per-child — a sibling of
@@ -303,6 +318,24 @@ Rails.application.routes.draw do
         # rule as entrega attachments.
         resources :materials, only: %i[create show destroy]
       end
+    end
+  end
+
+  # --- extracurriculars (net-new addon domain, v1.27.0, MVP item #8) --------
+  # activities#index lista el catálogo dentro del alcance del actor
+  # (Extracurriculars::ActivityScope: coordinador todas, instructor solo las
+  # suyas por PROPIEDAD de fila — NO un scope de rol nuevo). enrollments anida
+  # bajo una actividad: inscribir/desinscribir desde supervisión (la OTRA vía,
+  # junto con la del acudiente en el portal). Sin activities#destroy — una
+  # actividad se archiva (append), nunca se borra; publish/archive son
+  # transiciones de estado en la misma fila (gate activity.manage).
+  namespace :extracurriculars do
+    resources :activities, except: %i[destroy] do
+      member do
+        post :publish
+        post :archive
+      end
+      resources :enrollments, only: %i[create destroy]
     end
   end
 

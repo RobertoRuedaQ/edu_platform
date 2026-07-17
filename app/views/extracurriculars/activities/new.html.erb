@@ -1,0 +1,6 @@
+<% content_for :title, "Nueva actividad" %>
+
+<%= render "shared/page_header", title: "Nueva actividad", subtitle: "Comienza como borrador; publícala para abrir la inscripción." %>
+
+<%= render "form", activity: @activity, url: extracurriculars_activities_path, method: :post,
+      terms: @terms, staff: @staff %>

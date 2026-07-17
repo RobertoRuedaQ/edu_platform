@@ -1,0 +1,6 @@
+<% content_for :title, "Editar actividad" %>
+
+<%= render "shared/page_header", title: "Editar #{@activity.name}", subtitle: nil %>
+
+<%= render "form", activity: @activity, url: extracurriculars_activity_path(@activity), method: :patch,
+      terms: @terms, staff: @staff %>

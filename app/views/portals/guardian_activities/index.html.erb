@@ -1,0 +1,59 @@
+<% content_for :title, "Actividades de #{@student.first_name}" %>
+
+<%= render "shared/page_header",
+      title: "Actividades de #{@student.first_name} #{@student.last_name}",
+      subtitle: "Inscribe o retira a tu acudido de las actividades extracurriculares." %>
+
+<%= render "shared/page_header", title: "Inscrito", subtitle: nil %>
+
+<% if @enrollments.any? -%>
+  <%= render layout: "shared/table",
+        locals: { headers: [ "Actividad", "Tipo", "Costo", "Horario", "" ] } do -%>
+    <% @enrollments.each do |enrollment| -%>
+      <% activity = enrollment.activity -%>
+      <tr>
+        <td><%= link_to activity.name, portal_guardian_student_activity_path(@student, activity) %></td>
+        <td><%= activity.kind_label %></td>
+        <td><%= activity.fee_label %></td>
+        <td><%= activity.schedule_info.presence || "—" %></td>
+        <td>
+          <%= button_to "Retirar",
+                portal_guardian_student_activity_enrollment_path(@student, activity),
+                method: :delete, class: "btn btn--danger btn--sm" %>
+        </td>
+      </tr>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state",
+        icon: "calendar",
+        title: "Sin actividades",
+        description: "Aún no has inscrito a tu acudido en ninguna actividad." %>
+<% end -%>
+
+<%= render "shared/page_header", title: "Disponibles", subtitle: "Actividades publicadas del término activo." %>
+
+<% if @available.any? -%>
+  <%= render layout: "shared/table",
+        locals: { headers: [ "Actividad", "Tipo", "Costo", "Cupo", "" ] } do -%>
+    <% @available.each do |activity| -%>
+      <tr>
+        <td><%= link_to activity.name, portal_guardian_student_activity_path(@student, activity) %></td>
+        <td><%= activity.kind_label %></td>
+        <td><%= activity.fee_label %></td>
+        <td><%= activity.capacity %></td>
+        <td>
+          <%= button_to "Inscribir",
+                portal_guardian_student_activity_enrollment_path(@student, activity),
+                method: :post, params: { idempotency_key: @idempotency_key },
+                class: "btn btn--primary btn--sm" %>
+        </td>
+      </tr>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state",
+        icon: "calendar",
+        title: "No hay actividades disponibles",
+        description: "Cuando la institución publique actividades, aparecerán aquí." %>
+<% end -%>

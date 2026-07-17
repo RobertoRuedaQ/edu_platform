@@ -1,0 +1,56 @@
+<%# locals: (activity:, url:, method:, terms:, staff:) -%>
+<%= form_with url: url, method: method do -%>
+  <% if activity.errors.any? -%>
+    <%= render "shared/alert", variant: :danger, message: activity.errors.full_messages.join(", ") %>
+  <% end -%>
+
+  <%= render "shared/field", label: "Nombre", name: "activity[name]", type: "text", value: activity.name %>
+
+  <div class="field">
+    <label class="field__label" for="activity_kind">Tipo</label>
+    <select class="field__input" id="activity_kind" name="activity[kind]" required>
+      <% Extracurriculars::Activity::KINDS.each do |kind| -%>
+        <option value="<%= kind %>" <%= "selected" if activity.kind == kind %>>
+          <%= Extracurriculars::Activity::KIND_LABELS.fetch(kind, kind) %>
+        </option>
+      <% end -%>
+    </select>
+  </div>
+
+  <div class="field">
+    <label class="field__label" for="activity_academic_term_id">Término</label>
+    <select class="field__input" id="activity_academic_term_id" name="activity[academic_term_id]" required>
+      <option value="">— Selecciona un término —</option>
+      <% terms.each do |term| -%>
+        <option value="<%= term.id %>" <%= "selected" if activity.academic_term_id == term.id %>>
+          <%= term.name %>
+        </option>
+      <% end -%>
+    </select>
+  </div>
+
+  <div class="field">
+    <label class="field__label" for="activity_instructor_staff_member_id">Instructor (opcional)</label>
+    <select class="field__input" id="activity_instructor_staff_member_id" name="activity[instructor_staff_member_id]">
+      <option value="">— Sin asignar —</option>
+      <% staff.each do |member| -%>
+        <option value="<%= member.id %>" <%= "selected" if activity.instructor_staff_member_id == member.id %>>
+          <%= member.name %>
+        </option>
+      <% end -%>
+    </select>
+  </div>
+
+  <%= render "shared/field", label: "Cupo", name: "activity[capacity]", type: "number",
+        value: activity.capacity, min: 1, required: true %>
+
+  <%= render "shared/field", label: "Costo (COP, vacío = gratis)", name: "activity[fee]", type: "number",
+        step: "0.01", min: 0, value: activity.fee_amount %>
+
+  <%= render "shared/field", label: "Lugar", name: "activity[location]", type: "text", value: activity.location %>
+
+  <%= render "shared/field", label: "Horario", name: "activity[schedule_info]", type: "text",
+        value: activity.schedule_info, placeholder: "Ej. Lunes y miércoles 3–4pm" %>
+
+  <%= ui_button "Guardar", type: "submit", variant: :primary %>
+<% end -%>

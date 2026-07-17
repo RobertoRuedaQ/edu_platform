@@ -1,0 +1,14 @@
+<% content_for :title, @activity.name %>
+
+<%= render "shared/page_header",
+      title: @activity.name,
+      subtitle: "#{@activity.kind_label} · #{@activity.academic_term.name}" %>
+
+<dl class="stack">
+  <div><dt>Costo</dt><dd><%= @activity.fee_label %></dd></div>
+  <div><dt>Instructor</dt><dd><%= @activity.instructor_staff_member&.name || "Sin asignar" %></dd></div>
+  <div><dt>Lugar</dt><dd><%= @activity.location.presence || "—" %></dd></div>
+  <div><dt>Horario</dt><dd><%= @activity.schedule_info.presence || "—" %></dd></div>
+</dl>
+
+<p><%= link_to "Volver a mis actividades", portal_student_activities_path, class: "btn btn--secondary btn--sm" %></p>
