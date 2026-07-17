@@ -11,11 +11,68 @@
 
 ---
 
-## Changelog completo (v1.0.0 → v1.31.0)
+## Changelog completo (v1.0.0 → v1.32.0)
 
 > Copiado verbatim de §14 de `PROJECT_STATE.md` v1.5.0, antes de que el split editorial (v1.5.1)
 > moviera el changelog fuera del doc magro. Las entradas v1.6.0+ se escribieron directamente aquí,
 > ya con el split vigente.
+
+### v1.32.0 — 2026-07-17 — Schedule recurrente para SnapshotJob/RollupJob/PeriodCutJob/Expirer
+
+**Tercer slice post-MVP.** `Core::Headcount::SnapshotJob`, `ControlPlane::Usage::RollupJob`,
+`ControlPlane::Billing::PeriodCutJob` e `IdentityAccess::Invitations::Expirer` quedaban
+"invocables manual/rake" desde sus slices originales (S3a/S4/v1.7.0) — `config/recurring.yml`
+(Solid Queue) ya existía en el repo (con `clear_solid_queue_finished_jobs` real, del scaffold)
+pero sin ninguna entrada propia del proyecto.
+
+**Recon:** ninguno de los tres jobs per-institución (`SnapshotJob.enqueue_for`, `PeriodCutJob#perform
+(institution_id:, ...)`, `Expirer.call(institution:)`) puede colgar DIRECTO de una entrada de
+`recurring.yml` — esa entrada solo invoca UNA clase con args fijos, y estos necesitan una
+institución distinta por invocación. `RollupJob` es la excepción: global/self-contenido desde
+S3a (agrupa TODOS los `usage_events` de un día, sin GUC), así que cuelga directo sin wrapper.
+
+**Diseño construido — patrón fan-out, un wrapper por job per-institución:**
+- `Core::Headcount::SnapshotAllJob` — itera `Core::Institution.find_each`, encola un
+  `SnapshotJob.enqueue_for(institution)` por cada una (sin tocar ese método existente).
+- `ControlPlane::Billing::PeriodCutAllJob` — corta el **mes calendario ANTERIOR completo**, solo
+  para instituciones con `ControlPlane::Subscription.active` AHORA MISMO (una sin suscripción se
+  salta silenciosamente — caso común, no una falla a loguear); encola `PeriodCutJob.perform_later`.
+- `IdentityAccess::Invitations::ExpireAllJob` — el más distinto: `Invitation` es tenant-scoped/RLS
+  (a diferencia de las tablas globales de los otros dos), así que este job gestiona su PROPIO loop
+  de `ActiveRecord::Base.transaction { Tenant::Guc.set_local(...) } ensure Tenant::Guc.reset!` por
+  institución — no hay un `.enqueue_for` previo que reusar, `Expirer.call` nunca corrió como job.
+- `config/recurring.yml`, bloque `production:` (dev/test siguen con los rakes manuales): rollup
+  1am → snapshot 2am → sweep de invitaciones 4am (diarios); corte de facturación 3am del día 1 de
+  cada mes — orden elegido para que billing/headcount vean datos ya asentados del día anterior.
+
+**Hallazgo de testing (no un bug del job):** el primer intento de test de `ExpireAllJob` reportó
+"GUC leaked past the job" — falso positivo. La causa real: las aserciones DESPUÉS del job usaban
+`within_tenant(...)` (el helper de test, que deliberadamente NUNCA resetea el GUC — es un atajo
+"corre esto bajo X", no una garantía de limpieza) para releer `issued_a`/`issued_b`, dejando el
+GUC fijado ANTES de la aserción "no hay fuga". Aislado con `bin/rails runner` (fuera del wrapper
+transaccional de Minitest) para confirmar que el job en sí resetea correctamente — el fix fue
+reordenar el test, no tocar el job. Nuevo guardrail sobre esto.
+
+**Caso de aceptación, verificado end-to-end:** `SnapshotAllJob`/`PeriodCutAllJob` encolan
+exactamente un job por institución elegible (verificado con `assert_enqueued_jobs`/inspección de
+argumentos serializados); drenar la cola snapshotea cada institución y corta un borrador de
+factura de junio cuando se corre en julio; `ExpireAllJob` expira invitaciones vencidas de DOS
+instituciones distintas bajo sus GUCs correctos, sin fuga verificada con una query real bajo RLS
+(nunca una relectura de `current_setting()`).
+
+**Resultado:** 603 runs / 2557 assertions / 0 failures / 0 errors / 1 skip preexistente (baseline
+598; 5 tests nuevos: 2 en `snapshot_all_job_test.rb`, 2 en `period_cut_all_job_test.rb`, 1 en
+`people_management_test.rb`). `bin/rails zeitwerk:check` verde. Sin migraciones.
+
+**Archivos nuevos/editados:**
+- Jobs: `app/domains/core/jobs/headcount/snapshot_all_job.rb`,
+  `app/control_plane/control_plane/billing/period_cut_all_job.rb`,
+  `app/domains/identity_access/jobs/invitations/expire_all_job.rb` (los tres nuevos).
+- Config: `config/recurring.yml`.
+- Comentarios actualizados (ya no "deferred"): `period_cut_job.rb`, `invitations/expirer.rb`.
+- Tests: `test/models/core/headcount/snapshot_all_job_test.rb` (nuevo),
+  `test/models/control_plane/billing/period_cut_all_job_test.rb` (nuevo),
+  `test/integration/people_management_test.rb`.
 
 ### v1.31.0 — 2026-07-17 — RBAC intra-plano (`platform_admin` roles)
 

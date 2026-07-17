@@ -4,7 +4,8 @@ module ControlPlane
     # institution_id on itself (the ApplicationJob attr_accessor) — invoices/
     # invoice_line_items are GLOBAL tables, so this must run with NO GUC
     # fixed, same posture as ControlPlane::Usage::RollupJob. Invocable
-    # manually/rake; recurring schedule deferred.
+    # manually/rake, AND (v1.32.0) enqueued monthly per institution by
+    # ControlPlane::Billing::PeriodCutAllJob (config/recurring.yml).
     class PeriodCutJob < ApplicationJob
       def perform(institution_id:, period_start:, period_end:)
         institution = Core::Institution.find(institution_id)
