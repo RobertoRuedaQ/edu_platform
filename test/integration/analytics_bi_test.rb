@@ -85,7 +85,12 @@ class AnalyticsBiTest < ActionDispatch::IntegrationTest
       get "/analytics_bi/cross_tenant_reports"
       assert_response :success
       assert_select ".alert__title", text: "Modo auditoría"
-      assert_select "td", text: "Universidad Andina"
+      # NOTE: CrossTenantReportRoster runs through a genuinely SEPARATE DB
+      # connection (edu_bi_reader) — it cannot see this test's own
+      # uncommitted transaction, so @institution itself never appears here.
+      # The real cross-tenant acceptance case (with committed data across
+      # two institutions) lives in analytics_bi_cross_tenant_test.rb, which
+      # deliberately opts out of transactional tests for that reason.
     end
   end
 

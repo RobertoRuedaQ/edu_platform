@@ -31,7 +31,11 @@ module IdentityAccess
       # communication (v1.20.0): written ONLY when a conversation.audit
       # holder reads a conversation they are NOT a participant of — a
       # participant reading their own conversation never writes this.
-      "conversation_audited"            => "Conversación auditada (lectura por no-participante)"
+      "conversation_audited"            => "Conversación auditada (lectura por no-participante)",
+      # analytics_bi (v1.35.0): written every time a bi_auditor reads the
+      # cross-tenant report (edu_bi_reader/BYPASSRLS) — see
+      # AnalyticsBi::CrossTenantReportsController.
+      "cross_tenant_report_accessed"    => "Reporte cross-tenant accedido"
     }.freeze
 
     Page = Data.define(:events, :page, :total_pages, :total_count)
