@@ -17,6 +17,7 @@ module ControlPlane
   # not something this slice builds.
   class BaseController < ActionController::Base
     include ControlPlane::Authentication
+    include ControlPlane::Authorization
 
     layout "control_plane"
 

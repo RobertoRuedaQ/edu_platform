@@ -20,6 +20,7 @@ module ControlPlane
     validates :email, presence: true, uniqueness: true
     validates :name, presence: true
     validates :status, inclusion: { in: %w[active suspended] }
+    validates :role, inclusion: { in: %w[super_admin billing_ops viewer] }
 
     scope :active, -> { where(status: "active") }
     scope :suspended, -> { where(status: "suspended") }

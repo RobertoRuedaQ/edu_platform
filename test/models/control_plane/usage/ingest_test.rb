@@ -65,6 +65,23 @@ class ControlPlane::Usage::IngestTest < ActiveSupport::TestCase
     assert event.persisted?
   end
 
+  test ".emit is the same as .call when the addon is metered" do
+    institution = build_institution
+    build_metered_addon
+
+    event = ControlPlane::Usage::Ingest.emit(institution: institution, addon_key: "transportation",
+      unit: "check-ins", occurred_at: Time.current, idempotency_key: "emit-1")
+    assert event.persisted?
+  end
+
+  test ".emit swallows Rejected (unknown/unmetered addon) instead of raising, for domain call sites" do
+    institution = build_institution
+
+    assert_nil ControlPlane::Usage::Ingest.emit(institution: institution, addon_key: "does_not_exist",
+      unit: "x", occurred_at: Time.current, idempotency_key: "emit-2")
+    assert_equal 0, ControlPlane::UsageEvent.count
+  end
+
   test "runs with no tenant GUC set at all" do
     institution = build_institution
     build_metered_addon

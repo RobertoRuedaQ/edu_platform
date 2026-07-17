@@ -41,6 +41,7 @@ module Attendance
         record.recorded_by_staff_member = recorder
         record.note = params.dig(:notes, student.id).presence
         record.save!
+        emit_usage(record)
       end
 
       redirect_to attendance_groups_path, notice: "Asistencia de #{@group.name} guardada para #{@date.to_fs(:long)}."
@@ -69,6 +70,15 @@ module Attendance
       Date.iso8601(value)
     rescue ArgumentError, TypeError
       nil
+    end
+
+    # S3b (v1.30.0): one "registros" unit per AttendanceRecord saved. The
+    # record's own id is the idempotency anchor — re-taking the SAME (group,
+    # date) reuses the SAME row (find_or_initialize_by above), so it never
+    # double-counts a re-take, only a genuinely new (student, date) record.
+    def emit_usage(record)
+      ControlPlane::Usage::Ingest.emit(institution: Current.institution, addon_key: "attendance",
+        unit: "registros", occurred_at: record.date.in_time_zone, idempotency_key: "attendance_record:#{record.id}")
     end
   end
 end

@@ -28,6 +28,19 @@ module ControlPlane
           occurred_at: occurred_at, idempotency_key: idempotency_key, metadata: metadata
         )
       end
+
+      # S3b call sites (inside domain services/controllers) use THIS, never
+      # .call directly: metering must never break the underlying business
+      # action just because an addon isn't seeded/metered yet in a given
+      # environment (a fresh dev DB before `control_plane:seed_catalog`, an
+      # institution whose plan doesn't carry that addon, etc.) — Rejected is
+      # the one documented/expected failure mode, so ONLY it is swallowed;
+      # any other error still raises, so a real bug never hides behind this.
+      def self.emit(...)
+        call(...)
+      rescue Rejected
+        nil
+      end
     end
   end
 end

@@ -4,24 +4,54 @@ module ControlPlane
   # shape (find_or_initialize_by + .call). Run from
   # `bin/rails control_plane:seed_catalog`.
   class SeedCatalog
-    # One addon per addon-able domain (F14). `metered` picked for plausibility
-    # only — transportation (check-ins) and communication (mensajes) are the
-    # two "medidos plausibles" the spec calls out; `unit` stays provisional
-    # until M1 closes.
+    # One addon per addon-able domain (F14). `metered`/`unit` amounts are
+    # EXAMPLES, not real pricing (same disclaimer as the plan/tiers below).
+    #
+    # M1 closes per-domain, not all at once: a domain is metered here ONLY
+    # once its real facturable event is actually wired (S3b, v1.30.0) — never
+    # speculatively, so this table never lies about what's really measured.
+    # `transportation` is Clase C (cero modelos reales, ningun checkout que
+    # emitir) — was metered:true before v1.30.0 purely aspirationally;
+    # flipped to false because a seed that promises measurement over nothing
+    # real is misleading (an invoice would never show overage, but the
+    # catalog implied it could).
     ADDONS = [
       { key: "cafeteria", name: "Cafetería", monthly_fee_cents: 800_000 },
-      { key: "transportation", name: "Transporte", metered: true, unit: "check-ins",
-        included_quota: 5_000, overage_unit_price_cents: 50 },
+      { key: "transportation", name: "Transporte", monthly_fee_cents: 500_000 },
       { key: "schedules", name: "Horarios", monthly_fee_cents: 400_000 },
       { key: "student_support", name: "Bienestar estudiantil", monthly_fee_cents: 600_000 },
       { key: "counseling", name: "Consejería", monthly_fee_cents: 600_000 },
-      { key: "finance", name: "Tesorería/cartera", monthly_fee_cents: 700_000 },
+      # finance (v1.30.0): Finance::ChargeCreator/PaymentRecorder emit one
+      # "transacciones" unit per real charge/payment (never per attempt —
+      # both are already idempotent by their OWN idempotency_key).
+      { key: "finance", name: "Tesorería/cartera", metered: true, unit: "transacciones",
+        included_quota: 3_000, overage_unit_price_cents: 150 },
       { key: "communication", name: "Comunicación", metered: true, unit: "mensajes",
         included_quota: 10_000, overage_unit_price_cents: 20 },
       { key: "analytics_bi", name: "Analítica y BI", monthly_fee_cents: 1_200_000 },
-      { key: "attendance", name: "Asistencia", monthly_fee_cents: 300_000 },
-      { key: "report_cards", name: "Boletines", monthly_fee_cents: 400_000 },
-      { key: "assignments", name: "Tareas", monthly_fee_cents: 300_000 }
+      # attendance (v1.30.0): Attendance::RecordsController#create emits one
+      # "registros" unit per AttendanceRecord saved (re-taking the SAME
+      # (group, date) reuses the same record id, so it never double-counts).
+      { key: "attendance", name: "Asistencia", metered: true, unit: "registros",
+        included_quota: 15_000, overage_unit_price_cents: 5 },
+      # report_cards (v1.30.0): ReportCards::Publisher emits one "boletines"
+      # unit per (student, academic_term) PUBLICADO — keyed on that pair, not
+      # the ReportCard row's own id, since re-publishing regenerates the row
+      # (delete_all + create!) but must never re-bill the same boletin.
+      { key: "report_cards", name: "Boletines", metered: true, unit: "boletines",
+        included_quota: 2_000, overage_unit_price_cents: 100 },
+      # assignments (v1.30.0): Assignments::SubmissionRecorder emits one
+      # "entregas" unit per Submission saved — one per group on a group
+      # assignment (the shared row), never per member.
+      { key: "assignments", name: "Tareas", metered: true, unit: "entregas",
+        included_quota: 5_000, overage_unit_price_cents: 10 },
+      # extracurriculars (v1.30.0): first Addon row for this domain — it had
+      # none at all before (created after AddonCatalog::DOMAIN_KEYS, never
+      # backfilled into this demo seed). Extracurriculars::EnrollmentCreator
+      # emits one "inscripciones" unit per NEW active Enrollment (the
+      # idempotent re-enroll-while-active path returns before creating one).
+      { key: "extracurriculars", name: "Extracurriculares", metered: true, unit: "inscripciones",
+        included_quota: 500, overage_unit_price_cents: 200 }
     ].freeze
 
     PLAN = {

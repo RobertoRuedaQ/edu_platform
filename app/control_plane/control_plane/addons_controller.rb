@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
 module ControlPlane
-  # Screen 3 — Addon catalog: real CRUD (soft-retire, never destroy). Any
-  # authenticated platform_admin may manage the catalog — no intra-plane RBAC
-  # in S1 (scope creep, deferred).
+  # Screen 3 — Addon catalog: real CRUD (soft-retire, never destroy). Reads
+  # (index/show) stay open to any active platform_admin; mutations require
+  # catalog.manage (RBAC intra-plano, v1.31.0 — see ControlPlane::Authorization).
   class AddonsController < BaseController
     before_action :set_addon, only: %i[show edit update retire reactivate]
 
@@ -15,10 +15,12 @@ module ControlPlane
     end
 
     def new
+      authorize_platform!("catalog.manage")
       @addon = Addon.new(metered: false, currency: "COP")
     end
 
     def create
+      authorize_platform!("catalog.manage")
       @addon = Addon.new(addon_params)
       if @addon.save
         ControlPlane::Audit.log(action: "addon.created", platform_admin: current_platform_admin,
@@ -30,9 +32,11 @@ module ControlPlane
     end
 
     def edit
+      authorize_platform!("catalog.manage")
     end
 
     def update
+      authorize_platform!("catalog.manage")
       before = @addon.attributes.slice(*addon_params.keys)
       if @addon.update(addon_params)
         ControlPlane::Audit.log(action: "addon.updated", platform_admin: current_platform_admin,
@@ -44,6 +48,7 @@ module ControlPlane
     end
 
     def retire
+      authorize_platform!("catalog.manage")
       dependent = @addon.entitlements.active.includes(:institution)
       if dependent.exists?
         names = dependent.map { |e| e.institution.name }.uniq.join(", ")
@@ -58,6 +63,7 @@ module ControlPlane
     end
 
     def reactivate
+      authorize_platform!("catalog.manage")
       @addon.reactivate!
       ControlPlane::Audit.log(action: "addon.reactivated", platform_admin: current_platform_admin,
         target: @addon, ip_address: request.remote_ip)

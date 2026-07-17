@@ -252,4 +252,25 @@ class FinanceTest < ActionDispatch::IntegrationTest
       assert_empty Finance::StudentAccount.where(institution_id: other_institution.id)
     end
   end
+
+  # S3b (v1.30.0): one "transacciones" usage event per real Charge/Payment —
+  # both count toward the SAME unit. A double-submit of the same
+  # idempotency_key (ChargeCreator/PaymentRecorder's OWN guard) never re-emits.
+  test "S3b: a charge and a payment each emit one usage event, and a double-submit never duplicates either" do
+    ControlPlane::Addon.find_by!(key: "finance").update!( # sign_in_as_member already seeded this, unmetered
+      metered: true, unit: "transacciones", included_quota: 10, overage_unit_price_cents: 150
+    )
+
+    as_treasury do
+      key = SecureRandom.uuid
+      post "/finance/#{@account.id}/charges", params: { amount: "50000.00", description: "Pensión", idempotency_key: key }
+      post "/finance/#{@account.id}/charges", params: { amount: "50000.00", description: "Pensión", idempotency_key: key }
+
+      post "/finance/#{@account.id}/payments", params: { amount: "10000.00", method: "cash", idempotency_key: SecureRandom.uuid }
+    end
+
+    events = ControlPlane::UsageEvent.where(institution_id: @institution.id)
+    assert_equal 2, events.count # one charge + one payment, the repeated charge submit never re-emitted
+    assert(events.all? { |e| e.unit == "transacciones" })
+  end
 end

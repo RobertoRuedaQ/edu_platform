@@ -47,6 +47,7 @@ module Extracurriculars
           institution: institution, activity: activity, student: student, status: "active",
           enrolled_at: Time.current, enrolled_via: enrolled_via, enrolled_by_user: enrolled_by_user
         )
+        emit_usage(enrollment)
         charge_for_paid_activity
         enrollment
       end
@@ -90,6 +91,14 @@ module Extracurriculars
         institution: institution, account: account, amount: activity.fee_amount,
         description: "Actividad extracurricular: #{activity.name}", idempotency_key: idempotency_key
       )
+    end
+
+    # S3b (v1.30.0): one "inscripciones" unit per NEW active Enrollment — this
+    # method is only reached past the `next existing if existing` guard above,
+    # so a repeated enroll-while-active attempt never re-emits.
+    def emit_usage(enrollment)
+      ControlPlane::Usage::Ingest.emit(institution: institution, addon_key: "extracurriculars",
+        unit: "inscripciones", occurred_at: enrollment.enrolled_at, idempotency_key: "enrollment:#{enrollment.id}")
     end
   end
 end

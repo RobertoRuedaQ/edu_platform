@@ -3,6 +3,8 @@
 module ControlPlane
   # Screen 5 — Plans & pricing: per-student base rate + volume brackets. Addon
   # fees/overage are catalogued separately (Addon) — F9, no FK between them.
+  # Reads open to any active platform_admin; mutations require catalog.manage
+  # (RBAC intra-plano, v1.31.0 — see ControlPlane::Authorization).
   class PlansController < BaseController
     before_action :set_plan, only: %i[show edit update retire reactivate]
 
@@ -14,10 +16,12 @@ module ControlPlane
     end
 
     def new
+      authorize_platform!("catalog.manage")
       @plan = Plan.new(currency: "COP")
     end
 
     def create
+      authorize_platform!("catalog.manage")
       @plan = Plan.new(plan_params)
       if @plan.save
         ControlPlane::Audit.log(action: "plan.created", platform_admin: current_platform_admin,
@@ -29,9 +33,11 @@ module ControlPlane
     end
 
     def edit
+      authorize_platform!("catalog.manage")
     end
 
     def update
+      authorize_platform!("catalog.manage")
       before = @plan.attributes.slice(*plan_params.keys)
       if @plan.update(plan_params)
         ControlPlane::Audit.log(action: "plan.updated", platform_admin: current_platform_admin,
@@ -43,6 +49,7 @@ module ControlPlane
     end
 
     def retire
+      authorize_platform!("catalog.manage")
       @plan.retire!
       ControlPlane::Audit.log(action: "plan.retired", platform_admin: current_platform_admin,
         target: @plan, ip_address: request.remote_ip)
@@ -50,6 +57,7 @@ module ControlPlane
     end
 
     def reactivate
+      authorize_platform!("catalog.manage")
       @plan.reactivate!
       ControlPlane::Audit.log(action: "plan.reactivated", platform_admin: current_platform_admin,
         target: @plan, ip_address: request.remote_ip)

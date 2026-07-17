@@ -45,6 +45,7 @@ module Finance
           paid_at: received_at, idempotency_key: idempotency_key)
         account.update!(balance: account.balance - amount)
         mark_charge_paid_if_settled!
+        emit_usage(payment)
         payment
       end
     end
@@ -65,6 +66,14 @@ module Finance
       paid_so_far = Finance::Payment.where(institution_id: institution.id, charge_id: charge.id,
         status: "completed").sum(:amount)
       charge.update!(status: "paid") if paid_so_far >= charge.amount && charge.status != "paid"
+    end
+
+    # S3b (v1.30.0): one "transacciones" unit per real Payment — same
+    # discipline as ChargeCreator#emit_usage (only reached past the
+    # find_existing idempotency guard).
+    def emit_usage(payment)
+      ControlPlane::Usage::Ingest.emit(institution: institution, addon_key: "finance",
+        unit: "transacciones", occurred_at: payment.paid_at, idempotency_key: "payment:#{payment.id}")
     end
   end
 end

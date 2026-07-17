@@ -1001,6 +1001,8 @@ CREATE TABLE public.platform_admins (
     last_sign_in_at timestamp(6) without time zone,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
+    role character varying DEFAULT 'super_admin'::character varying NOT NULL,
+    CONSTRAINT platform_admins_role_check CHECK (((role)::text = ANY ((ARRAY['super_admin'::character varying, 'billing_ops'::character varying, 'viewer'::character varying])::text[]))),
     CONSTRAINT platform_admins_status_check CHECK (((status)::text = ANY ((ARRAY['active'::character varying, 'suspended'::character varying])::text[])))
 );
 
@@ -5645,6 +5647,7 @@ CREATE POLICY teaching_assignments_tenant_isolation ON public.teaching_assignmen
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260717155106'),
 ('20260716203439'),
 ('20260716153456'),
 ('20260716151744'),

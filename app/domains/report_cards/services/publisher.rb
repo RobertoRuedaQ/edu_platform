@@ -34,7 +34,7 @@ module ReportCards
     def publish_one(student)
       result = Computation.call(student: student, academic_term: academic_term, institution: institution)
 
-      ReportCard.transaction do
+      report_card = ReportCard.transaction do
         ReportCard.where(institution_id: institution.id, student_id: student.id,
           academic_term_id: academic_term.id).delete_all
 
@@ -49,6 +49,19 @@ module ReportCards
           published_by_staff_member: published_by_staff_member
         )
       end
+      emit_usage(report_card, student)
+      report_card
+    end
+
+    # S3b (v1.30.0): one "boletines" unit per (student, academic_term)
+    # PUBLISHED — keyed on that pair, NOT the ReportCard row's own id, since
+    # re-publishing regenerates the row (delete_all + create! above) with a
+    # brand new id; using the row id would re-bill the same boletín on every
+    # regrade/republish.
+    def emit_usage(report_card, student)
+      ControlPlane::Usage::Ingest.emit(institution: institution, addon_key: "report_cards",
+        unit: "boletines", occurred_at: report_card.published_at,
+        idempotency_key: "report_card:#{institution.id}:#{student.id}:#{academic_term.id}")
     end
   end
 end

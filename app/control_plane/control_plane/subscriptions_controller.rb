@@ -11,11 +11,13 @@ module ControlPlane
     before_action :set_subscription, only: %i[show terminate]
 
     def new
+      authorize_platform!("billing.manage")
       @subscription = Subscription.new
       @plans = Plan.active.order(:name)
     end
 
     def create
+      authorize_platform!("billing.manage")
       plan = Plan.active.find_by(id: subscription_params[:plan_id])
       if plan.nil?
         @subscription = Subscription.new
@@ -40,6 +42,7 @@ module ControlPlane
     end
 
     def terminate
+      authorize_platform!("billing.manage")
       @subscription.end!
       ControlPlane::Audit.log(action: "subscription.ended", platform_admin: current_platform_admin,
         target: @subscription, metadata: { institution_id: @institution.id }, ip_address: request.remote_ip)

@@ -38,10 +38,12 @@ module ControlPlane
     end
 
     def new
+      authorize_platform!("institutions.manage")
       @institution = Core::Institution.new(kind: "school")
     end
 
     def create
+      authorize_platform!("institutions.manage")
       @institution = Core::Institution.new(institution_params)
       @admin_email = params[:institution][:admin_email].to_s.strip
       @admin_name = params[:institution][:admin_name].to_s.strip

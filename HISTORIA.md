@@ -11,11 +11,162 @@
 
 ---
 
-## Changelog completo (v1.0.0 → v1.29.0)
+## Changelog completo (v1.0.0 → v1.31.0)
 
 > Copiado verbatim de §14 de `PROJECT_STATE.md` v1.5.0, antes de que el split editorial (v1.5.1)
 > moviera el changelog fuera del doc magro. Las entradas v1.6.0+ se escribieron directamente aquí,
 > ya con el split vigente.
+
+### v1.31.0 — 2026-07-17 — RBAC intra-plano (`platform_admin` roles)
+
+**Segundo slice post-MVP.** Con S3b cerrado, el owner (autónomo — decisiones tomadas siguiendo
+siempre la opción recomendada, per instrucción explícita de iterar sin pausas) siguió con el
+siguiente ítem del backlog de billing (`OPEN_PROCESS.md` §1.5.4): cualquier `platform_admin`
+autenticado administraba TODO el plano de control (catálogo, provisioning, subscripciones,
+entitlements, facturas, otros admins) — el propio código de `AddonsController` lo documentaba
+("no intra-plane RBAC in S1, scope creep, deferred").
+
+**Recon:** `platform_admins` no tenía NINGUNA columna de rol/scope. `PlatformAdminsController` solo
+expone `index/show/suspend/reactivate` — el alta es SOLO por CLI de bootstrap
+(`lib/tasks/control_plane.rake`), nunca por la UI. Confirmado: ningún otro dato de scope
+(departamento/institución) tendría sentido aquí — el plano de control es cross-tenant por diseño.
+
+**Decisión (recomendada, elegida):** un mapeo ESTÁTICO rol→permisos en código, NUNCA el esquema
+completo del inquilino (`roles`/`role_permissions`/`role_assignments` con columnas de scope) — los
+platform admins son un puñado de personas de ops, no un sistema de autoservicio. Tres roles:
+`super_admin` (todo), `billing_ops` (provisioning + billing del día a día, SIN catálogo ni gestión
+de otros admins), `viewer` (solo lectura). Reads (`index`/`show`) quedan abiertos a CUALQUIER admin
+activo sin importar el rol — solo las mutaciones se gatean, mismo split "escritura=RBAC,
+lectura=membresía" que ya usa el lado del inquilino.
+
+**Lo construido:**
+- Migración `20260717155106_add_role_to_platform_admins.rb`: columna `role` string, CHECK
+  `IN ('super_admin','billing_ops','viewer')`, **default `super_admin`** — backward-compatible a
+  propósito: TODO admin/test preexistente conserva acceso completo sin tocar una sola línea.
+- `ControlPlane::Authorization` (concern nuevo, incluido en `BaseController`): `PERMISSIONS_BY_ROLE`
+  (constante congelada), `authorize_platform!(permission)` (puerta dura, `raise NotAuthorized` →
+  `rescue_from` → 403 amable, `control_plane/errors/forbidden.html.erb` nuevo, mismo molde que
+  `Authorization::Controller` del inquilino), `can_platform?(permission)` (cosmético, para ocultar
+  botones).
+- Cuatro permisos: `catalog.manage` (`AddonsController`/`PlansController`, `super_admin` solo),
+  `institutions.manage` (`InstitutionsController#new/#create`), `billing.manage`
+  (`SubscriptionsController`/`EntitlementsController`/`InvoicesController`, todas las mutaciones),
+  `platform_admins.manage` (`suspend`/`reactivate` de OTROS admins — el más sensible, `super_admin`
+  solo). `billing_ops` recibe `institutions.manage`+`billing.manage`; `viewer`, ninguno.
+- Vistas: botones "Nuevo addon"/"Nuevo plan"/"Nueva institución" y "Suspender"/"Reactivar" (en el
+  índice de `platform_admins`, que también ahora muestra la columna `role`) ocultos vía
+  `can_platform?` para quien no tiene el permiso — cosmético, el gate real sigue en el controller.
+
+**Caso de aceptación, verificado end-to-end:** un `viewer` lee todo (addons/plans/institutions/
+invoices) pero cada mutación (crear addon/plan/institución, abrir subscripción/entitlement/factura,
+suspender otro admin) da 403 con la página amable, nunca una excepción cruda; un `billing_ops`
+provisiona instituciones pero no puede tocar el catálogo ni suspender a otro admin; un
+`super_admin` sigue haciendo todo, incluida la gestión de otros admins. Los 52 tests preexistentes
+del plano de control pasaron SIN NINGÚN CAMBIO (el default `super_admin` preserva el comportamiento
+de antes de este slice al pie de la letra).
+
+**Resultado:** 598 runs / 2539 assertions / 0 failures / 0 errors / 1 skip preexistente (baseline
+593; 5 tests nuevos en `test/integration/control_plane/authorization_test.rb`). `bin/rails
+zeitwerk:check` verde. Una migración, aplicada en dev y test.
+
+**Archivos nuevos/editados:**
+- Migración: `db/migrate/20260717155106_add_role_to_platform_admins.rb`.
+- Modelo: `app/control_plane/control_plane/platform_admin.rb`.
+- Concern: `app/control_plane/control_plane/authorization.rb` (nuevo), `base_controller.rb`.
+- Controllers: `addons_controller.rb`, `plans_controller.rb`, `institutions_controller.rb`,
+  `subscriptions_controller.rb`, `entitlements_controller.rb`, `invoices_controller.rb`,
+  `platform_admins_controller.rb`.
+- Vistas: `control_plane/errors/forbidden.html.erb` (nueva), `addons/index`, `plans/index`,
+  `institutions/index`, `platform_admins/index`.
+- Test: `test/integration/control_plane/authorization_test.rb` (nuevo).
+
+### v1.30.0 — 2026-07-17 — S3b: emisión real de uso por dominio (post-MVP, M1 medio cerrado)
+
+**Primer slice post-MVP** — con el camino crítico de `LINEAMIENTOS_MVP.md` completo (v1.29.0), el
+owner eligió continuar con el track de billing del plano de control (`PROJECT_STATE.md` §7) en vez
+de RBAC intra-plano o `analytics_bi`. Cierra (parcialmente) M1: "unidad de metering por dominio
+medido", abierto desde que el pipe de uso se construyó (S3a) sin que ningún dominio lo llamara.
+
+**Recon (STOP #1):** `ControlPlane::Usage::Ingest`/`UsageEvent`/`UsageDailyRollup`/`RollupJob` ya
+eran reales desde S3a — confirmado con grep que CERO dominio los invocaba fuera de
+`test/models/control_plane/usage/*`. De los 13 dominios en `AddonCatalog::DOMAIN_KEYS`, solo 6 son
+Clase A con un evento de escritura real e inequívoco (`communication`, `attendance`,
+`extracurriculars`, `assignments`, `report_cards`, `finance`); el resto es Clase C (`transportation`,
+`cafeteria`, `student_support`, `analytics_bi` — cero tabla real que emitir) o sensible/diferido
+(`counseling`). Hallazgo crítico: `transportation` estaba sembrado `metered:true, unit:"check-ins"`
+en `seed_catalog.rb` desde S1 — 100% aspiracional, el dominio nunca tuvo ningún checkout real.
+`extracurriculars` (v1.27.0) nunca tuvo fila `Addon` en el seed en absoluto (creado después de que
+`AddonCatalog::DOMAIN_KEYS` lo incluyera, nunca backfilleado). `ControlPlane::Billing::PeriodCut` ya
+sumaba `UsageDailyRollup` correctamente por rango de fecha+addon — confirmado que no necesitaba
+ningún cambio.
+
+**Checkpoint de diseño (STOP #2) — decisiones del owner:**
+1. **Alcance: barrido completo de los 6 dominios Clase A en un solo slice** (no incremental
+   domain-por-domain como otros tracks) — M1 es una decisión de negocio DISTINTA por dominio, pero
+   no exige cerrarse de a una.
+2. **`transportation` se corrige a `metered:false`** en el mismo slice — un seed que promete
+   medición sobre un evento inexistente es engañoso.
+
+**Diseño construido:**
+- **`ControlPlane::Usage::Ingest.emit`** (nuevo, junto a `.call` — sin tocar su contrato original,
+  seguido probando por el test suite de S3a): rescata específicamente `Rejected` (addon no
+  sembrado/no medido) y devuelve `nil` — nunca rompe la acción de negocio real por un problema de
+  configuración de billing. Cualquier otro error sigue propagando.
+- **Seis call sites, cada uno con su propia ancla de idempotencia** — la lección repetida del
+  slice: usar el id de la fila SOLO si es estable; si el hecho de negocio se REGENERA, la clave debe
+  ser la tupla semántica, no un id volátil.
+  - `Communication::MessageSender` → "mensajes", `message:#{id}` (cada envío es una fila nueva).
+  - `Attendance::RecordsController#create` → "registros", `attendance_record:#{record.id}`
+    (re-tomar el mismo (grupo, fecha) reusa la MISMA fila vía `find_or_initialize_by`, uno por
+    estudiante del roster).
+  - `Extracurriculars::EnrollmentCreator` → "inscripciones", `enrollment:#{id}` (solo alcanzado tras
+    el guard de idempotencia propio del servicio — un re-enroll activo nunca re-emite).
+  - `Assignments::SubmissionRecorder` → "entregas", `submission:#{id}` (upsert — reeditar/resubmit
+    reusa la fila, uno por GRUPO en una tarea grupal, nunca por integrante).
+  - `Finance::ChargeCreator`/`PaymentRecorder` → "transacciones" (mismo unit para ambos),
+    `charge:#{id}`/`payment:#{id}` — ambos servicios YA tenían su propio guard de idempotencia
+    previo al lock (v1.18.0), reusado tal cual.
+  - **`ReportCards::Publisher` rompe el patrón "usar el id de la fila"**: `publish_one` hace
+    `delete_all`+`create!` en cada re-publicación (v1.17.0) — el `ReportCard#id` es NUEVO en cada
+    regrade/republish. Ancla correcta: `"report_card:#{institution.id}:#{student.id}:#{academic_term.id}"`
+    (el hecho de negocio "este boletín de este estudiante en este término", nunca la fila física) —
+    verificado con un test dedicado que re-publica dos veces y confirma UN solo `UsageEvent` pese a
+    un id de `ReportCard` distinto cada vez.
+- **`seed_catalog.rb`**: los 5 dominios ganaron `metered:true`+`unit`+cupos de ejemplo (`registros`
+  15.000/`entregas` 5.000/`boletines` 2.000/`transacciones` 3.000, más `mensajes` 10.000 ya existente);
+  `extracurriculars` ganó su primera fila `Addon` (`inscripciones`, 500); `transportation` pasó a
+  `metered:false`.
+- **`PeriodCut`/`RollupJob` sin ningún cambio** — confirmado el recon, no hacía falta.
+
+**Caso de aceptación, verificado end-to-end (uno por dominio, en el archivo de test existente de
+cada dominio — nunca un archivo nuevo):** cada acción real (enviar un mensaje, tomar asistencia,
+inscribir, entregar una tarea, publicar un boletín, cobrar/pagar) con el addon correspondiente
+sembrado y medido crea exactamente un `ControlPlane::UsageEvent` con el `unit` esperado; repetir la
+acción de forma idempotente (reenviar, re-tomar, re-inscribir, re-entregar, re-publicar,
+re-cobrar/re-pagar con la MISMA `idempotency_key`) nunca duplica el evento; y — caso crítico —
+`ReportCards::Publisher` re-publicando produce una fila `ReportCard` con id DISTINTO cada vez pero
+sigue emitiendo un solo `UsageEvent`. Con el addon SIN sembrar/sin medir (el estado real de
+`sign_in_as_member`, que crea el addon pero `metered:false` por defecto), la acción de negocio sigue
+funcionando exactamente igual — `Usage::Ingest.emit` nunca la bloquea.
+
+**Resultado:** 593 runs / 2506 assertions / 0 failures / 0 errors / 1 skip preexistente (baseline
+581; 12 tests nuevos: 2 en `messaging_test.rb`, 1 en `attendance_test.rb`, 1 en
+`extracurriculars_test.rb`, 1 en `submissions_test.rb`, 1 en `report_cards_test.rb`, 1 en
+`finance_test.rb`, 2 en `ingest_test.rb` (`.emit`), 3 en el `seed_catalog_test.rb` nuevo — el primer
+test de ese archivo). `bin/rails zeitwerk:check` verde. Sin migraciones.
+
+**Archivos nuevos/editados:**
+- `app/control_plane/control_plane/usage/ingest.rb` (`.emit`).
+- `app/control_plane/control_plane/seed_catalog.rb`.
+- `app/domains/communication/services/message_sender.rb`,
+  `app/controllers/attendance/records_controller.rb`,
+  `app/domains/extracurriculars/services/enrollment_creator.rb`,
+  `app/domains/assignments/services/submission_recorder.rb`,
+  `app/domains/report_cards/services/publisher.rb`,
+  `app/domains/finance/services/{charge_creator,payment_recorder}.rb`.
+- Tests: `test/models/control_plane/usage/ingest_test.rb`,
+  `test/models/control_plane/seed_catalog_test.rb` (nuevo),
+  `test/integration/{messaging,attendance,extracurriculars,submissions,report_cards,finance}_test.rb`.
 
 ### v1.29.0 — 2026-07-17 — Provisioning de instituciones + correo real (ítem #10 del MVP) — CAMINO CRÍTICO DEL MVP COMPLETO
 

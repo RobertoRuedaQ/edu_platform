@@ -289,4 +289,24 @@ class SubmissionsTest < ActionDispatch::IntegrationTest
       assert_empty Assignments::Submission.where(institution_id: other_institution.id)
     end
   end
+
+  # S3b (v1.30.0): one "entregas" usage event per Submission saved, and
+  # resubmitting (upsert, same row/id) never re-emits.
+  test "S3b: submitting emits one usage event, and resubmitting never duplicates it" do
+    ControlPlane::Addon.find_by!(key: "assignments").update!( # sign_in_as_member already seeded this, unmetered
+      metered: true, unit: "entregas", included_quota: 50, overage_unit_price_cents: 10
+    )
+    assignment = create_and_publish_assignment!
+    student_user = within_tenant(@institution) do
+      link_as_student_user!(@institution, student: @student, email: "student-s3b-#{SecureRandom.hex(4)}@member.test", name: "Valentina")
+    end
+
+    sign_in_as(student_user, institution: @institution, password: "password-123456")
+    post "/portal/student/assignments/#{assignment.id}/submission", params: { body: "Primer intento" }
+    post "/portal/student/assignments/#{assignment.id}/submission", params: { body: "Segundo intento" }
+
+    events = ControlPlane::UsageEvent.where(institution_id: @institution.id)
+    assert_equal 1, events.count
+    assert_equal "entregas", events.sole.unit
+  end
 end
