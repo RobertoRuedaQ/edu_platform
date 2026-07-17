@@ -224,7 +224,12 @@ class ActionDispatch::IntegrationTest
         a.name = key.humanize
         a.currency = "COP"
       end
-      ControlPlane::Entitlement.create!(institution: institution, addon: addon, valid_from: Date.current)
+      # valid_from in the past (never today): Entitlement#revoke! (v1.33.0)
+      # closes valid_until at Date.current, which the model rejects when
+      # equal to valid_from (mirrors Subscription#end!'s same-day
+      # restriction) — many "entitlement gate #1" tests revoke this SAME
+      # default grant within the same test, same day it was seeded here.
+      ControlPlane::Entitlement.create!(institution: institution, addon: addon, valid_from: 1.day.ago.to_date)
     end
   end
 end

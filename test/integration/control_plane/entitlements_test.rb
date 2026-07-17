@@ -35,7 +35,7 @@ class ControlPlane::EntitlementsTest < ActionDispatch::IntegrationTest
   end
 
   test "revoking and reactivating an entitlement is soft and audited" do
-    entitlement = ControlPlane::Entitlement.create!(institution: @institution, addon: @addon, valid_from: Date.current)
+    entitlement = ControlPlane::Entitlement.create!(institution: @institution, addon: @addon, valid_from: 1.day.ago.to_date)
 
     patch revoke_control_plane_entitlement_path(entitlement)
     assert_equal "revoked", entitlement.reload.status

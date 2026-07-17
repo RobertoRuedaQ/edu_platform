@@ -71,6 +71,9 @@ module ControlPlane
         target: @entitlement, ip_address: request.remote_ip)
       redirect_to control_plane_entitlements_path(institution_id: @entitlement.institution_id),
         notice: "Entitlement revocado."
+    rescue ActiveRecord::RecordInvalid
+      redirect_to control_plane_entitlements_path(institution_id: @entitlement.institution_id),
+        alert: "No se puede revocar un entitlement el mismo día en que se otorgó — espera al día siguiente."
     end
 
     def reactivate

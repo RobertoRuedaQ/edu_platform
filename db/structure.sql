@@ -11,6 +11,20 @@ SET client_min_messages = warning;
 SET row_security = off;
 
 --
+-- Name: btree_gist; Type: EXTENSION; Schema: -; Owner: -
+--
+
+CREATE EXTENSION IF NOT EXISTS btree_gist WITH SCHEMA public;
+
+
+--
+-- Name: EXTENSION btree_gist; Type: COMMENT; Schema: -; Owner: -
+--
+
+COMMENT ON EXTENSION btree_gist IS 'support for indexing common datatypes in GiST';
+
+
+--
 -- Name: citext; Type: EXTENSION; Schema: -; Owner: -
 --
 
@@ -1897,6 +1911,14 @@ ALTER TABLE ONLY public.installments
 
 
 --
+-- Name: institution_entitlements institution_entitlements_no_overlapping_periods; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.institution_entitlements
+    ADD CONSTRAINT institution_entitlements_no_overlapping_periods EXCLUDE USING gist (institution_id WITH =, addon_id WITH =, daterange(valid_from, COALESCE(valid_until, 'infinity'::date), '[)'::text) WITH &&);
+
+
+--
 -- Name: institution_entitlements institution_entitlements_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2214,6 +2236,14 @@ ALTER TABLE ONLY public.submission_groups
 
 ALTER TABLE ONLY public.submissions
     ADD CONSTRAINT submissions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: subscriptions subscriptions_no_overlapping_periods; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.subscriptions
+    ADD CONSTRAINT subscriptions_no_overlapping_periods EXCLUDE USING gist (institution_id WITH =, daterange(starts_on, COALESCE(ends_on, 'infinity'::date), '[)'::text) WITH &&);
 
 
 --
@@ -5647,6 +5677,7 @@ CREATE POLICY teaching_assignments_tenant_isolation ON public.teaching_assignmen
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260717161248'),
 ('20260717155106'),
 ('20260716203439'),
 ('20260716153456'),

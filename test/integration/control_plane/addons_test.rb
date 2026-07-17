@@ -83,7 +83,7 @@ class ControlPlane::AddonsTest < ActionDispatch::IntegrationTest
     addon = ControlPlane::Addon.create!(key: "counseling", name: "Consejería", currency: "COP")
     institution = Core::Institution.create!(name: "Colegio Dependiente 2", slug: "colegio-dependiente-2",
       code: "DEP-2", kind: "school")
-    entitlement = ControlPlane::Entitlement.create!(institution: institution, addon: addon, valid_from: Date.current)
+    entitlement = ControlPlane::Entitlement.create!(institution: institution, addon: addon, valid_from: 1.day.ago.to_date)
     entitlement.revoke!
 
     patch retire_control_plane_addon_path(addon)

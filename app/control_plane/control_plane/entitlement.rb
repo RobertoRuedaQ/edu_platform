@@ -32,8 +32,18 @@ module ControlPlane
 
     def active? = status == "active"
 
-    def revoke!     = update!(status: "revoked")
-    def reactivate! = update!(status: "active")
+    # v1.33.0: closes valid_until on revoke (mirrors Subscription#end!'s
+    # ends_on) — a revoked entitlement that stayed open-ended still claimed
+    # its calendar range forever, colliding with a same-addon regrant under
+    # the no-overlap exclusion constraint (institution_entitlements_no_
+    # overlapping_periods). Same restriction as Subscription#end! too: same-
+    # day revoke (valid_until == valid_from) is invalid — controller rescues
+    # it with the same friendly message.
+    def revoke!(valid_until: Date.current) = update!(status: "revoked", valid_until: valid_until)
+
+    # Reopens the SAME grant (not a new one) — valid_from is untouched, only
+    # the closed valid_until from revoke! is cleared.
+    def reactivate! = update!(status: "active", valid_until: nil)
 
     def active_on?(date = Date.current)
       active? && valid_from <= date && (valid_until.nil? || valid_until > date)

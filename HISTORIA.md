@@ -11,11 +11,77 @@
 
 ---
 
-## Changelog completo (v1.0.0 → v1.32.0)
+## Changelog completo (v1.0.0 → v1.33.0)
 
 > Copiado verbatim de §14 de `PROJECT_STATE.md` v1.5.0, antes de que el split editorial (v1.5.1)
 > moviera el changelog fuera del doc magro. Las entradas v1.6.0+ se escribieron directamente aquí,
 > ya con el split vigente.
+
+### v1.33.0 — 2026-07-17 — Hardening de billing: exclusion constraints GiST (solapamiento de rangos)
+
+**Cuarto slice post-MVP.** De los cuatro sub-ítems documentados bajo "hardening, no construido"
+(`OPEN_PROCESS.md` §1.5.3), solo el de exclusion constraints es un default seguro de construir sin
+una decisión de producto nueva — prorrateo/edición manual de líneas/tabla `billing_periods`
+explícita quedan abiertos, cada uno exige reglas de negocio reales que este slice no puede asumir.
+
+**Recon:** los índices únicos parciales ya existentes (`index_subscriptions_one_active_per_
+institution`, `index_entitlements_one_active_per_institution_addon`) YA prevenían "dos filas
+ACTIVAS a la vez" — el exclusion constraint no era necesario para ESE invariante. El gap real:
+ninguno de los dos chequeaba que una fila NUEVA no se solapara en el tiempo con una fila VIEJA
+(ended/revoked) de la MISMA institución — un dato inconsistente hoy silencioso (dos "contratos"
+reclamando el mismo rango de calendario), nunca antes verificado ni a nivel de app ni de BD.
+
+**Lo construido:**
+- Migración `20260717161248`: `CREATE EXTENSION btree_gist` (operator class de igualdad para
+  `uuid` dentro de un `EXCLUDE`, PG18 nativo) + `EXCLUDE USING gist` en `subscriptions`
+  (`institution_id WITH =`, `daterange(starts_on, COALESCE(ends_on,'infinity'::date),'[)') WITH &&`)
+  y en `institution_entitlements` (mismo molde, + `addon_id WITH =`). Sin migrar datos — ninguna fila
+  existente violaba el nuevo constraint (dev/test corrieron limpio).
+
+**Bug real que el propio constraint destapó (no hipotético):** `Entitlement#revoke!` NUNCA cerraba
+`valid_until` — a diferencia de `Subscription#end!`, que sí cierra `ends_on` desde su propio slice.
+Un entitlement revocado seguía reclamando su rango hasta el infinito, así que revocar y volver a
+otorgar el MISMO addon a la MISMA institución (flujo real y común: "quitar cafetería, dárselo de
+nuevo más adelante") violaba el nuevo `EXCLUDE`. Corregido:
+- `Entitlement#revoke!(valid_until: Date.current)` cierra el rango (mismo molde que `end!`).
+- `Entitlement#reactivate!` reabre la MISMA fila (`valid_until: nil`), sin tocar `valid_from` —
+  nunca crea una nueva.
+- Mismo restricción "no el mismo día" que ya tenía `Subscription#end!` (la validación
+  `valid_until_after_valid_from` ya existía, sin cambios) — `EntitlementsController#revoke` ganó el
+  MISMO `rescue ActiveRecord::RecordInvalid`/mensaje amable que ya usaba
+  `SubscriptionsController#terminate`, copiado literal.
+
+**Blast radius real del fix, encontrado corriendo la suite COMPLETA (nunca solo el archivo en el que
+se trabajaba): 18 tests en ~13 archivos**, todos por la MISMA causa raíz —
+`grant_full_entitlements` (`test_helper.rb`) sembraba el entitlement por defecto de CADA test con
+`valid_from: Date.current`, y decenas de tests de "entitlement gate #1" (uno por dominio addon-
+gated) lo revocan el MISMO día dentro del mismo test para simular "institución sin el módulo".
+Arreglado en UN solo lugar (`valid_from: 1.day.ago.to_date` en el helper) — no se tocó cada archivo
+individualmente, salvo los 4 tests que YA creaban su propio entitlement inline con `Date.current`
+(`entitlement_test.rb`, `entitlements_check_test.rb`, `control_plane/entitlements_test.rb`,
+`control_plane/addons_test.rb`), que se corrigieron uno por uno por ser setups propios, no del
+helper compartido.
+
+**Caso de aceptación, verificado end-to-end:** revocar un entitlement con `valid_from` en el pasado
+cierra `valid_until` a hoy; reactivarlo reabre la MISMA fila; un intento de re-otorgar el mismo
+addon a la misma institución con un rango que se solapa con uno YA REVOCADO es rechazado por la
+BASE DE DATOS (`ActiveRecord::StatementInvalid`/`PG::ExclusionViolation`), nunca silenciosamente
+aceptado — la app nunca chequeaba esto antes. Revocar el mismo día que se otorgó sigue dando el
+mensaje amable existente, nunca una excepción cruda.
+
+**Resultado:** 606 runs / 2562 assertions / 0 failures / 0 errors / 1 skip preexistente (baseline
+603; 4 tests nuevos en `entitlement_test.rb`, 18 tests preexistentes reparados por la causa raíz
+compartida — no nuevas aserciones de negocio, solo fechas de setup corregidas). `bin/rails
+zeitwerk:check` verde. Una migración, aplicada en dev y test.
+
+**Archivos nuevos/editados:**
+- Migración: `db/migrate/20260717161248_add_no_overlap_exclusion_constraints_to_billing.rb`.
+- Modelo: `app/control_plane/control_plane/entitlement.rb`.
+- Controller: `app/control_plane/control_plane/entitlements_controller.rb`.
+- Test helper: `test/test_helper.rb` (`grant_full_entitlements`).
+- Tests: `test/models/control_plane/entitlement_test.rb`,
+  `test/models/control_plane/entitlements_check_test.rb`,
+  `test/integration/control_plane/{entitlements,addons}_test.rb` (fechas de setup corregidas).
 
 ### v1.32.0 — 2026-07-17 — Schedule recurrente para SnapshotJob/RollupJob/PeriodCutJob/Expirer
 
