@@ -4,7 +4,7 @@ module AnalyticsBi
   class InstitutionDashboardController < ApplicationController
     def show
       authorize!("institution_dashboard.view")
-      @kpis = AnalyticsBi::InstitutionDashboard.stub
+      @kpis = AnalyticsBi::InstitutionDashboard.for(institution: Current.institution)
     end
   end
 end

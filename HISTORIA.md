@@ -11,11 +11,52 @@
 
 ---
 
-## Changelog completo (v1.0.0 → v1.33.0)
+## Changelog completo (v1.0.0 → v1.34.0)
 
 > Copiado verbatim de §14 de `PROJECT_STATE.md` v1.5.0, antes de que el split editorial (v1.5.1)
 > moviera el changelog fuera del doc magro. Las entradas v1.6.0+ se escribieron directamente aquí,
 > ya con el split vigente.
+
+### v1.34.0 — 2026-07-17 — `analytics_bi`: `InstitutionDashboard` real (mitad tenant-scoped)
+
+**Quinto slice post-MVP.** `analytics_bi` seguía 100% en fase stub (`InstitutionDashboard.stub`,
+números fijos: 187 estudiantes, 3.8 de promedio, etc.). Decisión deliberada: cerrar SOLO la mitad
+tenant-scoped en este slice — la mitad cross-tenant (`CrossTenantReportRoster`, rol
+`edu_bi_reader`/`BYPASSRLS`) es la primera vez que la app conectaría con un rol Postgres distinto
+para una query real, y merece su propio recon/checkpoint, no colarse aditiva aquí.
+
+**Lo construido:** `AnalyticsBi::InstitutionDashboard.for(institution:)` reemplaza `.stub` —
+mismas seis claves exactas que la vista ya esperaba (`total_students`/`avg_grade`/
+`attendance_rate`/`enrollment_trend`/`grades_by_subject`/`status_breakdown`), cero cambios a la
+vista salvo el manejo de `nil`.
+- `total_students`: misma definición que `Core::Headcount::Snapshotter` (`status == "active"`,
+  nunca filtrado por término) — pero SIN llamar a `Snapshotter.call`, que persiste una fila +
+  un `Audit.log` por invocación (side-effect equivocado para una vista de solo lectura).
+- `avg_grade`/`grades_by_subject`: `Schedules::Assessment.graded` (el gradebook compartido de
+  siempre, `schedules::Assessment`), agrupado por materia para el segundo.
+- `attendance_rate`: presentes ÷ total de `Attendance::AttendanceRecord` de los últimos 30 días.
+- `enrollment_trend`: la ÚNICA excepción que lee histórico en vez de recalcular —
+  `ControlPlane::StudentHeadcountSnapshot` (real de verdad desde que `SnapshotAllJob` corre solo,
+  v1.32.0), reusado sin re-computarlo.
+- `avg_grade`/`attendance_rate` devuelven `nil` (nunca un `0`/`0%` engañoso) cuando no hay datos
+  todavía — la vista muestra "—", mismo principio que "boletín sin notas no aporta línea, nunca
+  un cero" ya establecido en `report_cards`.
+
+**Caso de aceptación, verificado end-to-end:** con 2 estudiantes activos + 1 inactivo, dos notas
+(4.0/3.0) y dos registros de asistencia (1 presente/1 ausente), el dashboard muestra exactamente
+2 estudiantes, 3.5 de promedio, 50.0% de asistencia y "Álgebra" en el desglose por materia — todo
+calculado en vivo, nada hardcodeado. Una institución sin datos ve "—" en vez de un cero falso.
+
+**Resultado:** 607 runs / 2572 assertions / 0 failures / 0 errors / 1 skip preexistente (baseline
+606; el test existente de `analytics_bi_test.rb` se corrigió — ya no espera el número fijo del
+stub — y se agregó el caso de aceptación con datos reales). `bin/rails zeitwerk:check` verde. Sin
+migraciones.
+
+**Archivos nuevos/editados:**
+- Servicio: `app/domains/analytics_bi/services/institution_dashboard.rb`.
+- Controller: `app/controllers/analytics_bi/institution_dashboard_controller.rb`.
+- Vista: `app/views/analytics_bi/institution_dashboard/show.html.erb`.
+- Test: `test/integration/analytics_bi_test.rb`.
 
 ### v1.33.0 — 2026-07-17 — Hardening de billing: exclusion constraints GiST (solapamiento de rangos)
 
