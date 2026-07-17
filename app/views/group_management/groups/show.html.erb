@@ -3,7 +3,10 @@
 <%= render "shared/page_header",
       title: @group.name,
       subtitle: @group.grade_level&.name,
-      actions: (can?("groups.manage", @group) ? ui_button("Editar matrícula", href: edit_group_management_group_membership_path(@group), variant: :secondary) : nil) %>
+      actions: (can?("groups.manage", @group) ? safe_join([
+        ui_button("Editar matrícula", href: edit_group_management_group_membership_path(@group), variant: :secondary),
+        ui_button("Distribución del aula", href: group_management_group_classroom_layout_path(@group), variant: :secondary)
+      ], " ") : nil) %>
 
 <%# No real homeroom-teacher link (sections has no homeroom_teacher_id) and
     no real timetable table exist — same limitation as the index. %>

@@ -1,0 +1,28 @@
+<% content_for :title, @section.name %>
+
+<%= render "shared/page_header", title: "Aula #{@section.name}",
+      subtitle: @section.grade_level&.name %>
+
+<% if @classroom.present? -%>
+  <div class="tile-grid">
+    <%= render "shared/stat", value: @classroom.student_count.to_s, label: "Estudiantes ubicados" %>
+    <%= render "shared/stat", value: @classroom.needs_attention_count.to_s,
+          label: "Necesitan atención", variant: (@classroom.needs_attention_count.positive? ? :warning : :default) %>
+  </div>
+
+  <%= AnalyticsBi::Svg::SeatGrid.render(classroom: @classroom) %>
+
+  <div class="seat-grid__legend">
+    <p><span class="seat-grid__swatch seat-grid__swatch--calm" aria-hidden="true"></span> Estable</p>
+    <p><span class="seat-grid__swatch seat-grid__swatch--hot" aria-hidden="true"></span> Necesita atención (marcado con «!»)</p>
+    <p><span class="seat-grid__swatch seat-grid__swatch--unknown" aria-hidden="true"></span> Sin datos suficientes</p>
+  </div>
+
+  <p class="text-muted">
+    El calor se deriva en el servidor de notas (<code>Schedules::Assessment</code>) y asistencia
+    (últimos 30 días) — el estudiante contra sí mismo, nunca un ranking entre niños.
+  </p>
+<% else -%>
+  <%= render "shared/empty_state", title: "Este grupo no tiene una distribución de aula vigente",
+        description: "Configúrala desde Grupos › #{@section.name} › Distribución del aula." %>
+<% end -%>

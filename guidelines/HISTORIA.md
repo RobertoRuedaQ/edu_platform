@@ -11,11 +11,126 @@
 
 ---
 
-## Changelog completo (v1.0.0 → v1.35.0)
+## Changelog completo (v1.0.0 → v1.36.0)
 
 > Copiado verbatim de §14 de `PROJECT_STATE.md` v1.5.0, antes de que el split editorial (v1.5.1)
 > moviera el changelog fuera del doc magro. Las entradas v1.6.0+ se escribieron directamente aquí,
 > ya con el split vigente.
+
+### v1.36.0 — 2026-07-17 — `analytics_bi`: Lente 1 "Mapa de Empatía Espacial" (Slice 2 de `BI_DOCUMENT.md`)
+
+**Séptimo slice post-MVP, segundo guiado por `guidelines/BI_DOCUMENT.md`.** Construye la superficie
+espacial canónica del HPS (la Lente 1): el plano IRL del aula con una capa de calor derivada de datos
+que ya existen (notas, asistencia), para que el docente/director de grupo vea de un vistazo quién
+necesita atención — *el estudiante contra sí mismo, nunca un ranking entre niños* (no-negociable
+§1.1.3). Dos mitades: geometría de aula **net-new** (dato primario que había que modelar) + heat
+**derivado** de T1 (dato que ya estaba).
+
+**Recon-first (§12):** `grep create_table classroom_layouts|seat_assignments` → no existían (confirma
+§5.0). El patrón `EXCLUDE USING gist` (btree_gist) ya estaba en el repo desde v1.33.0
+(`subscriptions`/`institution_entitlements`) — se copió el idioma exacto, incluido `COALESCE(fin,
+'infinity'::date)` para el extremo abierto. `helpers/` NO está en la lista de colapso de Zeitwerk
+(`config/application.rb` colapsa solo `{models,queries,services,jobs,policies}`), así que el helper
+SVG fue a `services/svg/` (colapsa a `AnalyticsBi::Svg::*`), verificado con `zeitwerk:check` antes de
+cerrar.
+
+**Decisión A2 ejecutada (owner-approved): la geometría la POSEE `group_management`, no
+`analytics_bi`.** El aula física es dato de `group_management` (dueño de `Section`/`Student`), igual
+que `analytics_bi` ya lee `Schedules::Assessment`/`Attendance::AttendanceRecord` sin poseerlas (§5.1).
+Dos tablas net-new tenant-scoped (RLS `ENABLE+FORCE`, `uuidv7()`, índice líder `institution_id`, sin
+columnas de dinero):
+
+- **`GroupManagement::ClassroomLayout`** — una configuración versionable por `(section,
+  academic_term)`: `rows`/`cols` smallint, `board_orientation` (0·90·180·270, CHECK), `aisles` jsonb
+  (geometría pura, default `[]`, nunca PII), `version`, `effective_from`/`effective_until`.
+- **`GroupManagement::SeatAssignment`** — quién se sienta dónde: `classroom_layout_id`/`student_id`/
+  `"row"`/`"col"` (smallint), efectivo-fechado.
+
+**Tres `EXCLUDE USING gist`** — la integridad vive en la BD, no en la app: (1)
+`classroom_layouts_no_overlapping_versions` por `(institution, section, term, daterange)` — una sola
+versión vigente + append-only real (más allá de "una activa a la vez"); (2)
+`seat_assignments_no_double_booked_seat` por `(institution, layout, row, col, daterange)`; (3)
+`seat_assignments_no_two_seats_per_student` por `(institution, layout, student, daterange)`. `"row"`
+va entrecomillado en TODO SQL crudo (palabra reservada de SQL — sin las comillas la migración explota
+al parsear el CHECK y el EXCLUDE). `btree_gist` ya lo habilitó la migración de billing; el `down` de
+esta migración NO lo elimina (los constraints de billing siguen dependiendo de él).
+
+**Reconfiguración append-only, molde simétrico `Subscription#end!`/`Entitlement#revoke!`.**
+`GroupManagement::ClassroomReconfigurer` cierra la versión vigente y abre `version + 1` (los
+`seat_assignments` viejos quedan intactos → histórico preservado); `GroupManagement::SeatAssigner`
+cierra el asiento activo del estudiante antes de abrir el nuevo (mover ≠ violar el constraint), y
+`unassign` solo cierra. **Desviación de redacción documentada:** §5.3 esbozaba `effective_until =
+ayer`; se cierra con `Date.current` en su lugar — con `daterange '[)'`, `[from, hoy)` y `[hoy, ∞)`
+son ADYACENTES (nunca solapan), lo que satisface el `EXCLUDE` Y funciona reconfigurando el mismo día
+en que se creó la versión (ayer violaría el CHECK `effective_until >= effective_from` y dejaría un
+hueco de un día). Ambos servicios abren su transacción con **`requires_new: true` (SAVEPOINT)** — sin
+eso, una violación de exclusión (double-booking) abortaba la transacción entera del request
+(`TenantScoped` around_action), y aunque el controller rescatara la excepción, el `COMMIT` final
+explotaba con "current transaction is aborted"; con `requires_new` la violación revierte solo al
+savepoint y re-lanza limpio (bug real encontrado corriendo los tests, ver abajo).
+
+**Dos superficies, dos gates distintos (no se colapsan):**
+
+- **Reconfiguración (WRITE) en `group_management`, gate `groups.manage`** (mismo permiso que edita la
+  matrícula del grupo — gestionar el aula física es la misma capacidad): `ClassroomLayoutsController`
+  (crear/reconfigurar) + `SeatAssignmentsController` (asignar/mover/liberar), colgados de
+  `/group_management/groups/:id/`, enlazados desde el show del grupo. UX **select-based**, sin
+  drag-and-drop — "aburrido sobre ingenioso", y sin precedente de nested-attributes-con-JS en esta
+  casa que respalde un builder cliente-side. El double-booking (constraint) se surface como alerta
+  amable, nunca un 500.
+- **Lectura del mapa (Lente 1) en `analytics_bi`, gate `hps.classroom.view`** (permiso NUEVO en
+  `SeedPermissions::CATALOG` — per-institución; `institution_admin` lo hereda por el bootstrap
+  `FirstAdmin` como cualquier key salvo `cross_tenant_reports.view`; NO es cross-tenant). Molde #4
+  (supervisión): `AnalyticsBi::SpatialClassroomsController` con `authorize!` al inicio de cada acción;
+  query object `AnalyticsBi::Lens::SpatialClassroomScope` (filtro de inquilino explícito + per-row
+  `can?` sobre `layout.section` — un grant `:group` la cubre vía `Section#group_id`, uno
+  `:grade_level` vía `section.grade_level_id`, ambos por los `SCOPE_READERS` existentes). `can?` solo
+  cosmético en vistas.
+
+**Heat in-memory, HSL server-side, cero recomputación en cliente (§7 default, §10.2).**
+`AnalyticsBi::Lens::SpatialHeatmap` (molde `InstitutionDashboard`/`ReportCards::Computation`) deriva
+por estudiante un valor 0..1 (mayor = más necesita atención) de `Schedules::Assessment.graded`
+(nota/5.0) + `Attendance::AttendanceRecord` (presentes ÷ registrados, últimos 30 días); `wellbeing =
+media de las señales disponibles`, `heat = 1 - wellbeing`. Sin datos → `heat` **nil** (empty state
+real, dimmed/neutral, nunca un 0 engañoso — mismo principio que v1.34.0). Mapea a `hsl(hue,72%,52%)`
+con `hue = (1-heat)*130` (calmo verde → cálido rojo), emitido como variable CSS `--heat` por asiento.
+`AnalyticsBi::Lens::SpatialClassroom` compone layout + asientos + heat como read-model (un objeto por
+controller, Sandi Metz).
+
+**SVG server-rendered (§10.1): `AnalyticsBi::Svg::SeatGrid`** (`services/svg/seat_grid.rb`).
+Renderiza la grilla como SVG plano (mismo molde que `shared/_bar_chart`, sin librería de charting),
+un `<g class="seat">` por asiento con `style="--heat: hsl(...)"` + `data-needs-attention`/`data-heat`.
+**AA, nunca color solo (UX_UI §7):** el asiento que necesita atención lleva una marca "!" +
+`aria-label`, y una tabla `visually-hidden` espeja cada asiento (el significado nunca depende de leer
+el color). **Cero PII al cliente más allá de lo permitido:** solo iniciales en el SVG; el nombre
+completo solo en la tabla que el observador ya puede ver server-side. Stimulus
+`spatial_map_controller.js` atenúa los estables (`.seat--dimmed`) resaltando quienes necesitan
+atención, solo con data-attributes ya en el DOM — sin round-trip, sin `localStorage` (§10.4).
+
+**Aura overlay (§5.7, `care_auras`) DEFERIDO a Slice 3.** La Lente 1 de §5.7 menciona un ícono de
+aura abstracta sobre el pupitre del docente; este slice construye SOLO el mapa espacial + heat. El
+cableado del aura se hará al construir el Slice 3 (`counseling` → proyección) — anotado en el doc.
+
+**Tests (18 nuevos, suite completa 626 runs / 0 fallos / 1 skip preexistente, en serie
+`PARALLEL_WORKERS=1`):**
+- Modelo (los tres `EXCLUDE`): reconfigurar a mitad de año cierra la versión y abre la siguiente sin
+  violar; dos versiones solapadas para el mismo `(section, term)` lanzan `StatementInvalid`;
+  double-book de un asiento lanza; un estudiante con dos asientos activos lanza; mover un estudiante
+  (cerrar + abrir) NO viola y preserva el histórico.
+- Unit de heat: thriving (heat bajo, no needs_attention), struggling (heat alto, needs_attention),
+  sin-datos (heat nil, `hsl` neutral), y una sola señal disponible.
+- Aceptación de superficie (espíritu del caso de María, §6.4): `authorize!` + scope realmente gatean
+  quién ve qué aula — grupo-scoped ve solo la suya en el índice, 403 fuera de scope, 404 cross-tenant
+  (nunca fuga), y el write gateado por `groups.manage` (no por `hps.classroom.view`).
+- **Hallazgo de testing (nuevo guardrail):** una violación de constraint dentro de una transacción
+  *joinable* aborta la transacción entera; los tests de modelo fijan el GUC sobre la transacción de
+  fixtures (no una anidada joinable) para que cada `create!` que viola caiga a su propio savepoint
+  (comportamiento estándar de Rails en tests transaccionales), y los servicios usan `requires_new:
+  true` por la misma razón en producción. Sin SimpleCov configurado en el repo (Minitest sin gema de
+  cobertura) — la cobertura se sostiene por los tests de modelo/servicio/controller (happy + fallo)
+  descritos, no por un reporte automatizado.
+
+Ver `BI_DOCUMENT.md` §14 (v0.3.0) y `OPEN_PROCESS.md` ítem #21 + guardrails v1.36.0 para el detalle.
 
 ### v1.35.0 — 2026-07-17 — `analytics_bi`: `CrossTenantReportRoster` real (mitad cross-tenant, Slice 1 de `BI_DOCUMENT.md`)
 

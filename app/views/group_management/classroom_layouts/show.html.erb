@@ -1,0 +1,71 @@
+<% content_for :title, "Distribución de #{@group.name}" %>
+
+<%= render "shared/page_header", title: "Distribución del aula — #{@group.name}",
+      subtitle: @group.grade_level&.name,
+      actions: ui_button("← Volver al grupo", href: group_management_group_path(@group), variant: :secondary) %>
+
+<% if @term.nil? -%>
+  <%= render "shared/empty_state", title: "No hay un término activo",
+        description: "La distribución del aula se ancla al término lectivo activo." %>
+<% else -%>
+  <section class="stack">
+    <h3><%= @layout ? "Reconfigurar distribución (versión actual: v#{@layout.version})" : "Crear distribución" %></h3>
+    <p class="text-muted">
+      Reconfigurar cierra la versión vigente y abre la siguiente — los asientos anteriores se
+      conservan como histórico, nunca se borran.
+    </p>
+    <%= form_with url: group_management_group_classroom_layout_path(@group), method: :post do |f| %>
+      <div class="form-row">
+        <label>Filas <%= f.number_field "classroom_layout[rows]", value: @layout&.rows || 5, min: 1, max: 20, required: true %></label>
+        <label>Columnas <%= f.number_field "classroom_layout[cols]", value: @layout&.cols || 6, min: 1, max: 20, required: true %></label>
+        <label>Orientación del tablero
+          <%= f.select "classroom_layout[board_orientation]",
+                options_for_select([["Arriba", 0], ["Derecha", 90], ["Abajo", 180], ["Izquierda", 270]], @layout&.board_orientation || 0) %>
+        </label>
+      </div>
+      <%= ui_button (@layout ? "Reconfigurar" : "Crear distribución"), type: "submit", variant: :primary %>
+    <% end %>
+  </section>
+
+  <% if @layout -%>
+    <section class="stack">
+      <h3>Asignar un asiento</h3>
+      <% if @unseated.any? -%>
+        <%= form_with url: group_management_group_seat_assignments_path(@group), method: :post do %>
+          <div class="form-row">
+            <label>Estudiante
+              <select name="student_id" required>
+                <% @unseated.each do |student| -%>
+                  <option value="<%= student.id %>"><%= student.last_name %>, <%= student.first_name %></option>
+                <% end -%>
+              </select>
+            </label>
+            <label>Fila <input type="number" name="row" value="0" min="0" max="<%= @layout.rows - 1 %>" required></label>
+            <label>Columna <input type="number" name="col" value="0" min="0" max="<%= @layout.cols - 1 %>" required></label>
+          </div>
+          <%= ui_button "Asignar", type: "submit", variant: :primary %>
+        <% end %>
+      <% else -%>
+        <p class="text-muted">Todos los estudiantes del grupo ya tienen asiento.</p>
+      <% end -%>
+    </section>
+
+    <section class="stack">
+      <h3>Asientos ocupados</h3>
+      <% if @assignments.any? -%>
+        <%= render layout: "shared/table", locals: { headers: ["Estudiante", "Fila", "Columna", ""] } do -%>
+          <% @assignments.sort_by { |a| [a.row, a.col] }.each do |assignment| -%>
+            <tr>
+              <td><%= assignment.student.last_name %>, <%= assignment.student.first_name %></td>
+              <td><%= assignment.row %></td>
+              <td><%= assignment.col %></td>
+              <td><%= button_to "Liberar", group_management_group_seat_assignment_path(@group, assignment.student_id), method: :delete, class: "btn btn--ghost btn--sm" %></td>
+            </tr>
+          <% end -%>
+        <% end -%>
+      <% else -%>
+        <%= render "shared/empty_state", title: "Aún no hay asientos asignados" %>
+      <% end -%>
+    </section>
+  <% end -%>
+<% end -%>

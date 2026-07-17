@@ -425,6 +425,33 @@ ALTER TABLE ONLY public.charges FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: classroom_layouts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.classroom_layouts (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    section_id uuid NOT NULL,
+    academic_term_id uuid NOT NULL,
+    rows smallint NOT NULL,
+    cols smallint NOT NULL,
+    board_orientation smallint DEFAULT 0 NOT NULL,
+    aisles jsonb DEFAULT '[]'::jsonb NOT NULL,
+    version integer DEFAULT 1 NOT NULL,
+    effective_from date NOT NULL,
+    effective_until date,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT classroom_layouts_board_orientation_check CHECK ((board_orientation = ANY (ARRAY[0, 90, 180, 270]))),
+    CONSTRAINT classroom_layouts_cols_positive_check CHECK ((cols > 0)),
+    CONSTRAINT classroom_layouts_effective_range_check CHECK (((effective_until IS NULL) OR (effective_until >= effective_from))),
+    CONSTRAINT classroom_layouts_rows_positive_check CHECK ((rows > 0))
+);
+
+ALTER TABLE ONLY public.classroom_layouts FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: control_plane_audit_events; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1278,6 +1305,29 @@ CREATE TABLE public.schema_migrations (
 
 
 --
+-- Name: seat_assignments; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.seat_assignments (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    classroom_layout_id uuid NOT NULL,
+    student_id uuid NOT NULL,
+    "row" smallint NOT NULL,
+    col smallint NOT NULL,
+    effective_from date NOT NULL,
+    effective_until date,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT seat_assignments_col_nonneg_check CHECK ((col >= 0)),
+    CONSTRAINT seat_assignments_effective_range_check CHECK (((effective_until IS NULL) OR (effective_until >= effective_from))),
+    CONSTRAINT seat_assignments_row_nonneg_check CHECK (("row" >= 0))
+);
+
+ALTER TABLE ONLY public.seat_assignments FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: sections; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1775,6 +1825,22 @@ ALTER TABLE ONLY public.charges
 
 
 --
+-- Name: classroom_layouts classroom_layouts_no_overlapping_versions; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.classroom_layouts
+    ADD CONSTRAINT classroom_layouts_no_overlapping_versions EXCLUDE USING gist (institution_id WITH =, section_id WITH =, academic_term_id WITH =, daterange(effective_from, COALESCE(effective_until, 'infinity'::date), '[)'::text) WITH &&);
+
+
+--
+-- Name: classroom_layouts classroom_layouts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.classroom_layouts
+    ADD CONSTRAINT classroom_layouts_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: control_plane_audit_events control_plane_audit_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2143,6 +2209,30 @@ ALTER TABLE ONLY public.schema_migrations
 
 
 --
+-- Name: seat_assignments seat_assignments_no_double_booked_seat; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.seat_assignments
+    ADD CONSTRAINT seat_assignments_no_double_booked_seat EXCLUDE USING gist (institution_id WITH =, classroom_layout_id WITH =, "row" WITH =, col WITH =, daterange(effective_from, COALESCE(effective_until, 'infinity'::date), '[)'::text) WITH &&);
+
+
+--
+-- Name: seat_assignments seat_assignments_no_two_seats_per_student; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.seat_assignments
+    ADD CONSTRAINT seat_assignments_no_two_seats_per_student EXCLUDE USING gist (institution_id WITH =, classroom_layout_id WITH =, student_id WITH =, daterange(effective_from, COALESCE(effective_until, 'infinity'::date), '[)'::text) WITH &&);
+
+
+--
+-- Name: seat_assignments seat_assignments_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.seat_assignments
+    ADD CONSTRAINT seat_assignments_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: sections sections_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2351,6 +2441,13 @@ CREATE UNIQUE INDEX idx_charges_idempotency ON public.charges USING btree (insti
 
 
 --
+-- Name: idx_classroom_layouts_on_inst_section_term_from; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_classroom_layouts_on_inst_section_term_from ON public.classroom_layouts USING btree (institution_id, section_id, academic_term_id, effective_from);
+
+
+--
 -- Name: idx_group_memberships_on_group; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2523,6 +2620,13 @@ CREATE INDEX idx_rubric_levels_on_institution_template ON public.rubric_levels U
 --
 
 CREATE INDEX idx_rubric_templates_on_institution_author ON public.rubric_templates USING btree (institution_id, authored_by_user_id);
+
+
+--
+-- Name: idx_seat_assignments_on_inst_layout_from; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_seat_assignments_on_inst_layout_from ON public.seat_assignments USING btree (institution_id, classroom_layout_id, effective_from);
 
 
 --
@@ -3807,6 +3911,14 @@ ALTER TABLE ONLY public.submissions
 
 
 --
+-- Name: seat_assignments fk_rails_367791f28a; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.seat_assignments
+    ADD CONSTRAINT fk_rails_367791f28a FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE CASCADE;
+
+
+--
 -- Name: audit_events fk_rails_373d303452; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4087,6 +4199,14 @@ ALTER TABLE ONLY public.assignments
 
 
 --
+-- Name: classroom_layouts fk_rails_642b1ed42f; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.classroom_layouts
+    ADD CONSTRAINT fk_rails_642b1ed42f FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: role_assignments fk_rails_646eed7bbc; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4172,6 +4292,14 @@ ALTER TABLE ONLY public.invitations
 
 ALTER TABLE ONLY public.conversations
     ADD CONSTRAINT fk_rails_7024c7cecf FOREIGN KEY (closed_by_institution_user_id) REFERENCES public.institution_users(id) ON DELETE SET NULL;
+
+
+--
+-- Name: classroom_layouts fk_rails_7026b4734c; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.classroom_layouts
+    ADD CONSTRAINT fk_rails_7026b4734c FOREIGN KEY (academic_term_id) REFERENCES public.academic_terms(id) ON DELETE CASCADE;
 
 
 --
@@ -4436,6 +4564,14 @@ ALTER TABLE ONLY public.referrals
 
 ALTER TABLE ONLY public.student_accounts
     ADD CONSTRAINT fk_rails_a63606332a FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: classroom_layouts fk_rails_a905a0ac26; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.classroom_layouts
+    ADD CONSTRAINT fk_rails_a905a0ac26 FOREIGN KEY (section_id) REFERENCES public.sections(id) ON DELETE CASCADE;
 
 
 --
@@ -4799,6 +4935,14 @@ ALTER TABLE ONLY public.rubric_evaluations
 
 
 --
+-- Name: seat_assignments fk_rails_dd5e702175; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.seat_assignments
+    ADD CONSTRAINT fk_rails_dd5e702175 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: student_headcount_snapshots fk_rails_dfadb12276; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4844,6 +4988,14 @@ ALTER TABLE ONLY public.charges
 
 ALTER TABLE ONLY public.role_assignments
     ADD CONSTRAINT fk_rails_e4bfc1cd2c FOREIGN KEY (role_id) REFERENCES public.roles(id) ON DELETE CASCADE;
+
+
+--
+-- Name: seat_assignments fk_rails_e8e04827c0; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.seat_assignments
+    ADD CONSTRAINT fk_rails_e8e04827c0 FOREIGN KEY (classroom_layout_id) REFERENCES public.classroom_layouts(id) ON DELETE CASCADE;
 
 
 --
@@ -5083,6 +5235,19 @@ ALTER TABLE public.charges ENABLE ROW LEVEL SECURITY;
 --
 
 CREATE POLICY charges_tenant_isolation ON public.charges USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: classroom_layouts; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.classroom_layouts ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: classroom_layouts classroom_layouts_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY classroom_layouts_tenant_isolation ON public.classroom_layouts USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
 
 
 --
@@ -5515,6 +5680,19 @@ CREATE POLICY rubric_templates_tenant_isolation ON public.rubric_templates USING
 
 
 --
+-- Name: seat_assignments; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.seat_assignments ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: seat_assignments seat_assignments_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY seat_assignments_tenant_isolation ON public.seat_assignments USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
 -- Name: sections; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -5677,6 +5855,7 @@ CREATE POLICY teaching_assignments_tenant_isolation ON public.teaching_assignmen
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260717210303'),
 ('20260717161248'),
 ('20260717155106'),
 ('20260716203439'),

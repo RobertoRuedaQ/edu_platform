@@ -100,7 +100,16 @@ module IdentityAccess
       # grado/institución-wide), que decide el resource pasado a authorize! —
       # ver Calendar::EventsController. Leer desde el portal NO usa permiso:
       # es relación (Calendar::VisibleScope/Timeline), ver Guardrails.
-      "calendar.manage" => "Crear y gestionar eventos del calendario (con alcance)"
+      "calendar.manage" => "Crear y gestionar eventos del calendario (con alcance)",
+      # analytics_bi HPS Lens 1 (v1.36.0, BI_DOCUMENT.md Slice 2): "Mapa de
+      # Empatía Espacial". SUPERVISION (RBAC + scope: section via :group /
+      # :grade_level reader), same molde as attendance.record — one permission
+      # to view the spatial map + heat overlay. hps.* is a NORMAL per-institution
+      # permission (institution_admin inherits it via bootstrap, like every
+      # other key EXCEPT cross_tenant_reports.view) — it is NOT cross-tenant.
+      # Reconfiguring the layout itself is a WRITE gated by groups.manage
+      # (group_management owns the tables, decision A2), not by this key.
+      "hps.classroom.view" => "Ver el mapa espacial del aula (Lente 1 del HPS)"
     }.freeze
 
     def self.call

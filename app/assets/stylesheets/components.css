@@ -704,4 +704,29 @@
     font-size: var(--text-sm);
     margin-bottom: var(--space-3);
   }
+
+  /* --- Spatial classroom map (HPS Lens 1, v1.36.0) ------------------------ */
+  /* Heat is a per-seat CSS variable set server-side (--heat: hsl(...)); the
+     view never recomputes color in JS. --heat-unknown is the muted neutral for
+     a student with no grade/attendance data yet. */
+  .seat-grid { --heat-unknown: var(--color-border); display: block; }
+  .seat-grid__filter { display: inline-flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3); font-size: var(--text-sm); }
+  .seat-grid__svg { width: 100%; height: auto; max-width: 40rem; overflow: visible; }
+  .seat-grid__board { fill: var(--color-surface-2, var(--color-border)); stroke: var(--color-border); }
+  .seat-grid__board-label { fill: var(--color-text-muted); font-size: 12px; font-weight: var(--weight-medium); }
+  .seat { transition: opacity var(--transition-fast); }
+  .seat__pad { fill: var(--heat); stroke: var(--color-surface); stroke-width: 1.5; }
+  .seat--empty { fill: none; stroke: var(--color-border); stroke-dasharray: 3 3; }
+  .seat__initials { fill: #fff; font-size: 15px; font-weight: var(--weight-semibold); }
+  .seat__flag { fill: #fff; font-size: 15px; font-weight: var(--weight-bold); }
+  /* Dimming: applied by spatial_map_controller.js to stable seats when the
+     filter is on — attenuate opacity/saturation, never remove (AA: meaning is
+     also carried by the "!" marker + label, never color alone). */
+  .seat--dimmed { opacity: 0.28; }
+  .seat-grid__legend { display: flex; flex-wrap: wrap; gap: var(--space-4); margin: var(--space-3) 0; font-size: var(--text-sm); color: var(--color-text-muted); }
+  .seat-grid__legend p { display: inline-flex; align-items: center; gap: var(--space-2); margin: 0; }
+  .seat-grid__swatch { width: 0.9rem; height: 0.9rem; border-radius: var(--radius-sm); display: inline-block; }
+  .seat-grid__swatch--calm { background: hsl(130, 72%, 52%); }
+  .seat-grid__swatch--hot { background: hsl(0, 72%, 52%); }
+  .seat-grid__swatch--unknown { background: var(--color-border); }
 }

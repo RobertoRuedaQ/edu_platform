@@ -174,6 +174,12 @@ Rails.application.routes.draw do
     resources :students, only: %i[index show]
     resources :groups, only: %i[index show] do
       resource :membership, only: %i[edit update], controller: "memberships"
+      # Physical classroom geometry (v1.36.0, BI_DOCUMENT.md Slice 2). Owned by
+      # group_management (decision A2), gated by groups.manage. classroom_layout
+      # is singular (one current version per group); reconfiguring opens the
+      # next version. seat_assignments key on student_id for destroy (unassign).
+      resource :classroom_layout, only: %i[show create], controller: "classroom_layouts"
+      resources :seat_assignments, only: %i[create destroy], controller: "seat_assignments"
     end
   end
 
@@ -382,11 +388,15 @@ Rails.application.routes.draw do
   # --- analytics_bi (domain views, Prompt Unificado) ------------------------
   # SENSIBLE. cross_tenant_reports is the ONE sanctioned cross-tenant path
   # (edu_bi_reader, BYPASSRLS, audited — see lib/tasks/roles.rake); the normal
-  # app connection (edu_app_runtime) NEVER gets that. Still fully stub in this
-  # views-only phase, same deferral control_plane already documents.
+  # app connection (edu_app_runtime) NEVER gets that. InstitutionDashboard
+  # (v1.34.0) and CrossTenantReportRoster (v1.35.0) are real; spatial_classrooms
+  # is HPS Lens 1 (v1.36.0, BI_DOCUMENT.md Slice 2) — a tenant-scoped
+  # supervision surface (hps.classroom.view) that only reads the
+  # group_management-owned classroom geometry.
   namespace :analytics_bi do
     get "dashboard", to: "institution_dashboard#show", as: "institution_dashboard"
     resources :cross_tenant_reports, only: :index
+    resources :spatial_classrooms, only: %i[index show]
   end
 
   # --- identity_access (domain views, Prompt Unificado) ---------------------

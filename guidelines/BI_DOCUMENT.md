@@ -17,10 +17,10 @@
 
 | Campo | Valor |
 |---|---|
-| **Versión** | `v0.2.0` |
+| **Versión** | `v0.3.0` |
 | **Fecha** | 2026-07-17 |
-| **Estado global de referencia** | `PROJECT_STATE.md v1.35.0` — `analytics_bi` AMBAS mitades reales: `InstitutionDashboard` (tenant-scoped) y `CrossTenantReportRoster` (cross-tenant, `edu_bi_reader`). |
-| **Estado del dominio** | Filosofía, tiers de confidencialidad, ERD conceptual, modelo de acceso de las 5 lentes, guardas de RLS/clínicas, estrategia de procesamiento y slicing — **fijados**. **Slice 1 (cross-tenant) cerrado** — primera conexión BYPASSRLS real de la app. Slices 2–8 (net-new) sin construir aún. |
+| **Estado global de referencia** | `PROJECT_STATE.md v1.36.0` — `analytics_bi` AMBAS mitades reales (`InstitutionDashboard`/`CrossTenantReportRoster`) **+ Lente 1 (Mapa de Empatía Espacial) real** (geometría en `group_management`, heat en `analytics_bi`). |
+| **Estado del dominio** | Filosofía, tiers de confidencialidad, ERD conceptual, modelo de acceso de las 5 lentes, guardas de RLS/clínicas, estrategia de procesamiento y slicing — **fijados**. **Slice 1 (cross-tenant) cerrado** (primera conexión BYPASSRLS real). **Slice 2 (Lente 1, mapa espacial + heat) cerrado (v1.36.0)** — geometría de aula (`classroom_layouts`/`seat_assignments`) net-new en `group_management` (decisión A2), heat derivado in-memory de T1 (notas/asistencia). Slices 3–8 (net-new) sin construir aún. |
 
 **Versionado (igual que los demás docs):** MAJOR = cambia una decisión de diseño asentada del dominio
 o su modelo de tiers · MINOR = se cierra un slice o una decisión abierta · PATCH =
@@ -695,7 +695,7 @@ con entrada en `HISTORIA.md` + actualización de `OPEN_PROCESS.md`.
 |---|---|---|---|---|
 | **0** | `InstitutionDashboard` tenant-scoped | ✅ existe | — | **✅ HECHO (v1.34.0)** |
 | **1** | Cross-tenant `CrossTenantReportRoster` (`edu_bi_reader`) | ✅ existe | media (rol nuevo) | **✅ HECHO (v1.35.0)** |
-| **2** | Lente 1 — superficie del mapa espacial (geometría + heat sobre T1) | geometría net-new; heat existe | media | §5.3 |
+| **2** | Lente 1 — superficie del mapa espacial (geometría + heat sobre T1) | geometría net-new; heat existe | media | **✅ HECHO (v1.36.0)** — §5.3 |
 | **3** | Lente 5 — auras de cuidado (proyección sobre `counseling`) | ✅ base clínica existe | media (carve-out) | `counseling` |
 | **4** | Temporalidad año-a-año (`student_placements` + `hps_term_snapshots`) | net-new transversal | media | §5.2 / frontera con `group_management` |
 | **5** | Instrumento de carácter (T2, molde rúbrica) | net-new + sensible | alta (NNA) | §5.4, consentimiento |
@@ -749,7 +749,7 @@ Antes de dar por cerrado cualquier slice de este dominio:
 | # | Decisión | Lean propuesto |
 |---|---|---|
 | **A1** | ¿`student_placements` (§5.2) lo escribe `analytics_bi` o `group_management`? | `group_management` (dueño de `students`/`sections`); `analytics_bi` solo lee. |
-| **A2** | ¿`classroom_layouts`/`seat_assignments` (§5.3) viven en `analytics_bi` o `group_management`? | `group_management` (dato del aula física); `analytics_bi` lo lee para la Lente 1. |
+| **A2** | ¿`classroom_layouts`/`seat_assignments` (§5.3) viven en `analytics_bi` o `group_management`? | **✅ RESUELTO (v1.36.0): `group_management`** (dato del aula física — modelos `GroupManagement::ClassroomLayout`/`SeatAssignment`, escritura vía `ClassroomReconfigurer`/`SeatAssigner` gateada por `groups.manage`); `analytics_bi` solo lee (`AnalyticsBi::Lens::SpatialClassroomScope`) para la Lente 1. |
 | **A3** | Umbral N de agregación para tags de pares (§5.4) | N ≥ 3, configurable por institución. |
 | **A4** | ¿`analytics_bi` se vuelve dominio medido (`Usage::Ingest.emit`)? | No por ahora (`metered:false`); sin evento facturable claro. |
 | **A5** | Set inicial de `character_frameworks` y `peer_appreciation_tags` | Curar con orientación pedagógica antes del Slice 5; solo constructivos. |
@@ -759,6 +759,86 @@ Antes de dar por cerrado cualquier slice de este dominio:
 ---
 
 ## 14. Changelog
+
+### v0.3.0 — 2026-07-17 — Slice 2 cerrado: Lente 1 "Mapa de Empatía Espacial" (geometría + heat sobre T1)
+
+- **Decisión A2 ejecutada (owner-approved): la geometría del aula la POSEE `group_management`, no
+  `analytics_bi`.** Dos tablas net-new tenant-scoped (RLS `ENABLE+FORCE`, `uuidv7()`, índice líder
+  `institution_id`), dueño `group_management` (dueño del dato físico del salón — `Section`/`Student`
+  viven ahí): `GroupManagement::ClassroomLayout` (una configuración versionable por `(section,
+  academic_term)`: `rows`/`cols`/`board_orientation` 0·90·180·270/`aisles` jsonb geometría pura sin
+  PII/`version`/`effective_from`/`effective_until`) y `GroupManagement::SeatAssignment` (quién se
+  sienta dónde: `classroom_layout_id`/`student_id`/`row`/`col` efectivo-fechado). `analytics_bi`
+  **solo lee** estas tablas (vía su propio query object con filtro de inquilino explícito, nunca
+  `default_scope`), exactamente como ya lee `Schedules::Assessment`/`Attendance::AttendanceRecord`
+  sin poseerlas (§5.1).
+- **Tres `EXCLUDE USING gist` (btree_gist, molde v1.33.0 de billing)** — dato hecho cumplir en la BD,
+  no en la app: (1) `classroom_layouts_no_overlapping_versions` por `(institution, section, term,
+  daterange)` — una sola versión vigente + append-only real (más allá de "una activa a la vez"); (2)
+  `seat_assignments_no_double_booked_seat` por `(institution, layout, row, col, daterange)` — un
+  asiento nunca tiene dos estudiantes activos; (3) `seat_assignments_no_two_seats_per_student` por
+  `(institution, layout, student, daterange)` — un estudiante nunca tiene dos asientos activos.
+  `"row"` va **entrecomillado** en todo SQL crudo (palabra reservada). `btree_gist` ya lo habilitó
+  la migración de billing; el `down` no lo elimina (esos constraints siguen dependiendo de él).
+- **Reconfiguración append-only, molde simétrico `Subscription#end!`/`Entitlement#revoke!`.**
+  `GroupManagement::ClassroomReconfigurer` cierra la versión vigente y abre `version + 1`;
+  `GroupManagement::SeatAssigner` cierra el asiento activo del estudiante antes de abrir el nuevo
+  (mover ≠ violar el constraint). **Desviación de redacción documentada:** §5.3 esbozaba
+  `effective_until = ayer`; se cierra con `Date.current` en su lugar — con `daterange '[)'`,
+  `[from, hoy)` y `[hoy, ∞)` son ADYACENTES (nunca solapan), lo que satisface el constraint Y
+  funciona incluso reconfigurando el mismo día en que se creó la versión (ayer violaría el CHECK
+  `effective_until >= effective_from` y dejaría un hueco de un día). Ambos servicios abren su
+  transacción con `requires_new: true` (SAVEPOINT): una violación de exclusión revierte solo su
+  unidad y re-lanza SIN envenenar la transacción del request (la del `TenantScoped`), así el
+  controller la rescata y redirige limpio (bug real encontrado en tests — sin `requires_new` la
+  transacción del request quedaba abortada tras el double-book).
+- **Superficie de RECONFIGURACIÓN (write) en `group_management`, gateada por `groups.manage`.**
+  UX select-based (no drag-and-drop — "aburrido sobre ingenioso", sin precedente de
+  nested-attributes-con-JS que respalde un builder cliente): `ClassroomLayoutsController` (crear/
+  reconfigurar) + `SeatAssignmentsController` (asignar/mover/liberar), colgados de
+  `/group_management/groups/:id/`. El double-booking (constraint) se surface como alerta amable,
+  nunca un 500.
+- **Superficie de LECTURA (Lente 1) en `analytics_bi`, gateada por `hps.classroom.view`** (permiso
+  nuevo en `SeedPermissions::CATALOG` — per-institución, `institution_admin` lo hereda por bootstrap
+  como cualquier key salvo `cross_tenant_reports.view`; NO es cross-tenant). Molde #4 (supervisión):
+  `AnalyticsBi::SpatialClassroomsController` con `authorize!` al inicio de cada acción; query object
+  `AnalyticsBi::Lens::SpatialClassroomScope` (filtro de inquilino explícito + per-row `can?` sobre
+  `layout.section` — un grant `:group` o `:grade_level` cubre la sección vía los `SCOPE_READERS`
+  existentes). `can?` solo cosmético en vistas.
+- **Heat in-memory, HSL server-side, cero recomputación en cliente (§10.2).**
+  `AnalyticsBi::Lens::SpatialHeatmap` deriva por estudiante un valor 0..1 (mayor = más necesita
+  atención) de `Schedules::Assessment.graded` (nota/5.0) + `Attendance::AttendanceRecord` (presentes
+  ÷ registrados, últimos 30 días); `wellbeing = media de señales disponibles`, `heat = 1 - wellbeing`.
+  Sin datos → `heat` **nil** (empty state real, dimmed/neutral, nunca un 0 engañoso — mismo principio
+  que `InstitutionDashboard` v1.34.0). Mapea a `hsl(hue,72%,52%)` con `hue = (1-heat)*130` (calmo
+  verde → cálido rojo), emitido como variable CSS `--heat` por asiento. `AnalyticsBi::Lens::
+  SpatialClassroom` compone layout + asientos + heat como read-model (un objeto por controller).
+- **SVG server-rendered (§10.1): `AnalyticsBi::Svg::SeatGrid`** (bajo `services/svg/`, colapsa a
+  `AnalyticsBi::Svg::SeatGrid` — `helpers/` NO está en la lista de colapso de Zeitwerk, `services/`
+  sí; verificado con `zeitwerk:check`). Renderiza la grilla como SVG plano (mismo molde que
+  `shared/_bar_chart`), un `<g class="seat">` por asiento con `style="--heat: hsl(...)"` +
+  `data-needs-attention`/`data-heat` que consume el Stimulus. **AA (nunca color solo):** el asiento
+  que necesita atención lleva marca "!" + `aria-label`, y una tabla `visually-hidden` espeja cada
+  asiento. Cero PII al cliente más allá de lo permitido: solo iniciales en el SVG; nombre completo
+  solo en la tabla que el observador ya puede ver.
+- **Stimulus `spatial_map_controller.js` (§10.4):** atenúa los estables (`.seat--dimmed`) resaltando
+  quienes necesitan atención, solo con data-attributes ya en el DOM, sin round-trip, sin
+  `localStorage`.
+- **Aura overlay (§5.7, `care_auras`) DEFERIDO a Slice 3.** La Lente 1 de §5.7 menciona un ícono de
+  aura sobre el pupitre del docente; este slice construye SOLO el mapa espacial + heat. El cableado
+  del aura se hace al construir Slice 3 (`counseling` → proyección).
+- **Tests (18 nuevos, suite completa 626 runs / 0 fallos / 1 skip preexistente, en serie):** los tres
+  `EXCLUDE` a nivel de MODELO (reasignar/reconfigurar a mitad de año no viola; double-book y
+  dos-asientos-por-estudiante lanzan `StatementInvalid`), un unit de cómputo de heat
+  (thriving/struggling/sin-datos), y dos de aceptación de superficie: `authorize!` + scope realmente
+  gatean quién ve qué aula (grupo-scoped ve solo la suya, 403 fuera de scope, 404 cross-tenant — el
+  espíritu del caso de María, `PROJECT_STATE.md §6.4`) + el write gateado por `groups.manage`.
+  Hallazgo de testing: una violación de exclusión dentro de una transacción *joinable* aborta la
+  transacción entera — los tests de modelo fijan el GUC sobre la transacción de fixtures (no una
+  anidada joinable) para que cada `create!` que viola caiga a su propio savepoint (comportamiento
+  estándar de Rails en tests transaccionales), y los servicios usan `requires_new: true` por la
+  misma razón en producción.
+- Ver `HISTORIA.md` v1.36.0 para la narrativa completa del slice.
 
 ### v0.2.0 — 2026-07-17 — Slice 1 cerrado: `CrossTenantReportRoster` real (`edu_bi_reader`)
 
