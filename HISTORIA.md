@@ -11,11 +11,96 @@
 
 ---
 
-## Changelog completo (v1.0.0 → v1.26.0)
+## Changelog completo (v1.0.0 → v1.27.0)
 
 > Copiado verbatim de §14 de `PROJECT_STATE.md` v1.5.0, antes de que el split editorial (v1.5.1)
 > moviera el changelog fuera del doc magro. Las entradas v1.6.0+ se escribieron directamente aquí,
 > ya con el split vigente.
+
+### v1.27.0 — 2026-07-16 — `extracurriculars`: actividades + inscripción del acudiente (ítem #8 del MVP)
+
+**Dominio net-new, addon-gated, real desde el día uno (sin fase stub) — mismo molde que `attendance`
+(v1.16.0)/`assignments` (v1.21.0+): dos tablas, dos modelos, un query object, tres servicios, cinco
+controllers (dos de supervisión + tres de portal), sin over-engineering.** Ítem #8 del camino crítico
+del MVP (`LINEAMIENTOS_MVP.md` §4.1/§7). Las dos decisiones abiertas del §9 se cerraron con el owner
+ANTES de empezar (ambas vías de inscripción; scope de instructor por propiedad de fila, sin columna
+nueva en `role_assignments`); este slice fue implementación disciplinada de ese checkpoint.
+
+**Recon (STOP): sin contradicciones materiales, dos correcciones de suposición.** Verificado contra
+disco: (1) el motor de RBAC (`Authorization::Assignment#covers?`+`SCOPE_READERS`, `PermissionCheck`)
+modela SOLO jerarquía (`scope_department_id`/`scope_grade_level_id`/`scope_group_id`) — la propiedad
+de una sola fila NO es expresable ahí, confirmando que "la actividad del instructor" es un filtro de
+identidad por FK en un query object, no un `scope_type` nuevo. (2) `Finance::StudentAccount` NO se crea
+de forma perezosa en NINGÚN lado del repo (los controllers de `finance` hacen `find_by`+404; solo los
+tests la crean, hardcodeando `"COP"`) — así que una actividad paga hace `find_or_create_by!` de la
+cuenta (seguro: `student_accounts` tiene índice único `(institution_id, student_id)`), moneda `"COP"`
+por defecto (no hay columna de moneda en `institutions`). (3) `Schedules::ActiveTermEnrollmentScope`
+ya declaraba "inscripción a actividades" como consumidor previsto — reusado tal cual para el roster
+inscribible de supervisión, sin re-derivar el join de término.
+
+**Diseño construido:**
+- Migración `20260716203439_create_extracurriculars.rb`: `activities` (`kind` sport/art/tutoring CHECK,
+  `name`, `academic_term_id` NOT NULL + cascade — cierra parte de B2, `capacity` NOT NULL CHECK `>0`,
+  `instructor_staff_member_id` nullable + nullify — la actividad precede al instructor, mismo criterio
+  que `attendance.recorded_by`, `fee_cents` bigint nullable CHECK `>=0` — dinero NUEVO en `*_cents`
+  (F6), NO `decimal` como el `finance` legacy grandfathered, `location`/`schedule_info` texto PROPIO
+  (sin depender de `schedules`), `status` draft/published/archived CHECK — mismo ciclo que
+  `assignments`) + `activity_enrollments` (`status` active/withdrawn CHECK, `enrolled_at`/`withdrawn_at`,
+  `enrolled_via` staff/guardian CHECK, `enrolled_by_user_id` FK `users` nullify — atribución, "quién
+  inscribió: colegio vs acudiente", mismo criterio que `submissions.submitted_by_user_id`). RLS
+  `ENABLE+FORCE` en ambas. Corrida en dev Y test.
+- **Cupo + doble inscripción — dos defensas distintas.** El cupo es un invariante AGREGADO ("nº de
+  activos < capacity"), NO expresable barato como constraint declarativo sin un trigger (y este repo no
+  usa triggers): se hace cumplir en `Extracurriculars::EnrollmentCreator` con `activity.lock!` + count
+  dentro del lock (misma disciplina que `Finance::ChargeCreator`/`PaymentRecorder`). La doble
+  inscripción ACTIVA la bloquea un **índice único PARCIAL** `(institution_id, activity_id, student_id)
+  WHERE status='active'` (predicado inmutable) — el índice no corre carreras como sí lo haría
+  `validates uniqueness`, y el `WHERE status='active'` deja intacto el historial (varias filas withdrawn
+  + una active), coherente con "append, nunca destruir".
+- Modelos `Activity`/`Enrollment` (labels ES, `fee_amount` = el ÚNICO puente `cents`→`decimal`,
+  `BigDecimal(fee_cents)/100`, exacto, sin Float). `EnrollmentCreator` (lock + cupo + fila + Charge de
+  actividad paga en la MISMA transacción, idempotente por la fila activa existente + `idempotency_key`
+  de `ChargeCreator`), `EnrollmentWithdrawer` (flip suave a withdrawn, NO revierte el Charge — política
+  de tesorería diferida), `StudentActivities` (camino de lectura del portal, módulo `module_function`,
+  molde `Assignments::StudentView`).
+- **RBAC — split manage/instruct por ALCANCE de propiedad, no por confidencialidad.** `activity.manage`
+  (coordinador, institución-wide: todo el catálogo + inscribir en cualquiera). `activity.instruct`
+  (instructor: piso de acceso a la superficie + roster de las actividades PROPIAS). La propiedad se
+  resuelve en `Extracurriculars::ActivityScope` por `instructor_staff_member_id == mi StaffMember#id`
+  (WHERE directo en el query, no un `.select`+`covers?` per-fila — misma familia que `TeacherScope`,
+  pero el test de "mío" es identidad, no scope de rol). `covers?`/`SCOPE_READERS`/`role_assignments`
+  **intactos** (cero cambios de esquema en `role_assignments`, la restricción dura del checkpoint).
+- **Nav de un solo permiso, resuelto sembrando el coordinador con AMBOS.** El `Navigation::Registry`
+  admite un permiso por tile; se gatea por `activity.instruct` (el piso que ambos roles tienen) y el rol
+  `activity_coordinator` se siembra con `activity.manage` Y `activity.instruct` — así una sola tile
+  sirve a los dos roles sin duplicarla ni tocar el mecanismo del Registry.
+- Controllers de supervisión (`ActivitiesController` catálogo CRUD + publish/archive gate `activity.
+  manage`, index/show gate `activity.instruct`; `EnrollmentsController` inscribir/desinscribir, la
+  propiedad la hace cumplir `ActivityScope.resolve.find` → 404 fuera de alcance, convención de portal).
+  Portal (`Portals::StudentActivities` solo lectura self-scope; `GuardianActivities` lectura per-child;
+  `GuardianActivityEnrollments` inscribir/desinscribir en nombre del hijo — doble salto GuardianScope →
+  `StudentActivities.enrollable`, sin `authorize!`, fuera de `Navigation::Registry`, exactamente como
+  las entregas del acudiente). Index de supervisión: un solo GROUP BY para "inscritos/cupo" (nunca un
+  count por-fila — N+1 evitado).
+- **Actividad paga = un `Finance::Charge`, jamás un cobro propio.** `EnrollmentCreator` find-or-create
+  la cuenta y llama `Finance::ChargeCreator` con `activity.fee_amount` (el puente cents→decimal), reusa
+  su `idempotency_key` (hidden field generado una vez en el render, misma convención que todo `finance`).
+
+**Diferido (a propósito):** atribución de la BAJA (solo status + `withdrawn_at`); reversión del Charge
+al desinscribir (nota de crédito = política de tesorería); actividades de cupo ilimitado (columna
+nullable, no gana su lugar hoy); gate de matrícula-de-término en el flujo del acudiente (el dropdown de
+supervisión SÍ usa `ActiveTermEnrollmentScope`, el acudiente inscribe a su propio hijo directo —
+asimetría documentada, armonizable después).
+
+**Gotcha operativo (v1.27.0): checkout COMPARTIDO con el slice `calendar` concurrente.** `calendar`
+(ítem #7) se construyó en paralelo en el MISMO working tree (no worktrees aislados), tocando archivos
+compartidos (`config/routes.rb`, `addon_catalog.rb`, `seed_permissions.rb`, `db/structure.sql`, los
+docs) y ambos numerados v1.27.0. El commit de código de `extracurriculars` se mantuvo limpio staged
+SOLO sus propios hunks/archivos (verificado con `git show --stat`); las ediciones de doc en conflicto
+(cabecera del roadmap, entrada de HISTORIA) NO se pueden fusionar coherentemente en un working tree
+compartido — se reconcilian en el MERGE de `feature/extracurriculars` + `feature/calendar`, no
+capándolas en disco. Recordatorio: dos slices concurrentes necesitan worktrees/branches aislados desde
+el inicio, no el mismo checkout.
 
 ### v1.26.0 — 2026-07-16 — `assignments`: rúbricas, slice 4/4 (ítem #6 del MVP) — CIERRA el track
 
