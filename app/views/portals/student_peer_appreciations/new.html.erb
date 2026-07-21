@@ -1,0 +1,36 @@
+<% content_for :title, "Reconocer a un compañero" %>
+
+<%= render "shared/page_header",
+      title: "Reconocer a un compañero",
+      subtitle: "Elige a alguien de tu grupo y una etiqueta positiva.",
+      actions: ui_button("← Volver", href: portal_student_character_card_path, variant: :secondary) %>
+
+<% if @classmates.any? && @tags.any? -%>
+  <%# CLOSED list, never a search box (§1.1.6): only current section co-members
+      and only curated, constructive tags (§5.4 resguardo #1). -%>
+  <%= form_with url: portal_student_peer_appreciation_path, method: :post do -%>
+    <div class="field">
+      <label class="field__label" for="recipient_student_id">Compañero</label>
+      <select class="field__input" id="recipient_student_id" name="recipient_student_id" required>
+        <% @classmates.each do |classmate| -%>
+          <option value="<%= classmate.id %>"><%= classmate.first_name %> <%= classmate.last_name %></option>
+        <% end -%>
+      </select>
+    </div>
+
+    <div class="field">
+      <label class="field__label" for="tag_id">Reconocimiento</label>
+      <select class="field__input" id="tag_id" name="tag_id" required>
+        <% @tags.each do |tag| -%>
+          <option value="<%= tag.id %>"><%= tag.label %></option>
+        <% end -%>
+      </select>
+    </div>
+
+    <%= ui_button "Enviar reconocimiento", type: "submit", variant: :primary %>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state", icon: "users",
+        title: "Aún no puedes enviar reconocimientos",
+        description: "Necesitas compañeros en tu grupo y etiquetas de reconocimiento disponibles." %>
+<% end -%>

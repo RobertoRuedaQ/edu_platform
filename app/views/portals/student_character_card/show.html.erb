@@ -1,0 +1,17 @@
+<% content_for :title, "Mi ficha de carácter" %>
+
+<%= render "shared/page_header",
+      title: "Mi ficha de carácter",
+      subtitle: "Tus fortalezas, tu crecimiento y tus reconocimientos.",
+      actions: safe_join([
+        (ui_button("Reconocer a un compañero", href: new_portal_student_peer_appreciation_path, variant: :primary) if @student),
+        ui_button("← Volver", href: portal_student_path, variant: :secondary)
+      ].compact, " ") %>
+
+<% if @student -%>
+  <%= render "portals/character_card", card: @card %>
+<% else -%>
+  <%= render "shared/empty_state", icon: "trending-up",
+        title: "Tu cuenta aún no está vinculada a un registro de estudiante",
+        description: "Si esto no es lo esperado, contacta a tu institución." %>
+<% end -%>

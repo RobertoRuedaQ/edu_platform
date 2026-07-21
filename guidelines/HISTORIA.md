@@ -17,6 +17,140 @@
 > moviera el changelog fuera del doc magro. Las entradas v1.6.0+ se escribieron directamente aquí,
 > ya con el split vigente.
 
+### v1.40.0 — 2026-07-21 — `analytics_bi`: Lente 2 "Ficha de Personaje" (Slice 6 de `BI_DOCUMENT.md`)
+
+**Undécimo slice post-MVP, sexto guiado por `guidelines/BI_DOCUMENT.md`, y el primero de AUTOSERVICIO
+del HPS.** Todas las lentes anteriores (1, 5) son de supervisión (RBAC + scope); esta es la primera
+que un acudiente o el propio estudiante ve directamente sobre su propio registro — la compuerta es
+identidad pura (`GuardianScope`/`StudentSelfScope`), nunca un permiso. **Cero tablas nuevas**: el
+slice completo es un consumidor de la maquinaria del Slice 5 (v1.39.0), tal como el propio documento
+ya lo anticipaba ("usa Slice 5") — la prueba de que separar el instrumento de su lectura en Slice 5 fue
+la secuencia correcta.
+
+**Recon-first (§12):** se leyeron los controllers de portal ya existentes
+(`Portals::GuardianAttendanceController`/`GuardianCalendarController`, `Portals::
+StudentCalendarController`) como molde EXACTO antes de escribir nada — mismo patrón de resolución
+(`Core::Access::GuardianScope.for(Current.user).find(...)` / `Core::Access::StudentSelfScope.for(...)`),
+mismo `layout "portal"`, ningún `authorize!`, cero entrada en `config/navigation/*.rb`.
+`AnalyticsBi::Svg::SeatGrid` (Slice 2) se leyó como molde exacto para el nuevo helper SVG. `Portals::
+GuardianActivityEnrollmentsController` se leyó como molde para el botón otorgar/revocar.
+
+**`AnalyticsBi::Lens::CharacterCard`** (read-model, in-memory sobre AR indexado, filtro de inquilino
+explícito, §7 default) ensambla cuatro piezas por estudiante:
+
+- **Radar de fortalezas**: de la `CharacterEvaluation` PUBLICADA más reciente (Slice 5). Por cada
+  dimensión del `framework_snapshot` CONGELADO, resuelve el nivel elegido por el autor y su posición
+  ORDINAL dentro de los niveles de esa dimensión. **Ese ordinal es EXCLUSIVAMENTE un insumo
+  geométrico** para el nuevo `AnalyticsBi::Svg::RadarChart` — nunca se renderiza como número al
+  usuario (no-negociable §1.1.2, "cualitativo sobre score algorítmico"; §1.1.4, "la vista del
+  acudiente es digna"). Todo campo visible/accesible del `Card` es texto cualitativo
+  (`level_label`/`descriptor`), nunca el ordinal. Sin evaluación publicada aún → estado vacío REAL
+  (`axes == []`, mensaje honesto: "Aún no hay una evaluación de carácter publicada"), nunca un radar
+  plano/falso que insinúe datos que no existen (mismo principio nil-nunca-cero de v1.34.0, aplicado
+  aquí a un objeto compuesto en vez de un número).
+- **Brújula de carácter**: las dimensiones en el nivel MÁS ALTO observado en esa evaluación, listadas
+  por NOMBRE solamente — "fortalezas más consolidadas", puramente descriptivo, nunca un veredicto
+  calculado de "bueno/malo" (§5.4, "cómo alimenta las lentes").
+- **Medallas**: consume `AnalyticsBi::Character::PeerAppreciationDigest` (construido en el Slice 5,
+  sin consumidor hasta ahora) TAL CUAL — ya agregado-solamente por diseño, ya con el umbral aplicado,
+  ya jamás atribuible. Este slice no construye un segundo camino de lectura sobre `peer_appreciations`
+  — sería duplicar la única superficie sancionada de exposición de ese dato.
+- **Crecimiento en el tiempo** (no-negociable §1.1.3 — intra-estudiante, JAMÁS un ranking entre
+  compañeros): una evaluación publicada por término académico, ordenada por el inicio CALENDARIO del
+  propio término — mismo molde exacto que `AnalyticsBi::HpsTermSnapshotScope#trend_for` (Slice 4):
+  nunca por `published_at`, para que re-publicar una evaluación de un término ya cerrado no reordene
+  su lugar en la narrativa histórica. Es "cómo ha crecido este estudiante" en sus propias palabras
+  cualitativas por término, deliberadamente NO un gráfico de una sola nota subiendo/bajando (eso
+  sería precisamente el "score que suena a etiqueta" que §1.1.4 prohíbe).
+
+**`AnalyticsBi::Svg::RadarChart`** (§10.1, molde EXACTO de `AnalyticsBi::Svg::SeatGrid` de la Lente
+1): PORO (`ActionView::Helpers::TagHelper`/`OutputSafetyHelper`), SVG plano server-rendered, un eje
+por dimensión, la distancia de cada vértice desde el centro la maneja el ordinal — geometría
+únicamente, nunca texto. **Disciplina AA idéntica a `SeatGrid`**: cada etiqueta de eje es texto SVG
+real con el nombre de la dimensión MÁS el nivel cualitativo (nunca el número ordinal), el `<svg>`
+lleva `role="img"` + un `aria-label` descriptivo construido igual, y una tabla `visually-hidden`
+espeja cada eje (dimensión/nivel/descriptor) en texto plano — el significado nunca depende solo de la
+forma del polígono ni del color. **Sin un `Sparkline` separado para el crecimiento** — se renderiza
+como una lista/`<dl>` accesible por término en su lugar; un segundo tipo de gráfico no estaba ganado
+todavía para un MVP de esta lente (scope-down documentado, no un olvido — §8 ya ofrecía ambos como
+sugerencia, no como obligación).
+
+**`AnalyticsBi::SectionClassmatesScope`** (query object nuevo): el roster CERRADO de compañeros de
+sección para el picker de "dar un reconocimiento a un compañero" — lee el CACHÉ vivo
+`students.section_id` (§5.2: "quién comparte sección AHORA", una pregunta de presente), deliberadamente
+NO `AnalyticsBi::PlacementScope#students_in` (que es retrospectivo por término, para análisis
+histórico — una pregunta distinta). Nunca un buscador de personas (no-negociable §1.1.6): el picker es
+un `<select>` cerrado de compañeros actuales de sección, nunca un campo de texto libre/autocompletar.
+El controller vuelve a resolver destinatario y tag por lectura SCOPEADA
+(`SectionClassmatesScope#for(...).find(...)`, `PeerAppreciationTag.active.find_by!`) en vez de confiar
+en el parámetro crudo — un ID de compañero fuera de sección o un tag inactivo manipulado en el
+parámetro simplemente lanza `RecordNotFound`, rescatado limpio, nunca alcanza el `Recorder` con un
+destinatario/tag inválido.
+
+**Cuatro controllers de portal, los cuatro self-service** (`Portals::GuardianCharacterCardController`,
+`Portals::StudentCharacterCardController`, `Portals::GuardianCharacterConsentsController`,
+`Portals::StudentPeerAppreciationsController`): CERO `authorize!`, CERO entrada en
+`config/navigation/*.rb`. La resolución `GuardianScope.for(Current.user).find(params[:student_id])`/
+`StudentSelfScope.for(Current.user)` ES la compuerta completa — un hijo fuera de los vínculos activos
+del acudiente que llama 404 ("caso de María", el mismo espíritu de aceptación de seguridad de
+slices anteriores, aquí probado tanto en LECTURA como en ESCRITURA — la ficha Y el consentimiento).
+Dar un reconocimiento pasa entero por `PeerAppreciationRecorder` (Slice 5, sin tocar), rescatando
+`ConsentRequired`/`TagUnavailable` en un flash amable — nunca un 500, misma disciplina que
+`CharacterEvaluationsController` ya estableció en el Slice 5.
+
+**UI de consentimiento del acudiente (deferida del Slice 5, §5.4 punto 5) — cierra el hallazgo de
+diseño más grande de ese slice.** Un botón otorgar/retirar en la ficha del acudiente llama
+`AnalyticsBi::CharacterProgramConsent.grant!`/`.revoke!` (Slice 5, ya idempotentes y append-only, sin
+tocar aquí). **Sin llave de idempotencia** en el botón, a diferencia del molde de
+`GuardianActivityEnrollmentsController` (que sí la usa) — decisión deliberada: el propio modelo ya es
+idempotente por diseño, así que pasar una clave que el modelo ignoraría habría sido imitar el molde
+sin necesitarlo de verdad.
+
+**Superficie de dar un aporte de par (deferida del Slice 5)**: `Portals::
+StudentPeerAppreciationsController#new`/`#create` — el estudiante elige un compañero de su sección
+actual (picker cerrado, arriba) y un tag del catálogo activo; `PeerAppreciationRecorder` hace el
+resto (consentimiento, anti-duplicado, umbral — todo intacto del Slice 5, ni una línea tocada).
+**Deferido, documentado a propósito**: la UI de dar-como-acudiente (`giver_kind: "guardian"`, un
+acudiente reconociendo a un estudiante que NO es su hijo). El modelo y el `Recorder` ya lo soportan y
+está probado a nivel de modelo desde el Slice 5, pero construir una UI real para esto abre su propia
+pregunta de alcance sin resolver (¿qué estudiantes ajenos puede siquiera VER un acudiente para
+reconocerlos, sin violar §1.1.6?) que este slice no resuelve bajo presión de tiempo — misma postura
+honesta que el Slice 5 ya tomó al deferir por completo el controller de autoría-acudiente en su
+momento.
+
+**Enlaces de hub cableados de inmediato** (`app/views/portals/guardian_students/show.html.erb`,
+`app/views/portals/student_portal/show.html.erb`) — el hallazgo de v1.28.0 (una superficie de portal
+nueva enlazada tarde porque se olvidó cablear el hub) explícitamente NO se repitió esta vez; se hizo
+en el mismo slice, no como una corrección posterior.
+
+**Gotcha real de Rails, documentado para el futuro**: el comentario mágico de "locals estrictos" de
+Rails (`<%# locals: (card:) %>`) en un partial DEBE quedar solo en su propia línea — cualquier prosa
+que siga después de `locals:` hasta el `%>` de cierre se interpreta como parte de la firma del método
+`def` compilado, produciendo un `SyntaxErrorInTemplate` en tiempo de render que Erubi puro no genera
+(es una característica específica del manejador de Rails). Cualquier partial futuro que documente su
+propia firma de locals debe mantener el comentario de la firma desnudo, con la prosa en un comentario
+aparte.
+
+**Tests (21 nuevos, suite completa 679→700 runs / 0 fallos / 1 skip preexistente, en serie
+`PARALLEL_WORKERS=1`):** el read-model ensamblando las cuatro piezas correctamente, incluyendo el
+estado vacío real (sin evaluación publicada), la exclusión de evaluaciones en `draft`, y el
+comportamiento del umbral de medallas heredado del Slice 5 (`character_card_test.rb`); estructura +
+disciplina AA + una aserción explícita de que ningún número crudo aparece donde debería ir un nivel
+cualitativo (`radar_chart_test.rb`); el caso de María probado en LECTURA (la ficha) Y en ESCRITURA (el
+consentimiento) — un acudiente fuera de la relación recibe 404 en ambos caminos —, el round-trip
+completo de otorgar/revocar consentimiento, el estado vacío del portal, y la misma aserción de
+"ningún número visible" a nivel de respuesta HTTP completa
+(`portals_character_card_test.rb`); el picker cerrado excluyendo tanto a un compañero de OTRA sección
+como al propio estudiante-dador, el camino feliz de dar un reconocimiento, el rechazo de un
+destinatario fuera de sección incluso manipulando el parámetro, y el gate de consentimiento aplicado
+desde el portal (`portals_peer_appreciation_test.rb`).
+
+**Guardrails nuevos** (ver `OPEN_PROCESS.md` §2): "una lente de autoservicio que consume datos ya
+construidos por un slice anterior no necesita tabla nueva — verificarlo ANTES de modelar de más";
+"el ordinal de un nivel cualitativo puede alimentar la geometría de un SVG pero nunca debe alcanzar
+el HTML como texto/número visible — probarlo con una aserción explícita, no solo revisión de código";
+"el comentario `locals:` de un partial Rails debe quedar solo en su línea, sin prosa adjunta".
+
 ### v1.39.0 — 2026-07-21 — `analytics_bi`: instrumento de carácter (T2) + aportes de pares/acudientes (Slice 5 de `BI_DOCUMENT.md`)
 
 **Décimo slice post-MVP, quinto guiado por `guidelines/BI_DOCUMENT.md`, y la pieza de mayor tensión

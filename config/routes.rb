@@ -88,6 +88,16 @@ Rails.application.routes.draw do
       # escritura es del acudiente, no del estudiante. Sin authorize!, fuera
       # de Navigation::Registry (§7).
       resources :activities, only: %i[index show], controller: "student_activities"
+      # analytics_bi Lens 2 (v1.40.0, Slice 6): the student's OWN "Ficha de
+      # Personaje" — radar/brújula/medallas/crecimiento. Self-service by
+      # identity (StudentSelfScope), no authorize!, outside Navigation::Registry.
+      # Singular (one card per student), like calendar/attendance.
+      resource :character_card, only: :show, controller: "student_character_card"
+      # Peer-appreciation GIVING (v1.40.0, Slice 6, deferred from Slice 5): the
+      # student recognizes a current section co-member from a CLOSED roster + a
+      # CLOSED tag catalog (§1.1.6). Identity action gated by the Recorder's own
+      # consent check, not RBAC. Singular resource, new/create only.
+      resource :peer_appreciation, only: %i[new create], controller: "student_peer_appreciations"
     end
     resource :guardian, only: :show, controller: "guardian_portal" do
       # Per-child read-only summary (v1.9.0) — resolved through
@@ -139,6 +149,15 @@ Rails.application.routes.draw do
         resources :activities, only: %i[index show], controller: "guardian_activities" do
           resource :enrollment, only: %i[create destroy], controller: "guardian_activity_enrollments"
         end
+        # analytics_bi Lens 2 (v1.40.0, Slice 6): this child's "Ficha de
+        # Personaje" — per-child (like report_cards/calendar), resolved through
+        # GuardianScope (a child outside the caller's active links 404s). No
+        # authorize!, outside Navigation::Registry.
+        resource :character_card, only: :show, controller: "guardian_character_card"
+        # Guardian consent grant/revoke for the peer path (§5.4 point 5,
+        # deferred from Slice 5). Identity action for the guardian's OWN child
+        # (same class as :enrollment), never RBAC. Singular, create/destroy.
+        resource :character_consent, only: %i[create destroy], controller: "guardian_character_consents"
       end
       # communication (v1.19.0): org-wide, NOT per-child — a sibling of
       # :students, not nested under it.

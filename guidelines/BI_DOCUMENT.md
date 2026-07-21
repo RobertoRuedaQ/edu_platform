@@ -17,10 +17,10 @@
 
 | Campo | Valor |
 |---|---|
-| **Versión** | `v0.6.0` |
+| **Versión** | `v0.7.0` |
 | **Fecha** | 2026-07-21 |
-| **Estado global de referencia** | `PROJECT_STATE.md v1.39.0` — `analytics_bi` AMBAS mitades reales (`InstitutionDashboard`/`CrossTenantReportRoster`) **+ Lente 1 real + Lente 5 real + temporalidad año-a-año real + instrumento de carácter (T2) real** (`character_evaluations`/`peer_appreciations`, primer consentimiento del codebase). |
-| **Estado del dominio** | Filosofía, tiers de confidencialidad, ERD conceptual, modelo de acceso de las 5 lentes, guardas de RLS/clínicas, estrategia de procesamiento y slicing — **fijados**. **Slice 1 (cross-tenant) cerrado** (primera conexión BYPASSRLS real). **Slice 2 (Lente 1, mapa espacial + heat) cerrado (v1.36.0)** — geometría de aula (`classroom_layouts`/`seat_assignments`) net-new en `group_management` (decisión A2), heat derivado in-memory de T1 (notas/asistencia). **Slice 3 (Lente 5, "Auras de Cuidado") cerrado (v1.37.0)** — proyección `care_auras` net-new en `analytics_bi`, escrita SOLO por `AnalyticsBi::Aura::Projector` invocado desde `counseling` (cero PII clínica, cero acoplamiento inverso), leída por el docente como un ícono abstracto sobre la Lente 1 (`hps.aura.view`); aislamiento clínico probado a nivel de MODELO (SQL tap + estructura de asociaciones). **Slice 4 (temporalidad año-a-año) cerrado (v1.38.0)** — `student_placements` net-new en `group_management` (decisión A1 resuelta) efectivo-fechado/append-only vía `GroupManagement::SectionReassigner`, el ÚNICO seam que mueve un estudiante de sección; `hps_term_snapshots` net-new en `analytics_bi` (§7), congelado por `AnalyticsBi::Hps::Snapshotter` vía el fan-out `HpsTermSnapshotJob`/`HpsTermSnapshotAllJob`. **Slice 5 (instrumento de carácter, T2) cerrado (v1.39.0)** — el instrumento staff-autoría (`character_frameworks`→`evaluations`→`dimension_scores`, molde rúbrica con `framework_snapshot` congelado) y, SEPARADO, el camino de pares/acudientes (`peer_appreciations`, catálogo cerrado `peer_appreciation_tags`, umbral de agregación, moderación append-only) gateado por el **primer consentimiento del codebase** (`character_program_consents`). Slices 6–8 (Lente 2/ficha, afinidades/Lente 3, núcleo familiar/Lente 4) sin construir aún. |
+| **Estado global de referencia** | `PROJECT_STATE.md v1.40.0` — `analytics_bi` AMBAS mitades reales (`InstitutionDashboard`/`CrossTenantReportRoster`) **+ Lente 1 real + Lente 5 real + temporalidad año-a-año real + instrumento de carácter (T2) real + Lente 2 (Ficha de Personaje) real**, la primera lente de autoservicio (acudiente/estudiante). |
+| **Estado del dominio** | Filosofía, tiers de confidencialidad, ERD conceptual, modelo de acceso de las 5 lentes, guardas de RLS/clínicas, estrategia de procesamiento y slicing — **fijados**. **Slice 1 (cross-tenant) cerrado** (primera conexión BYPASSRLS real). **Slice 2 (Lente 1, mapa espacial + heat) cerrado (v1.36.0)** — geometría de aula (`classroom_layouts`/`seat_assignments`) net-new en `group_management` (decisión A2), heat derivado in-memory de T1 (notas/asistencia). **Slice 3 (Lente 5, "Auras de Cuidado") cerrado (v1.37.0)** — proyección `care_auras` net-new en `analytics_bi`, escrita SOLO por `AnalyticsBi::Aura::Projector` invocado desde `counseling` (cero PII clínica, cero acoplamiento inverso), leída por el docente como un ícono abstracto sobre la Lente 1 (`hps.aura.view`); aislamiento clínico probado a nivel de MODELO (SQL tap + estructura de asociaciones). **Slice 4 (temporalidad año-a-año) cerrado (v1.38.0)** — `student_placements` net-new en `group_management` (decisión A1 resuelta) efectivo-fechado/append-only vía `GroupManagement::SectionReassigner`, el ÚNICO seam que mueve un estudiante de sección; `hps_term_snapshots` net-new en `analytics_bi` (§7), congelado por `AnalyticsBi::Hps::Snapshotter` vía el fan-out `HpsTermSnapshotJob`/`HpsTermSnapshotAllJob`. **Slice 5 (instrumento de carácter, T2) cerrado (v1.39.0)** — el instrumento staff-autoría (`character_frameworks`→`evaluations`→`dimension_scores`, molde rúbrica con `framework_snapshot` congelado) y, SEPARADO, el camino de pares/acudientes (`peer_appreciations`, catálogo cerrado `peer_appreciation_tags`, umbral de agregación, moderación append-only) gateado por el **primer consentimiento del codebase** (`character_program_consents`). **Slice 6 (Lente 2, "Ficha de Personaje") cerrado (v1.40.0)** — la primera lente de AUTOSERVICIO: radar/brújula/medallas/crecimiento consumidos en solo-lectura de las tablas del Slice 5 (cero tablas nuevas), la UI de consentimiento del acudiente y la superficie de dar un aporte de par (ambas deferidas del Slice 5), gateadas por identidad (`GuardianScope`/`StudentSelfScope`), nunca RBAC. Slices 7–8 (afinidades/Lente 3, núcleo familiar/Lente 4) sin construir aún. |
 
 **Versionado (igual que los demás docs):** MAJOR = cambia una decisión de diseño asentada del dominio
 o su modelo de tiers · MINOR = se cierra un slice o una decisión abierta · PATCH =
@@ -724,8 +724,8 @@ con entrada en `HISTORIA.md` + actualización de `OPEN_PROCESS.md`.
 | **2** | Lente 1 — superficie del mapa espacial (geometría + heat sobre T1) | geometría net-new; heat existe | media | **✅ HECHO (v1.36.0)** — §5.3 |
 | **3** | Lente 5 — auras de cuidado (proyección sobre `counseling`) | ✅ base clínica existe | media (carve-out) | **✅ HECHO (v1.37.0)** — §5.7 |
 | **4** | Temporalidad año-a-año (`student_placements` + `hps_term_snapshots`) | net-new transversal | media | **✅ HECHO (v1.38.0)** — §5.2 / A1 resuelta a favor de `group_management` |
-| **5** | Instrumento de carácter (T2, molde rúbrica) | net-new + sensible | alta (NNA) | §5.4, consentimiento |
-| **6** | Lente 2 — ficha de personaje (portal, autoservicio) | usa slice 5 | alta (digna+NNA) | Slices 4, 5 |
+| **5** | Instrumento de carácter (T2, molde rúbrica) | net-new + sensible | alta (NNA) | **✅ HECHO (v1.39.0)** — §5.4, consentimiento |
+| **6** | Lente 2 — ficha de personaje (portal, autoservicio) | usa slice 5 | alta (digna+NNA) | **✅ HECHO (v1.40.0)** — Slices 4, 5 |
 | **7** | Afinidades + Lente 3 constelación | net-new + lib JS | alta | §5.5, §10.3 |
 | **8** | Núcleo familiar + Lente 4 (grafo orbital, tensión, lazos fraternales) | extiende `guardian_students` | alta | §5.6, §10.3 |
 
@@ -785,6 +785,97 @@ Antes de dar por cerrado cualquier slice de este dominio:
 ---
 
 ## 14. Changelog
+
+### v0.7.0 — 2026-07-21 — Slice 6 cerrado: Lente 2 "Ficha de Personaje" (autoservicio)
+
+- **La primera lente de AUTOSERVICIO del HPS** (§4): sin `authorize!`, sin permiso RBAC, fuera de
+  `Navigation::Registry` — la compuerta es pura identidad (`GuardianScope`/`StudentSelfScope`), exactamente
+  como `attendance`/`calendar` ya lo hacen en el portal. **Cero tablas nuevas**: este slice es un
+  consumidor puro de la maquinaria del Slice 5 (v1.39.0) — tal como el propio documento lo predecía
+  ("usa Slice 5").
+
+- **`AnalyticsBi::Lens::CharacterCard`** (read-model, in-memory sobre AR indexado, filtro de inquilino
+  explícito): ensambla cuatro piezas de UNA ficha por estudiante —
+  - **Radar de fortalezas**: de la `CharacterEvaluation` PUBLICADA más reciente. Por cada dimensión del
+    `framework_snapshot` congelado, resuelve el nivel elegido y su POSICIÓN ORDINAL dentro de los
+    niveles de esa dimensión — **ese ordinal es SOLO un insumo geométrico** para
+    `AnalyticsBi::Svg::RadarChart` y **nunca se muestra al usuario como número** (no-negociable
+    §1.1.2/§1.1.4); todo campo visible/accesible es texto cualitativo (`level_label`/`descriptor`).
+    Sin evaluación publicada → estado vacío real (`axes == []`, mensaje honesto), nunca un radar plano
+    falso.
+  - **Brújula de carácter**: "fortalezas más consolidadas" — las dimensiones en el nivel MÁS ALTO
+    observado, listadas por nombre, puramente descriptivo, nunca un veredicto calculado.
+  - **Medallas**: consume `AnalyticsBi::Character::PeerAppreciationDigest` (Slice 5) TAL CUAL — ya
+    agregado-solamente, ya con umbral, ya jamás atribuible; este slice no construye un segundo camino
+    de lectura.
+  - **Crecimiento en el tiempo** (no-negociable §1.1.3, intra-estudiante, nunca ranking): una
+    evaluación publicada por término, ordenada por el inicio calendario del propio término (mismo
+    molde `HpsTermSnapshotScope#trend_for` del Slice 4 — nunca por `published_at`, para que
+    re-publicar no reordene la historia). Es una narrativa de "cómo ha crecido este estudiante", no un
+    gráfico de una sola nota mejorando.
+
+- **`AnalyticsBi::Svg::RadarChart`** (§10.1, molde exacto `AnalyticsBi::Svg::SeatGrid`): SVG plano
+  server-rendered, un eje por dimensión, la distancia del vértice la maneja el ordinal (geometría
+  únicamente). **AA (nunca color/forma solo)**: cada etiqueta de eje es texto SVG real con el nombre
+  de la dimensión + el nivel CUALITATIVO (nunca el ordinal), `role="img"` + `aria-label` descriptivo, y
+  una tabla `visually-hidden` espeja cada eje (dimensión/nivel/descriptor) en texto plano. Sin
+  `Sparkline` separado para el crecimiento — se renderiza como una lista/`<dl>` accesible por término;
+  MVP honesto, un segundo tipo de gráfico no estaba ganado todavía (documentado como scope-down, no
+  un olvido).
+
+- **`AnalyticsBi::SectionClassmatesScope`** (query object nuevo): el roster CERRADO de compañeros de
+  sección del estudiante, para el picker de "dar un reconocimiento" — lee el CACHÉ vivo
+  `students.section_id` (quién comparte sección AHORA, una pregunta de presente), no
+  `PlacementScope#students_in` (que es retrospectivo por término). Nunca un buscador de personas
+  (no-negociable §1.1.6): el picker es un `<select>` cerrado de compañeros actuales, y el controller
+  vuelve a resolver el destinatario/tag por lectura scopeada (`SectionClassmatesScope#for(...).find`,
+  `PeerAppreciationTag.active.find_by!`) — un ID de compañero fuera de sección o un tag inactivo
+  manipulado en el parámetro simplemente 404/falla limpio, nunca confía en el parámetro crudo.
+
+- **Cuatro controllers de portal, todos self-service** (`Portals::GuardianCharacterCardController`,
+  `Portals::StudentCharacterCardController`, `Portals::GuardianCharacterConsentsController`,
+  `Portals::StudentPeerAppreciationsController`): la resolución `GuardianScope.for(...).find(...)`/
+  `StudentSelfScope.for(...)` ES la compuerta — un hijo fuera de los vínculos activos del acudiente
+  404 ("caso de María"), un estudiante da un reconocimiento solo con `PeerAppreciationRecorder`
+  (Slice 5, sin tocar) rescatando `ConsentRequired`/`TagUnavailable` en un flash amable, nunca un 500
+  (misma disciplina que `CharacterEvaluationsController` en el Slice 5).
+
+- **UI de consentimiento del acudiente (deferida del Slice 5, §5.4 punto 5)**: un botón
+  otorgar/revocar en la ficha del acudiente, llamando `CharacterProgramConsent.grant!`/`.revoke!`
+  (Slice 5, idempotentes y append-only, sin tocar aquí) — sin llave de idempotencia en el botón (a
+  diferencia del molde de `GuardianActivityEnrollmentsController`): el propio modelo ya es idempotente,
+  así que pasar una clave que el modelo ignora habría sido imitar el molde sin necesitarlo.
+
+- **Superficie de dar un aporte de par (deferida del Slice 5)**: `Portals::
+  StudentPeerAppreciationsController#new`/`#create` — el estudiante elige un compañero de su sección
+  actual (picker cerrado) y un tag del catálogo activo, y `PeerAppreciationRecorder` hace el resto
+  (consentimiento, anti-duplicado, umbral — todo intacto del Slice 5). **Deferido, documentado**: la
+  UI de dar-como-acudiente (`giver_kind: "guardian"`, un acudiente reconociendo a un estudiante que no
+  es su hijo) — el modelo y el `Recorder` ya lo soportan y está probado a nivel de modelo desde el
+  Slice 5, pero una UI real abre su propia pregunta de alcance/búsqueda-de-personas sin resolver (¿qué
+  estudiantes ajenos puede ver un acudiente?) que este slice no resuelve — misma postura que el Slice 5
+  ya tomó al deferir por completo el controller de autoría-acudiente.
+
+- **Enlaces de hub cableados** (`app/views/portals/guardian_students/show.html.erb`,
+  `app/views/portals/student_portal/show.html.erb`) — el hallazgo de v1.28.0 (una superficie de portal
+  nueva que se olvida de enlazar desde el hub) **no se repitió** esta vez.
+
+- **Gotcha real**: el comentario mágico de locals estrictos de Rails (`<%# locals: (card:) %>`) debe
+  quedar SOLO en su propia línea — cualquier prosa después de `locals:` hasta el `%>` se interpreta
+  como parte de la firma del método compilado, produciendo un `SyntaxErrorInTemplate` que Erubi crudo
+  no habría detectado. Documentado para cualquier partial futuro con firma de locals + comentario.
+
+- **Tests (21 nuevos, suite completa 679→700 runs / 0 fallos / 1 skip preexistente, en serie
+  `PARALLEL_WORKERS=1`):** el read-model ensamblando las cuatro piezas + el estado vacío real +
+  exclusión de borradores + el umbral (`character_card_test.rb`); estructura/AA/ausencia de número
+  crudo del SVG (`radar_chart_test.rb`); caso de María en lectura Y escritura (un acudiente fuera de
+  la relación 404 tanto en la ficha como en el consentimiento), el round-trip de consentimiento, el
+  estado vacío, y una aserción explícita de que ningún número aparece donde debería ir un nivel
+  cualitativo (`portals_character_card_test.rb`); el picker cerrado excluyendo a un compañero de otra
+  sección y al propio dador, el camino feliz, el rechazo de un destinatario fuera de sección, y el gate
+  de consentimiento (`portals_peer_appreciation_test.rb`).
+
+- Ver `HISTORIA.md` v1.40.0 para la narrativa completa del slice.
 
 ### v0.6.0 — 2026-07-21 — Slice 5 cerrado: instrumento de carácter (T2) + aportes de pares/acudientes
 

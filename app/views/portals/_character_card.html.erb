@@ -1,0 +1,68 @@
+<%# locals: (card:) %>
+<%#
+  Shared read-only body of Lens 2 (BI_DOCUMENT.md §5.4). Strengths-only and
+  dignified (§1.1.4). NEVER a numeric score anywhere: the radar's geometry
+  consumes the ordinal internally, but every visible field here is qualitative
+  (level_label + descriptor) or a tag label.
+-%>
+
+<% if card.evaluated? -%>
+  <section class="stack">
+    <h2>Radar de fortalezas</h2>
+    <%= AnalyticsBi::Svg::RadarChart.render(axes: card.axes) %>
+  </section>
+
+  <% if card.top_strengths.any? -%>
+    <section class="stack">
+      <h2>Brújula de carácter</h2>
+      <p>Fortalezas más consolidadas: <%= card.top_strengths.to_sentence %>.</p>
+    </section>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state", icon: "trending-up",
+        title: "Aún no hay una evaluación de carácter publicada",
+        description: "Cuando un docente u orientador publique una evaluación, aquí aparecerán las fortalezas observadas." %>
+<% end -%>
+
+<section class="stack">
+  <h2>Medallas</h2>
+  <% if card.recognitions.any? -%>
+    <%# Only the tag label surfaces — never who gave it (§5.4 resguardo #3) and
+        never a count/score (§1.1.2). A tag only appears past the aggregation
+        threshold, enforced upstream by PeerAppreciationDigest. -%>
+    <ul class="stack">
+      <% card.recognitions.each do |recognition| -%>
+        <li><%= ui_badge "Reconocido como #{recognition.tag_label} por sus compañeros", variant: :success %></li>
+      <% end -%>
+    </ul>
+  <% else -%>
+    <p>Aún no hay reconocimientos de compañeros para mostrar.</p>
+  <% end -%>
+</section>
+
+<section class="stack">
+  <h2>Crecimiento en el tiempo</h2>
+  <% if card.growth.any? -%>
+    <%# Intra-student narrative (§1.1.3): a snapshot per term, oldest first —
+        each term's qualitative levels, never a cross-student comparison. -%>
+    <% card.growth.each do |entry| -%>
+      <article class="stack">
+        <h3><%= entry.term_name %></h3>
+        <% if entry.axes.any? -%>
+          <dl class="detail-list">
+            <% entry.axes.each do |axis| -%>
+              <div>
+                <dt><%= axis.dimension_name %></dt>
+                <dd><%= axis.level_label %><% if axis.descriptor.present? %> — <%= axis.descriptor %><% end %></dd>
+              </div>
+            <% end -%>
+          </dl>
+        <% else -%>
+          <p>Sin dimensiones registradas en este término.</p>
+        <% end -%>
+      </article>
+    <% end -%>
+  <% else -%>
+    <p>Aún no hay historial de evaluaciones para mostrar el crecimiento.</p>
+  <% end -%>
+</section>
