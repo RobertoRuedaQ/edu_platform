@@ -22,6 +22,15 @@ module GroupManagement
     # anyone previously in @group but unchecked is set back to unassigned
     # (section_id: nil), never silently left in a group they were removed
     # from.
+    #
+    # Slice 4 (BI_DOCUMENT.md §5.2): the two former bulk update_all calls are
+    # replaced by per-student GroupManagement::SectionReassigner calls — THE
+    # single write seam that keeps students.section_id (the live cache) and the
+    # append-only student_placements history in lock-step. The roster of one
+    # homeroom is small (~30-40), so per-row is fine, and it keeps ALL
+    # placement-closing logic in one place (never scattered across call sites).
+    # SectionReassigner is idempotent, so a resubmit of the same roster never
+    # churns placement history.
     def update
       @group = find_group
       authorize!("groups.manage", @group)
@@ -30,10 +39,10 @@ module GroupManagement
       GroupManagement::Student
         .where(institution_id: Current.institution_id, section_id: @group.id)
         .where.not(id: submitted_ids)
-        .update_all(section_id: nil)
+        .find_each { |student| GroupManagement::SectionReassigner.call(student: student, section: nil) }
       GroupManagement::Student
         .where(institution_id: Current.institution_id, id: submitted_ids)
-        .update_all(section_id: @group.id)
+        .find_each { |student| GroupManagement::SectionReassigner.call(student: student, section: @group) }
 
       redirect_to group_management_group_path(@group.id), notice: "Matrícula del grupo actualizada."
     end

@@ -17,6 +17,132 @@
 > moviera el changelog fuera del doc magro. Las entradas v1.6.0+ se escribieron directamente aquí,
 > ya con el split vigente.
 
+### v1.38.0 — 2026-07-17 — `analytics_bi`: temporalidad año-a-año (Slice 4 de `BI_DOCUMENT.md`)
+
+**Noveno slice post-MVP, cuarto guiado por `guidelines/BI_DOCUMENT.md`.** Cierra el hueco que
+desbloquea toda tendencia intra-estudiante (no-negociable §1.1.3): `students.section_id` es un
+puntero MUTABLE al grupo actual, así que reorganizar salones sobreescribía el pasado y el BI no podía
+responder "¿cómo cambió el mapa de este estudiante de 2° a 8°?". Prerequisito declarado de las Lentes
+2 (ficha de personaje) y 3 (constelación) — ninguna de las dos puede mostrar una serie temporal sin
+este eje.
+
+**Recon-first (§12):** `grep create_table :student_placements` / `:hps_term_snapshots` → ninguna
+existía (confirma §5.0). Se leyó `memberships_controller#update` (el único call site real que muta
+`students.section_id` hoy — dos `update_all` de bulk, sin ningún rastro de historia) ANTES de tocar
+nada, para confirmar que ese era el único write path a interceptar.
+
+**Decisión A1 resuelta a favor de `group_management` (el lean propuesto en §13 se ejecutó sin
+cambios, mismo reparto de dueño que la geometría de aula de Slice 2/A2): el dominio dueño de
+`students`/`sections` escribe, `analytics_bi` solo lee.**
+
+- **`GroupManagement::StudentPlacement`** (`student_placements`), net-new, tenant-scoped (RLS
+  `ENABLE+FORCE`, `uuidv7()`, índice líder `institution_id`), efectivo-fechada
+  (`valid_from`/`valid_until`, `NULL` = vigente). `EXCLUDE USING gist` (btree_gist, molde v1.33.0) por
+  `(institution_id, student_id, daterange(valid_from, COALESCE(valid_until,'infinity'), '[)'))` — un
+  estudiante nunca tiene dos placements activos solapados, hecho cumplir en la BD, no en la app.
+- **`AnalyticsBi::PlacementScope`** — el lado LECTURA en `analytics_bi`, filtro de inquilino explícito,
+  nunca `default_scope`, exactamente como ya lee `Schedules::Assessment`/`ClassroomLayout` sin
+  poseerlas (§5.1).
+
+**Un solo seam de escritura: `GroupManagement::SectionReassigner`.** Mantiene DOS cosas en lock-step
+para que ningún call site futuro tenga que saber de historia: `students.section_id` (el CACHÉ vivo del
+placement actual, §5.2 lo deja explícitamente así — muchos flujos ya lo leen) y `student_placements`
+(el eje histórico append-only). Reasignar CIERRA el placement abierto (`valid_until = Date.current`) y
+ABRE uno nuevo — el mismo molde simétrico que `SeatAssigner`/`ClassroomReconfigurer` (v1.36.0) y
+`Subscription#end!`/`Entitlement#revoke!` (v1.33.0).
+
+- **Desviación de redacción respecto a §5.2 (que esbozaba "ayer"), igual que Slice 2**: se cierra con
+  `Date.current`. Con `daterange '[)'`, `[from, hoy)` y `[hoy, ∞)` son ADYACENTES, nunca solapan — y
+  funciona incluso reasignando el mismo día en que se abrió el placement (cerrar con "ayer" violaría
+  el CHECK `valid_until >= valid_from` para una fila creada hoy). `requires_new: true` (SAVEPOINT) por
+  la misma razón de siempre: el caller (`memberships_controller`, bajo el around_action de
+  `TenantScoped`) rescata una violación de exclusión sin que el `COMMIT` del request explote.
+- **`section: nil` desasigna**: cierra el placement abierto sin abrir uno nuevo — un estudiante sin
+  sección no tiene placement activo. El caché se pone a `nil` en el mismo paso.
+- **Idempotente por construcción**: reasignar al mismo section con un placement abierto que ya
+  coincide es un no-op — reenviar el mismo roster de un homeroom (el caso común de
+  `memberships_controller#update`, que siempre reenvía la lista completa marcada) nunca ensucia la
+  historia con placements idénticos repetidos.
+- **Auto-sanador**: si el caché ya apunta a la sección correcta pero falta el placement (un estudiante
+  creado por importación de roster, o uno de antes de este slice), el placement se abre igual — el
+  seam nunca asume que el estado previo ya era consistente, se auto-corrige.
+- **Borde documentado, no una excepción a mitad de flujo**: si no hay `grade_level_id` resoluble (ni
+  del estudiante ni de la sección) o no hay término académico activo, el caché igual se actualiza pero
+  NO se escribe placement — las columnas `NOT NULL` no podrían satisfacerse de todas formas. Un
+  estudiante en ese borde sigue matriculándose sin error; solo queda sin historia de placement hasta
+  que el borde se resuelva (grado/término).
+
+**`memberships_controller.rb` refactorizado**: los dos `update_all` de bulk (des-asignar el roster
+saliente, asignar el entrante) se reemplazan por `find_each` + `GroupManagement::SectionReassigner.call`
+por estudiante — el ÚNICO write seam. El roster de un homeroom es pequeño (~30-40 estudiantes), así
+que per-fila es aceptable en costo, y mantiene TODA la lógica de cierre de placement en un solo lugar
+en vez de esparcirla por cada call site que hoy o mañana mute `section_id`.
+
+**`GroupManagement::PlacementBackfill`** (one-shot, idempotente, re-ejecutable): abre un placement por
+cada estudiante activo-y-ubicado que hoy carece de uno — reusa la auto-sanación de
+`SectionReassigner` en vez de duplicar la lógica de creación. Batched con `find_each` (no hay volumen
+por-tenant que lo justifique de otra forma, documentado como borde a revisar si un tenant crece).
+Expuesto en `bin/rails bi:backfill_placements[institution_id]` (todas las instituciones si se omite),
+bajo el GUC de cada tenant fijado por el propio rake (mismo idioma que `qa_seed.rake`).
+
+**`AnalyticsBi::HpsTermSnapshot`** (`hps_term_snapshots`), net-new EN `analytics_bi` — la otra mitad
+del eje temporal (§7: "snapshot para el 'a lo largo del tiempo'"). Tenant-scoped, uno por `(student,
+academic_term)` (índice único líder `institution_id`). `payload` jsonb con las métricas derivadas
+(`attendance_rate`/`average_grade`/`grade_scale`/`wellbeing`/`heat`/`section_id`+`name`/
+`grade_level_id`+`name`) — mismo molde `report_cards.lines_snapshot`/`price_tiers_snapshot`: los
+Slices 5–8 (instrumento de carácter, ficha, afinidades, núcleo familiar) pueden agregar claves nuevas
+al payload sin ninguna migración; el triple `(institution, student, term)` es lo único que jamás deja
+de ser una columna real, indexada, y lo único que se filtra o se une.
+
+- **`AnalyticsBi::Hps::Snapshotter`** (mismo molde `Core::Headcount::Snapshotter`): cómputo en memoria
+  sobre AR indexado, `find_or_initialize_by` sobre el triple único — idempotente, nunca duplica.
+  Señales TERM-SCOPED a propósito (no una ventana rodante de 30 días como el heat de Slice 2): el
+  punto de un snapshot histórico es congelar EL TÉRMINO, no "los últimos 30 días" (que significarían
+  algo distinto según cuándo se corra el job). Nota promedio vía `enrollments.academic_term_id`
+  (v1.15.0), nunca recalculada de otra forma; asistencia sobre la ventana de calendario del término
+  (`starts_on..min(ends_on, hoy)` — nunca cuenta días futuros de un término aún no terminado);
+  placement vigente PARA ESE TÉRMINO leído de `student_placements` (nunca de `students.section_id`,
+  que solo conoce el presente — exactamente el punto de §5.2). `wellbeing`/`heat` siguen la misma
+  convención que `SpatialHeatmap` (v1.36.0): media de las señales disponibles, `nil` sin ninguna —
+  **nunca un 0 engañoso** (regla v1.34.0, reafirmada aquí con un test explícito de "sin ninguna señal
+  → heat nil, no cero").
+- **`HpsTermSnapshotJob`/`HpsTermSnapshotAllJob`** (fan-out, guardrail v1.32.0, mismo mecanismo que
+  `Core::Headcount::SnapshotJob`): el job por-institución resuelve el término activo si no se pasa uno
+  explícito (permite que un futuro disparador de fin-de-término snapshotee un término ya cerrado); sin
+  término activo y ninguno explícito pasado, no-op silencioso — temporada baja, nunca un error. **NO**
+  está cableado en `config/recurring.yml`: fin-de-término es un evento dependiente de dato (varía por
+  institución/calendario), no un reloj fijo diario/mensual como `RollupJob`/`PeriodCutJob` — se invoca
+  manualmente (`bin/rails bi:snapshot_terms[institution_id]`) hasta que exista una señal real de cierre
+  de término que lo dispare.
+- **`AnalyticsBi::HpsTermSnapshotScope`**: lado LECTURA, filtro de inquilino explícito. `trend_for`
+  ordena por el inicio calendario del término (`academic_terms.starts_on`), NUNCA por `captured_on` —
+  re-snapshotear un término ya cerrado (ej. una corrección de dato) no debe reordenar su lugar en la
+  serie histórica que un futuro sparkline de la Lente 2 va a leer.
+
+**Tests (11 nuevos, suite completa 646→657 runs / 0 fallos / 1 skip preexistente, en serie
+`PARALLEL_WORKERS=1`):** el `EXCLUDE gist` a nivel de MODELO (dos placements solapados para el mismo
+estudiante lanzan `StatementInvalid`, sin pasar por `SectionReassigner` — prueba el constraint de BD
+en sí, no solo la disciplina del servicio); reasignar cierra-y-abre sin hueco ni solape (`valid_until`
+del cerrado == `valid_from` del abierto, caché en lock-step); desasignar cierra sin abrir y nilea el
+caché; reasignar al mismo destino es no-op idempotente (cuenta de placements no crece); el backfill
+coloca exactamente un placement por estudiante activo-y-ubicado, salta withdrawn y activos-sin-sección,
+y es re-ejecutable sin duplicar (`student_placement_test.rb`). El snapshotter computa el payload
+correcto por estudiante incluyendo los tres casos límite (nota sin asistencia, asistencia sin nota,
+ninguna señal → todo `nil`) y es idempotente por re-ejecución del mismo (student, term)
+(`hps_term_snapshotter_test.rb`). El job fija el GUC del tenant correcto y snapshotea solo sus propios
+estudiantes, resuelve el término activo, no filtra el GUC más allá de su propia transacción (verificado
+con una lectura sin scope después de correr el job), y el fan-out encola exactamente un job por
+institución (`hps_term_snapshot_job_test.rb`). **Sin caso de aceptación de seguridad HTTP dedicado**
+— a diferencia de los Slices 2 y 3, este no abre ninguna superficie de controller nueva: el único punto
+de entrada de usuario que toca este eje (`memberships_controller#update`) ya estaba gateado por
+`groups.manage` desde antes de este slice, sin cambio de superficie ni de permiso.
+
+**Guardrails nuevos** (ver `OPEN_PROCESS.md` §2): el molde "un solo seam de escritura mantiene un caché
+vivo y una historia append-only en lock-step" se generaliza (ya era el patrón implícito de
+`SeatAssigner`, ahora está nombrado); "un backfill idempotente reusa la auto-sanación del seam de
+escritura en vez de duplicar su lógica de creación"; "un job de snapshot por-término NO se agenda en
+`config/recurring.yml` cuando el evento que lo dispara es dependiente de dato, no de reloj".
+
 ### v1.37.0 — 2026-07-17 — `analytics_bi`: Lente 5 "Auras de Cuidado" (Slice 3 de `BI_DOCUMENT.md`)
 
 **Octavo slice post-MVP, tercero guiado por `guidelines/BI_DOCUMENT.md`, y el más SENSIBLE del dominio

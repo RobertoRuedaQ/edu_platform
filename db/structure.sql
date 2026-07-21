@@ -770,6 +770,24 @@ ALTER TABLE ONLY public.guardians FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: hps_term_snapshots; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.hps_term_snapshots (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    student_id uuid NOT NULL,
+    academic_term_id uuid NOT NULL,
+    captured_on date NOT NULL,
+    payload jsonb DEFAULT '{}'::jsonb NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+ALTER TABLE ONLY public.hps_term_snapshots FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: installments; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1479,6 +1497,27 @@ CREATE TABLE public.student_headcount_snapshots (
 
 
 --
+-- Name: student_placements; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.student_placements (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    student_id uuid NOT NULL,
+    section_id uuid NOT NULL,
+    grade_level_id uuid NOT NULL,
+    academic_term_id uuid NOT NULL,
+    valid_from date NOT NULL,
+    valid_until date,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT student_placements_valid_range_check CHECK (((valid_until IS NULL) OR (valid_until >= valid_from)))
+);
+
+ALTER TABLE ONLY public.student_placements FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: students; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2000,6 +2039,14 @@ ALTER TABLE ONLY public.guardians
 
 
 --
+-- Name: hps_term_snapshots hps_term_snapshots_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.hps_term_snapshots
+    ADD CONSTRAINT hps_term_snapshots_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: installments installments_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2320,6 +2367,22 @@ ALTER TABLE ONLY public.student_headcount_snapshots
 
 
 --
+-- Name: student_placements student_placements_no_overlapping_periods; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.student_placements
+    ADD CONSTRAINT student_placements_no_overlapping_periods EXCLUDE USING gist (institution_id WITH =, student_id WITH =, daterange(valid_from, COALESCE(valid_until, 'infinity'::date), '[)'::text) WITH &&);
+
+
+--
+-- Name: student_placements student_placements_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.student_placements
+    ADD CONSTRAINT student_placements_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: students students_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2507,6 +2570,13 @@ CREATE UNIQUE INDEX idx_group_memberships_unique_student_per_assignment ON publi
 
 
 --
+-- Name: idx_hps_term_snapshots_one_per_student_term; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_hps_term_snapshots_one_per_student_term ON public.hps_term_snapshots USING btree (institution_id, student_id, academic_term_id);
+
+
+--
 -- Name: idx_installments_seq; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2672,6 +2742,13 @@ CREATE INDEX idx_rubric_templates_on_institution_author ON public.rubric_templat
 --
 
 CREATE INDEX idx_seat_assignments_on_inst_layout_from ON public.seat_assignments USING btree (institution_id, classroom_layout_id, effective_from);
+
+
+--
+-- Name: idx_student_placements_on_inst_student_from; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_student_placements_on_inst_student_from ON public.student_placements USING btree (institution_id, student_id, valid_from);
 
 
 --
@@ -3796,6 +3873,14 @@ ALTER TABLE ONLY public.roster_import_rows
 
 
 --
+-- Name: student_placements fk_rails_18193fb5e3; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.student_placements
+    ADD CONSTRAINT fk_rails_18193fb5e3 FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE CASCADE;
+
+
+--
 -- Name: submissions fk_rails_19447e9b4d; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3828,6 +3913,14 @@ ALTER TABLE ONLY public.conversations
 
 
 --
+-- Name: student_placements fk_rails_1c9fb41b84; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.student_placements
+    ADD CONSTRAINT fk_rails_1c9fb41b84 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: roster_import_batches fk_rails_1ddd8e9cad; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3849,6 +3942,14 @@ ALTER TABLE ONLY public.invitations
 
 ALTER TABLE ONLY public.attendance_records
     ADD CONSTRAINT fk_rails_24851af891 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: hps_term_snapshots fk_rails_2691923cf2; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.hps_term_snapshots
+    ADD CONSTRAINT fk_rails_2691923cf2 FOREIGN KEY (academic_term_id) REFERENCES public.academic_terms(id) ON DELETE CASCADE;
 
 
 --
@@ -4316,6 +4417,14 @@ ALTER TABLE ONLY public.enrollments
 
 
 --
+-- Name: student_placements fk_rails_6af522c18c; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.student_placements
+    ADD CONSTRAINT fk_rails_6af522c18c FOREIGN KEY (grade_level_id) REFERENCES public.grade_levels(id) ON DELETE CASCADE;
+
+
+--
 -- Name: staff_members fk_rails_6b44b8a383; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4580,6 +4689,14 @@ ALTER TABLE ONLY public.usage_daily_rollups
 
 
 --
+-- Name: student_placements fk_rails_9daf5d0b7c; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.student_placements
+    ADD CONSTRAINT fk_rails_9daf5d0b7c FOREIGN KEY (academic_term_id) REFERENCES public.academic_terms(id) ON DELETE CASCADE;
+
+
+--
 -- Name: calendar_events fk_rails_a13b118c67; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4729,6 +4846,14 @@ ALTER TABLE ONLY public.roster_import_batches
 
 ALTER TABLE ONLY public.care_auras
     ADD CONSTRAINT fk_rails_b9314c8338 FOREIGN KEY (authored_by_counselor_id) REFERENCES public.institution_users(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: hps_term_snapshots fk_rails_bb3e105301; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.hps_term_snapshots
+    ADD CONSTRAINT fk_rails_bb3e105301 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
 
 
 --
@@ -5012,6 +5137,14 @@ ALTER TABLE ONLY public.seat_assignments
 
 
 --
+-- Name: student_placements fk_rails_deb636331c; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.student_placements
+    ADD CONSTRAINT fk_rails_deb636331c FOREIGN KEY (section_id) REFERENCES public.sections(id) ON DELETE CASCADE;
+
+
+--
 -- Name: student_headcount_snapshots fk_rails_dfadb12276; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -5153,6 +5286,14 @@ ALTER TABLE ONLY public.role_assignments
 
 ALTER TABLE ONLY public.calendar_events
     ADD CONSTRAINT fk_rails_f872036c76 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: hps_term_snapshots fk_rails_f8adf4b299; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.hps_term_snapshots
+    ADD CONSTRAINT fk_rails_f8adf4b299 FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE CASCADE;
 
 
 --
@@ -5510,6 +5651,19 @@ CREATE POLICY guardians_tenant_isolation ON public.guardians USING ((institution
 
 
 --
+-- Name: hps_term_snapshots; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.hps_term_snapshots ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: hps_term_snapshots hps_term_snapshots_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY hps_term_snapshots_tenant_isolation ON public.hps_term_snapshots USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
 -- Name: installments; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -5848,6 +6002,19 @@ CREATE POLICY student_guardians_tenant_isolation ON public.student_guardians USI
 
 
 --
+-- Name: student_placements; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.student_placements ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: student_placements student_placements_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY student_placements_tenant_isolation ON public.student_placements USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
 -- Name: students; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -5945,6 +6112,7 @@ CREATE POLICY teaching_assignments_tenant_isolation ON public.teaching_assignmen
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260717220000'),
 ('20260717213000'),
 ('20260717210303'),
 ('20260717161248'),

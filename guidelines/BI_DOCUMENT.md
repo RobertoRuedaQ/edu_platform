@@ -17,10 +17,10 @@
 
 | Campo | Valor |
 |---|---|
-| **Versión** | `v0.4.0` |
+| **Versión** | `v0.5.0` |
 | **Fecha** | 2026-07-17 |
-| **Estado global de referencia** | `PROJECT_STATE.md v1.37.0` — `analytics_bi` AMBAS mitades reales (`InstitutionDashboard`/`CrossTenantReportRoster`) **+ Lente 1 (Mapa de Empatía Espacial) real + Lente 5 (Auras de Cuidado) real** (proyección `care_auras`, aislamiento clínico probado a nivel de modelo). |
-| **Estado del dominio** | Filosofía, tiers de confidencialidad, ERD conceptual, modelo de acceso de las 5 lentes, guardas de RLS/clínicas, estrategia de procesamiento y slicing — **fijados**. **Slice 1 (cross-tenant) cerrado** (primera conexión BYPASSRLS real). **Slice 2 (Lente 1, mapa espacial + heat) cerrado (v1.36.0)** — geometría de aula (`classroom_layouts`/`seat_assignments`) net-new en `group_management` (decisión A2), heat derivado in-memory de T1 (notas/asistencia). **Slice 3 (Lente 5, "Auras de Cuidado") cerrado (v1.37.0)** — proyección `care_auras` net-new en `analytics_bi`, escrita SOLO por `AnalyticsBi::Aura::Projector` invocado desde `counseling` (cero PII clínica, cero acoplamiento inverso), leída por el docente como un ícono abstracto sobre la Lente 1 (`hps.aura.view`); aislamiento clínico probado a nivel de MODELO (SQL tap + estructura de asociaciones). Slices 4–8 (net-new) sin construir aún. |
+| **Estado global de referencia** | `PROJECT_STATE.md v1.38.0` — `analytics_bi` AMBAS mitades reales (`InstitutionDashboard`/`CrossTenantReportRoster`) **+ Lente 1 (Mapa de Empatía Espacial) real + Lente 5 (Auras de Cuidado) real + temporalidad año-a-año real** (`student_placements`/`hps_term_snapshots`). |
+| **Estado del dominio** | Filosofía, tiers de confidencialidad, ERD conceptual, modelo de acceso de las 5 lentes, guardas de RLS/clínicas, estrategia de procesamiento y slicing — **fijados**. **Slice 1 (cross-tenant) cerrado** (primera conexión BYPASSRLS real). **Slice 2 (Lente 1, mapa espacial + heat) cerrado (v1.36.0)** — geometría de aula (`classroom_layouts`/`seat_assignments`) net-new en `group_management` (decisión A2), heat derivado in-memory de T1 (notas/asistencia). **Slice 3 (Lente 5, "Auras de Cuidado") cerrado (v1.37.0)** — proyección `care_auras` net-new en `analytics_bi`, escrita SOLO por `AnalyticsBi::Aura::Projector` invocado desde `counseling` (cero PII clínica, cero acoplamiento inverso), leída por el docente como un ícono abstracto sobre la Lente 1 (`hps.aura.view`); aislamiento clínico probado a nivel de MODELO (SQL tap + estructura de asociaciones). **Slice 4 (temporalidad año-a-año) cerrado (v1.38.0)** — `student_placements` net-new en `group_management` (decisión A1 resuelta) efectivo-fechado/append-only vía `GroupManagement::SectionReassigner`, el ÚNICO seam que mueve un estudiante de sección; `hps_term_snapshots` net-new en `analytics_bi` (§7), congelado por `AnalyticsBi::Hps::Snapshotter` vía el fan-out `HpsTermSnapshotJob`/`HpsTermSnapshotAllJob`. Slices 5–8 (net-new, T2 formativo) sin construir aún. |
 
 **Versionado (igual que los demás docs):** MAJOR = cambia una decisión de diseño asentada del dominio
 o su modelo de tiers · MINOR = se cierra un slice o una decisión abierta · PATCH =
@@ -723,7 +723,7 @@ con entrada en `HISTORIA.md` + actualización de `OPEN_PROCESS.md`.
 | **1** | Cross-tenant `CrossTenantReportRoster` (`edu_bi_reader`) | ✅ existe | media (rol nuevo) | **✅ HECHO (v1.35.0)** |
 | **2** | Lente 1 — superficie del mapa espacial (geometría + heat sobre T1) | geometría net-new; heat existe | media | **✅ HECHO (v1.36.0)** — §5.3 |
 | **3** | Lente 5 — auras de cuidado (proyección sobre `counseling`) | ✅ base clínica existe | media (carve-out) | **✅ HECHO (v1.37.0)** — §5.7 |
-| **4** | Temporalidad año-a-año (`student_placements` + `hps_term_snapshots`) | net-new transversal | media | §5.2 / frontera con `group_management` |
+| **4** | Temporalidad año-a-año (`student_placements` + `hps_term_snapshots`) | net-new transversal | media | **✅ HECHO (v1.38.0)** — §5.2 / A1 resuelta a favor de `group_management` |
 | **5** | Instrumento de carácter (T2, molde rúbrica) | net-new + sensible | alta (NNA) | §5.4, consentimiento |
 | **6** | Lente 2 — ficha de personaje (portal, autoservicio) | usa slice 5 | alta (digna+NNA) | Slices 4, 5 |
 | **7** | Afinidades + Lente 3 constelación | net-new + lib JS | alta | §5.5, §10.3 |
@@ -774,7 +774,7 @@ Antes de dar por cerrado cualquier slice de este dominio:
 
 | # | Decisión | Lean propuesto |
 |---|---|---|
-| **A1** | ¿`student_placements` (§5.2) lo escribe `analytics_bi` o `group_management`? | `group_management` (dueño de `students`/`sections`); `analytics_bi` solo lee. |
+| **A1** | ¿`student_placements` (§5.2) lo escribe `analytics_bi` o `group_management`? | **✅ RESUELTO (v1.38.0): `group_management`** (dueño de `students`/`sections` — modelo `GroupManagement::StudentPlacement`, escritura vía `GroupManagement::SectionReassigner`, el único seam que mueve un estudiante de sección); `analytics_bi` solo lee (`AnalyticsBi::PlacementScope`). |
 | **A2** | ¿`classroom_layouts`/`seat_assignments` (§5.3) viven en `analytics_bi` o `group_management`? | **✅ RESUELTO (v1.36.0): `group_management`** (dato del aula física — modelos `GroupManagement::ClassroomLayout`/`SeatAssignment`, escritura vía `ClassroomReconfigurer`/`SeatAssigner` gateada por `groups.manage`); `analytics_bi` solo lee (`AnalyticsBi::Lens::SpatialClassroomScope`) para la Lente 1. |
 | **A3** | Umbral N de agregación para tags de pares (§5.4) | N ≥ 3, configurable por institución. |
 | **A4** | ¿`analytics_bi` se vuelve dominio medido (`Usage::Ingest.emit`)? | No por ahora (`metered:false`); sin evento facturable claro. |
@@ -785,6 +785,105 @@ Antes de dar por cerrado cualquier slice de este dominio:
 ---
 
 ## 14. Changelog
+
+### v0.5.0 — 2026-07-17 — Slice 4 cerrado: temporalidad año-a-año (`student_placements` + `hps_term_snapshots`)
+
+- **Desbloquea toda tendencia intra-estudiante (no-negociable §1.1.3), prerequisito de las Lentes 2 y
+  3 (§11).** El problema (§5.2): `students.section_id` es un puntero MUTABLE al grupo actual —
+  reorganizar salones sobreescribe el pasado, y el BI no puede responder "¿cómo cambió el mapa de este
+  estudiante de 2° a 8°?" sin una historia append-only.
+
+- **Decisión A1 resuelta a favor de `group_management` (lean propuesto ejecutado sin cambios).**
+  `GroupManagement::StudentPlacement` (`student_placements`), net-new, tenant-scoped (RLS
+  `ENABLE+FORCE`, `uuidv7()`, índice líder `institution_id`), efectivo-fechada
+  (`valid_from`/`valid_until`, `NULL` = vigente). **`EXCLUDE USING gist`** (btree_gist, molde v1.33.0)
+  por `(institution, student, daterange)` — un estudiante nunca tiene dos placements activos
+  solapados; `analytics_bi` **solo lee** vía `AnalyticsBi::PlacementScope` (filtro de inquilino
+  explícito, nunca `default_scope`), exactamente el mismo reparto de dueño que la geometría de aula de
+  Slice 2 (A2).
+
+- **Un solo seam de escritura: `GroupManagement::SectionReassigner`.** Mantiene DOS cosas en
+  lock-step para que ningún call site tenga que saber de historia: (1) `students.section_id` — el
+  CACHÉ vivo del placement actual (§5.2 lo deja así, muchos flujos ya lo leen); (2)
+  `student_placements` — CIERRA el placement abierto (`valid_until = Date.current`) y ABRE uno nuevo,
+  el mismo molde simétrico de `SeatAssigner`/`ClassroomReconfigurer` (v1.36.0) y
+  `Subscription#end!`/`Entitlement#revoke!` (v1.33.0). **Desviación de redacción respecto a §5.2**
+  (que esbozaba "ayer"): se cierra con `Date.current`, igual que Slice 2 — `[from, hoy)` y `[hoy, ∞)`
+  son ADYACENTES bajo `daterange '[)'`, nunca solapan, y el constraint se satisface incluso
+  reasignando el mismo día en que se abrió el placement. `requires_new: true` (SAVEPOINT) por la misma
+  razón que `SeatAssigner`.
+  - **`section: nil` desasigna**: cierra el placement abierto sin abrir uno nuevo (un estudiante sin
+    sección no tiene placement activo); el caché se pone a `nil`.
+  - **Idempotente por construcción**: reasignar al mismo section con un placement abierto que ya
+    coincide es un no-op — reenviar el mismo roster nunca ensucia la historia (hallazgo real: el
+    roster de `memberships_controller#update` se reenvía típicamente sin cambios).
+  - **Auto-sanador**: si el caché ya apunta a la sección correcta pero falta el placement (un
+    estudiante creado por importación de roster, o pre-backfill), el placement se abre igual — el
+    seam no asume que el estado previo ya era consistente.
+  - **Borde documentado**: si no hay `grade_level_id` resoluble (ni del estudiante ni de la sección) o
+    no hay término activo, el caché igual se actualiza pero NO se escribe placement (las columnas NOT
+    NULL no podrían satisfacerse de todas formas) — nunca una excepción a mitad de un flujo de
+    matrícula.
+
+- **`GroupManagement::PlacementBackfill`** (one-shot, idempotente, re-ejecutable): abre un placement
+  por cada estudiante activo y con sección hoy, sobre `SectionReassigner` (reusa su auto-sanación, no
+  duplica lógica). Batched con `find_each`; corre bajo el GUC del propio invocador (rake), sin job
+  throttleado — el volumen por-tenant no lo justifica (documentado, revisar si un tenant crece).
+  Expuesto en `bin/rails bi:backfill_placements[institution_id]` (`lib/tasks/bi.rake`).
+
+- **`memberships_controller.rb` refactorizado**: los dos `update_all` de bulk (asignar/desasignar
+  roster de un grupo) se reemplazan por `find_each` + `SectionReassigner.call` por estudiante — el
+  ÚNICO write seam que mantiene caché e historia en lock-step. El roster de un homeroom es pequeño
+  (~30-40), así que per-fila es aceptable; ningún call site vuelve a tocar `section_id` directo.
+
+- **`AnalyticsBi::HpsTermSnapshot`** (`hps_term_snapshots`), net-new en `analytics_bi` (§7: "snapshot
+  para el 'a lo largo del tiempo'"). Tenant-scoped, uno por `(student, academic_term)` (índice único
+  `idx_hps_term_snapshots_one_per_student_term`, líder `institution_id`). `payload` jsonb —
+  `attendance_rate`/`average_grade`/`grade_scale`/`wellbeing`/`heat`/`section_id`+`name`/
+  `grade_level_id`+`name` — mismo molde `report_cards.lines_snapshot`: los campos derivados viven en
+  jsonb para que los Slices 5–8 agreguen claves sin migración; el triple (institution, student, term)
+  es lo único que se filtra o se une jamás.
+
+- **`AnalyticsBi::Hps::Snapshotter`** (mismo molde `Core::Headcount::Snapshotter`): cómputo en memoria
+  sobre AR indexado, `find_or_initialize_by` sobre el triple único (idempotente, nunca duplica).
+  Señales TERM-scoped (no una ventana rodante de 30 días como el heat de Slice 2, a propósito — el
+  punto de un snapshot histórico es congelar el término, no "los últimos 30 días" que cambian según
+  cuándo se mire): nota promedio vía `enrollments.academic_term_id`, asistencia vía la ventana de
+  calendario del término (`starts_on..min(ends_on, hoy)`, nunca cuenta días futuros de un término sin
+  terminar), placement vigente para ese término leído de `student_placements` (nunca de
+  `students.section_id`, que solo conoce el presente). `wellbeing`/`heat` siguen la convención de
+  `SpatialHeatmap`: media de señales disponibles, `nil` sin ninguna — **nunca un 0 engañoso** (regla
+  v1.34.0).
+
+- **`HpsTermSnapshotJob`/`HpsTermSnapshotAllJob`** (fan-out, guardrail v1.32.0): el job por-institución
+  resuelve el término activo si no se pasa uno explícito (permite snapshotear un término ya cerrado
+  desde un futuro trigger de fin-de-término); sin término activo y ninguno explícito, no-op silencioso
+  (temporada baja, nunca un error). **NO** está en `config/recurring.yml`: fin-de-término es un evento
+  dependiente de dato, no un reloj fijo — se invoca manualmente
+  (`bin/rails bi:snapshot_terms[institution_id]`) hasta que exista un disparador real de cierre de
+  término (nota para Slices futuros / `OPEN_PROCESS.md`).
+
+- **`AnalyticsBi::PlacementScope`/`AnalyticsBi::HpsTermSnapshotScope`**: los dos query objects de
+  lectura de este slice, ambos con filtro de inquilino EXPLÍCITO, ninguno con `default_scope`. El
+  primero da la historia completa (`history_for`) y el placement vigente por término
+  (`for_term`/`students_in`); el segundo da la tendencia ordenada por el inicio calendario del término
+  (`trend_for`, nunca por `captured_on` — re-snapshotear un término no debe reordenar su lugar en la
+  serie histórica).
+
+- **Tests (11 nuevos, suite completa 657 runs / 0 fallos / 1 skip preexistente, en serie
+  `PARALLEL_WORKERS=1`):** el `EXCLUDE gist` a nivel de MODELO (dos placements solapados lanzan
+  `StatementInvalid`); reasignar cierra-y-abre sin hueco ni solape; desasignar cierra sin abrir;
+  reasignar al mismo destino es no-op idempotente; el backfill coloca exactamente un placement por
+  estudiante activo-y-ubicado y es re-ejecutable sin duplicar (`student_placement_test.rb`); el
+  snapshotter computa el payload correcto por estudiante incluyendo los casos sin nota/sin
+  asistencia/sin ninguna señal (`nil`, nunca 0) y es idempotente por re-ejecución
+  (`hps_term_snapshotter_test.rb`); el job fija el GUC del tenant correcto, resuelve el término activo,
+  no filtra el GUC más allá de su propia transacción, y el fan-out encola un job por institución
+  (`hps_term_snapshot_job_test.rb`). Sin caso de aceptación de seguridad HTTP dedicado — este slice no
+  abre ninguna superficie de controller nueva (el único punto de entrada del usuario,
+  `memberships_controller#update`, ya estaba gateado por `groups.manage` y sin cambios de superficie).
+
+- Ver `HISTORIA.md` v1.38.0 para la narrativa completa del slice.
 
 ### v0.4.0 — 2026-07-17 — Slice 3 cerrado: Lente 5 "Auras de Cuidado" (proyección clínica → docente)
 
