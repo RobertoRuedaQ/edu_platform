@@ -1,0 +1,37 @@
+<% content_for :title, "Evaluar carácter" %>
+
+<%= render "shared/page_header",
+      title: "Evaluación de carácter",
+      subtitle: "#{@student.first_name} #{@student.last_name} · #{@framework.name}" %>
+
+<%= render "shared/alert", variant: :info,
+      message: "Describe fortalezas observadas por dimensión. No es un puntaje ni un ranking — es un instrumento cualitativo de autoría humana." %>
+
+<%= form_with url: analytics_bi_character_evaluations_path, method: :post do -%>
+  <input type="hidden" name="student_id" value="<%= @student.id %>">
+  <input type="hidden" name="framework_id" value="<%= @framework.id %>">
+
+  <div class="field">
+    <label class="field__label" for="author_kind">Tu rol como autor</label>
+    <select class="field__input" id="author_kind" name="author_kind">
+      <option value="teacher">Docente</option>
+      <option value="counselor">Orientador</option>
+    </select>
+  </div>
+
+  <% @framework.character_dimensions.each do |dimension| -%>
+    <fieldset class="field">
+      <legend class="field__label"><%= dimension.name %></legend>
+      <select class="field__input" name="dimensions[<%= dimension.id %>][level_label]">
+        <option value="">— Sin evaluar —</option>
+        <% dimension.character_levels.each do |level| -%>
+          <option value="<%= level.label %>"><%= level.label %></option>
+        <% end -%>
+      </select>
+      <textarea class="field__input" name="dimensions[<%= dimension.id %>][note]" rows="2"
+        placeholder="Observación cualitativa (opcional)"></textarea>
+    </fieldset>
+  <% end -%>
+
+  <%= ui_button "Publicar evaluación", type: "submit", variant: :primary %>
+<% end -%>

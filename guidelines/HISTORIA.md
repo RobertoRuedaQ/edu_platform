@@ -17,6 +17,158 @@
 > moviera el changelog fuera del doc magro. Las entradas v1.6.0+ se escribieron directamente aquí,
 > ya con el split vigente.
 
+### v1.39.0 — 2026-07-21 — `analytics_bi`: instrumento de carácter (T2) + aportes de pares/acudientes (Slice 5 de `BI_DOCUMENT.md`)
+
+**Décimo slice post-MVP, quinto guiado por `guidelines/BI_DOCUMENT.md`, y la pieza de mayor tensión
+NNA construida hasta ahora junto con la Lente 5 (Clase S).** Abre el tier T2 (formativo) del HPS: el
+instrumento de evaluación de carácter con autoría humana (no-negociable §1.1.2 — nunca un score
+algorítmico) y, como pieza separada y mucho más restringida, el camino de reconocimiento entre pares
+y de acudientes hacia un estudiante — el primero de este dominio que introduce el CONSENTIMIENTO como
+primitivo real del codebase.
+
+**Recon-first (§12):** `grep create_table :character_frameworks` / `:peer_appreciations` /
+`:character_program_consents` → ninguna existía. `grep requires_consent app db/structure.sql` → **cero
+resultados** — el molde que el propio §5.4 citaba (`assignments.requires_consent`) es una referencia
+obsoleta/aspiracional que nunca se construyó; se corrige aquí, misma clase de hallazgo que ya
+motivó correcciones de molde en los Slices 2 y 3.
+
+**Dos piezas independientes, nunca mezcladas** (el punto central del diseño de §5.4):
+
+1. **Instrumento staff-autoría, molde rúbrica exacto**: `AnalyticsBi::CharacterFramework` (biblioteca
+   reutilizable por institución, `status` draft/published/archived) → `CharacterDimension`
+   (`name`/`position`/`weight`, nunca forzado a sumar 100) → `CharacterLevel` (`label` +
+   `descriptor` CUALITATIVO — nunca un número) → `CharacterEvaluation` (una por
+   estudiante+término+framework+autor, `framework_snapshot` jsonb CONGELADO al publicar — molde
+   exacto `assignments.rubric_snapshot`/`price_tiers_snapshot`) → `CharacterDimensionScore`
+   (`dimension_key` texto que referencia el snapshot CONGELADO, nunca un FK vivo a
+   `character_dimensions` — mismo molde que las puntuaciones de rúbrica de `assignments`: editar o
+   archivar un framework después de publicar nunca reescribe una evaluación ya publicada).
+   `AnalyticsBi::Character::Publisher` congela la estructura y valida cada selección contra el
+   snapshot (nunca contra la estructura viva), rechazando con `InvalidSelection` una dimensión o
+   nivel que no existía al momento de publicar.
+
+2. **Aportes de pares/acudientes — tabla SEPARADA `peer_appreciations`**, con los seis resguardos
+   anti-acoso de §5.4 hechos cumplir por CONSTRUCCIÓN, no por convención ni por disciplina de
+   servicio:
+   - **(1) Sin texto libre, nunca**: la tabla no tiene NINGUNA columna de texto — solo `tag_id` hacia
+     `peer_appreciation_tags` (catálogo cerrado, curado, solo-constructivo, con `active` para
+     retirar un tag del catálogo sin romper histórico). Es estructuralmente imposible escribir un
+     insulto, no solo bloqueado en el service — no hay dónde escribirlo.
+   - **(2) Umbral de agregación antes de surfacear** (decisión A3): `AnalyticsBi::Character::
+     PeerAppreciationDigest` es el ÚNICO camino de lectura sancionado, agrega conteos por tag y
+     filtra por `AGGREGATION_THRESHOLD` (constante de módulo = 3 — ver decisión abajo). Construido y
+     probado AHORA aunque nada lo renderiza todavía (el Slice 6/Lente 2 lo va a consumir);
+     construirlo antes de tener un consumidor real evita que el primer consumidor invente su propia
+     agregación ad-hoc, potencialmente sin el umbral.
+   - **(3) Nunca atribuible fuera de `hps.character.moderate`**: el `Data.define(:tag_label,
+     :category, :count)` que retorna el Digest no tiene NINGÚN campo de atribución — allowlist por
+     construcción, el mismo principio que `AnalyticsBi::Lens::AuraScope` ya estableció en v1.37.0.
+     Las columnas de identidad del dador existen solo para `Moderation` y el rastro de auditoría.
+   - **(4) Solo fortalezas**: el catálogo sembrado (ver A5 abajo) es curado y constructivo por
+     diseño, usando el propio contenido de ejemplo del §5.4.
+   - **(5) Consentimiento del acudiente**: ver el primitivo nuevo, abajo — el hallazgo más grande de
+     este slice.
+   - **(6) Moderación append-only**: `AnalyticsBi::Character::Moderation.withhold!` es un flip de
+     estado (`active` → `withheld_by_moderation`), nunca un `destroy` — la fila y su identidad de
+     dador permanecen para el rastro de auditoría. Cada withhold audita
+     (`peer_appreciation.withheld`, nuevo en `IdentityAccess::AuditEventIndex::ACTIONS`); idempotente,
+     un segundo withhold sobre una fila ya retirada no vuelve a escribir un evento de auditoría.
+
+**XOR de identidad del dador**: `giver_kind` (`peer_student`/`guardian`, string+CHECK — desviación
+documentada del `smallint` que el boceto de §5.4 dibuja, mismo criterio que Slices 2/3) más
+`num_nonnulls(giver_student_id, giver_guardian_user_id) = 1` (CHECK), el mismo molde exacto de
+`messages_sender_identity_check`/`conversation_participants_identity_check` ya existentes en el
+codebase. El acudiente-dador es un `Core::User` global (misma columna de identidad que
+`guardian_students.guardian_user_id`/`messages.guardian_user_id`), NO un `institution_user` — un
+acudiente no es staff, y modelarlo distinto habría sido inconsistente con cómo ya se modela en
+`communication`.
+
+**Anti-duplicado/anti-brigading REFORZADO más allá del boceto de §5.4 (hallazgo real, no un
+capricho):** el boceto sugiere un único índice único parcial sobre `(institution, student, tag,
+giver_student, term) WHERE status='active'`. Pero el CHECK XOR garantiza que exactamente UNA de las
+dos columnas de dador es no-nula por fila — y Postgres trata cada valor `NULL` como *distinto* dentro
+de un índice único, nunca como un duplicado de otro `NULL`. Un solo índice sobre `giver_student_id`
+habría dejado a cualquier acudiente (cuyas filas SIEMPRE tienen `giver_student_id: NULL`) repetir el
+mismo tag al mismo estudiante sin ningún límite — el índice nunca lo habría bloqueado. Corregido con
+DOS índices únicos parciales, uno por columna de dador. Vale la pena recordar este razonamiento para
+cualquier índice parcial futuro sobre una columna que puede quedar NULL por una XOR.
+
+**`AnalyticsBi::CharacterProgramConsent` — el primer primitivo de consentimiento del codebase (§5.4
+punto 5), y el hallazgo de diseño más grande del slice.** El molde que el documento citaba
+(`assignments.requires_consent`) NO EXISTE en ningún lugar del repositorio — grep-confirmado antes de
+escribir una sola línea, la misma clase de corrección de referencia obsoleta que ya motivó
+desviaciones documentadas en los Slices 2 y 3 (aunque esta vez sobre un molde entero, no solo un tipo
+de columna). Reemplazo: una tabla tenant-scoped nueva, PROPIA de `analytics_bi` — deliberadamente NO
+un framework general de Habeas Data (ese alcance mayor no está pedido ni justificado por ningún otro
+dominio todavía; construirlo ahora habría sido especulación). Append-only (`granted_at`/`revoked_at`,
+un índice único parcial "una consent activa por estudiante" `WHERE revoked_at IS NULL`, el mismo molde
+de una-activa-a-la-vez que `care_auras`). `AnalyticsBi::Character::PeerAppreciationRecorder` exige
+consentimiento activo del estudiante que RECIBE siempre, y del par que DA si el dador es otro
+estudiante (un acudiente-dador es adulto — sin gate de consentimiento propio); su ausencia se rechaza
+limpio (`ConsentRequired`), nunca un 500 — misma disciplina de rechazo amable que un gate de
+entitlement/RBAC. **Alcance deliberadamente acotado**: esta pieza NO construye la UI de otorgar/
+revocar consentimiento desde el portal del acudiente — el modelo + `grant!`/`revoke!` + el gate ya
+están completos y probados; alcanzable por consola/rake por ahora, la superficie de portal se
+construye en el Slice 6 (donde de todas formas se construye el resto del portal del acudiente para
+este dominio).
+
+**Permisos nuevos** (`SeedPermissions::CATALOG`): `hps.character.author` (docente/orientador
+crea/publica evaluaciones — SUPERVISIÓN, molde #4, `authorize!` al inicio de cada acción,
+scope-cubierto vía `CharacterEvaluation#group_id`/`grade_level_id` delegados al estudiante, mismo
+truco que `CareAura#group_id` en v1.37.0) y `hps.character.moderate` (modera aportes — y es la ÚNICA
+llave que alguna vez ve atribución de dador). El ACTO de dar un aporte de par/acudiente **no** usa
+`authorize!` — es una acción de identidad (co-pertenencia + consentimiento, §4), gateada enteramente
+por `PeerAppreciationRecorder`, nunca por RBAC. Ambas llaves nuevas son per-institución normales
+(heredadas por `institution_admin` vía bootstrap, NO cross-tenant).
+
+**Superficie de autoría** (`AnalyticsBi::CharacterEvaluationsController`, solo `new`/`create`): el
+punto de entrada es un estudiante ya supervisado (`student_id` en params), nunca un buscador de
+personas (no-negociable §1.1.6). Los `params[:dimensions]` (hash dinámico por `dimension_key`)
+requirieron `permit!.to_h` en vez de un allowlist estático de strong params — seguro aquí porque cada
+`dimension_key`/`level_label` se re-valida contra el `framework_snapshot` CONGELADO dentro del
+`Publisher` (una clave o nivel desconocido lanza `InvalidSelection`), así que no hay ninguna
+superficie de asignación masiva real: nada de ese hash se asigna a un atributo de modelo directamente.
+
+**Deferido, documentado (decisiones A3/A5):**
+- **A3 (umbral N)**: resuelto en N=3 como constante de módulo — NO configurable por institución
+  todavía. No existe ningún mecanismo de settings-por-institución en el codebase, e inventar una
+  tabla genérica para un solo número tunable habría sido especulación; se revisita cuando una
+  institución real lo pida.
+- **A5 (curación pedagógica)**: en vez de la UI de autoría de frameworks/dimensiones/niveles (CRUD),
+  `bin/rails bi:seed_character_starter[institution_id]` siembra un framework + catálogo de tags
+  STARTER usando el contenido de ejemplo que el propio §5.4 ya sugiere (dimensiones Lógica/
+  Creatividad/Empatía/Convivencia/Perseverancia; tags Buen compañero/Creativo-a/Ayuda a los demás/
+  Perseverante/Curioso-a) — explícitamente NO la curación pedagógica real que pedía A5, el placeholder
+  aburrido que la reemplaza hasta que exista una necesidad real de curación.
+- **A7**: `character_evaluations` también queda acoplado a `academic_terms` (mismo criterio que
+  `care_auras` en v1.37.0).
+- Fuera de alcance, explícitamente Slice 6: la superficie de dar un aporte de par desde el portal, la
+  UI de consentimiento del acudiente, y la ficha de la Lente 2 que consume todo esto.
+
+**Tests (22 nuevos, suite completa 657→679 runs / 0 fallos / 1 skip preexistente, en serie
+`PARALLEL_WORKERS=1`):** congelado del snapshot al publicar + inmutabilidad tras editar el framework
+en vivo + `InvalidSelection` sobre una selección desconocida + unicidad autor/estudiante/término/
+framework (tanto la validación de AR como el backstop de índice único de BD)
+(`character_evaluation_test.rb`); los seis resguardos anti-acoso completos — catálogo cerrado
+(un tag inactivo no puede usarse), XOR de dador (BD, con y sin validación), el índice parcial
+anti-duplicado como backstop de BD, el gate de consentimiento rechazando limpio a un receptor sin
+consentimiento y a un par-dador sin consentimiento, revocación de consentimiento cortando
+participación futura, un aporte consentido se registra e ID-empotente en reenvío, umbral de
+agregación (surge solo al llegar al umbral, un tag disperso queda oculto) y la proyección
+comprobadamente sin ningún campo de atribución, y moderación append-only + auditada + idempotente
+(`peer_appreciation_test.rb`); caso de aceptación de seguridad HTTP — la persona por defecto sin
+`hps.character.author` recibe 403 en `new` y en `create` (cero filas creadas), un titular real del
+permiso publica de verdad a través del `Publisher` (snapshot y puntuación verificados end-to-end), y
+el formulario de autoría renderiza (`analytics_bi_character_evaluation_test.rb`).
+
+**Guardrails nuevos** (ver `OPEN_PROCESS.md` §2): "un índice único parcial sobre una columna que
+puede quedar NULL por una relación XOR necesita un índice por cada lado de la XOR, nunca uno solo —
+Postgres nunca trata dos NULLs como duplicados entre sí"; "cuando el doc conceptual cita un molde que
+no existe en el repo (grep-confirmado), se reemplaza con la pieza mínima defendible y se documenta
+como corrección de referencia, igual que una desviación de tipo de columna"; "un consentimiento nuevo
+se modela como una tabla propia y mínima del dominio que lo necesita, nunca como un framework general
+de Habeas Data hasta que un segundo dominio lo pida de verdad".
+
 ### v1.38.0 — 2026-07-17 — `analytics_bi`: temporalidad año-a-año (Slice 4 de `BI_DOCUMENT.md`)
 
 **Noveno slice post-MVP, cuarto guiado por `guidelines/BI_DOCUMENT.md`.** Cierra el hueco que

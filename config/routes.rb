@@ -405,6 +405,12 @@ Rails.application.routes.draw do
     get "dashboard", to: "institution_dashboard#show", as: "institution_dashboard"
     resources :cross_tenant_reports, only: :index
     resources :spatial_classrooms, only: %i[index show]
+    # character_evaluations (T2, BI_DOCUMENT.md Slice 5): the docente/orientador
+    # write surface for the character instrument, gated by hps.character.author.
+    # new/create only — framework-authoring CRUD is seeded (bi:seed_character_starter),
+    # and the portal ficha (Lens 2) that reads it is Slice 6. The entry point is
+    # a supervised student (student_id param), never a person search (§1.1.6).
+    resources :character_evaluations, only: %i[new create]
   end
 
   # --- identity_access (domain views, Prompt Unificado) ---------------------

@@ -120,7 +120,24 @@ module IdentityAccess
       # hps.classroom.view). hps.* is a NORMAL per-institution permission
       # (institution_admin inherits it via bootstrap, like every key EXCEPT
       # cross_tenant_reports.view) — it is NOT cross-tenant.
-      "hps.aura.view" => "Ver auras de cuidado sobre el mapa del aula (Lente 5 del HPS, proyección abstracta)"
+      "hps.aura.view" => "Ver auras de cuidado sobre el mapa del aula (Lente 5 del HPS, proyección abstracta)",
+      # analytics_bi HPS T2 formativo (v1.39.0, BI_DOCUMENT.md Slice 5): the
+      # character-evaluation instrument (§5.4). Two WRITE keys, split by ACTION
+      # (author vs moderate), not by confidentiality:
+      #   hps.character.author  — a docente/orientador creates/publishes character
+      #     evaluations against a framework (AnalyticsBi::CharacterEvaluationsController,
+      #     molde #4 supervision, scope group_id via the student's section).
+      #   hps.character.moderate — moderates peer/guardian appreciations (flip to
+      #     withheld_by_moderation, append-only + audited). This is ALSO the only
+      #     key that may ever see giver attribution (§5.4 resguardo #3).
+      # The ACT of a peer/guardian GIVING an appreciation is NOT gated by RBAC —
+      # it's an identity action (co-membership + guardian consent, §4), handled by
+      # AnalyticsBi::Character::PeerAppreciationRecorder, never an authorize!.
+      # hps.* is a NORMAL per-institution permission (institution_admin inherits
+      # it via bootstrap, like every key EXCEPT cross_tenant_reports.view) — it is
+      # NOT cross-tenant.
+      "hps.character.author"   => "Crear y publicar evaluaciones de carácter (Lente 2 del HPS, T2)",
+      "hps.character.moderate" => "Moderar aportes de pares/acudientes (retirar y ver trazabilidad, auditado)"
     }.freeze
 
     def self.call

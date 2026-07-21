@@ -35,4 +35,60 @@ namespace :bi do
       puts "#{institution.name}: hps_term_snapshots=#{snapshots.size}"
     end
   end
+
+  # Slice 5 (BI_DOCUMENT.md §5.4). Seeds the STARTER character framework +
+  # peer_appreciation_tags using the doc's own §5.4 suggested content (curated,
+  # constructive-only). Idempotent — safe to re-run. Stands in for a
+  # framework-authoring UI, which is deferred until a real curation need (A5:
+  # "curar con orientación pedagógica antes del Slice 5" — this is the boring
+  # default). Usage: bin/rails bi:seed_character_starter[institution_id].
+  STARTER_DIMENSIONS = %w[Lógica Creatividad Empatía Convivencia Perseverancia].freeze
+  STARTER_LEVELS = [ "En desarrollo", "Consolidado", "Destacado" ].freeze
+  STARTER_TAGS = {
+    "Buen compañero"     => "convivencia",
+    "Creativo/a"         => "creatividad",
+    "Ayuda a los demás"  => "empatia",
+    "Perseverante"       => "perseverancia",
+    "Curioso/a"          => "logica"
+  }.freeze
+
+  desc "Seed the starter character framework + peer appreciation tags (Slice 5, §5.4). " \
+       "Idempotent. Usage: bin/rails bi:seed_character_starter[institution_id] (all if omitted)."
+  task :seed_character_starter, [ :institution_id ] => :environment do |_t, args|
+    institutions = args[:institution_id].presence ? Core::Institution.where(id: args[:institution_id]) : Core::Institution.all
+
+    institutions.find_each do |institution|
+      Current.set(institution_id: institution.id) do
+        ActiveRecord::Base.transaction do
+          Tenant::Guc.set_local(institution.id)
+
+          framework = AnalyticsBi::CharacterFramework.find_or_create_by!(
+            institution: institution, name: "Marco de carácter (base)"
+          ) do |f|
+            f.description = "Marco base sugerido por BI_DOCUMENT.md §5.4."
+            f.status = "published"
+          end
+
+          STARTER_DIMENSIONS.each_with_index do |name, position|
+            dimension = AnalyticsBi::CharacterDimension.find_or_create_by!(
+              institution: institution, framework: framework, name: name
+            ) { |d| d.position = position; d.weight = 1 }
+
+            STARTER_LEVELS.each_with_index do |label, level_position|
+              AnalyticsBi::CharacterLevel.find_or_create_by!(
+                institution: institution, dimension: dimension, label: label
+              ) { |l| l.position = level_position }
+            end
+          end
+
+          STARTER_TAGS.each do |label, category|
+            AnalyticsBi::PeerAppreciationTag.find_or_create_by!(
+              institution: institution, label: label
+            ) { |tag| tag.category = category; tag.active = true }
+          end
+        end
+      end
+      puts "#{institution.name}: character starter seeded (framework + #{STARTER_TAGS.size} tags)"
+    end
+  end
 end

@@ -35,7 +35,12 @@ module IdentityAccess
       # analytics_bi (v1.35.0): written every time a bi_auditor reads the
       # cross-tenant report (edu_bi_reader/BYPASSRLS) — see
       # AnalyticsBi::CrossTenantReportsController.
-      "cross_tenant_report_accessed"    => "Reporte cross-tenant accedido"
+      "cross_tenant_report_accessed"    => "Reporte cross-tenant accedido",
+      # analytics_bi (v1.39.0, BI_DOCUMENT.md Slice 5, §5.4 resguardo #6):
+      # written every time an hps.character.moderate holder withholds a peer/
+      # guardian appreciation — see AnalyticsBi::Character::Moderation. Moderation
+      # is an append-only status flip, never a destroy.
+      "peer_appreciation.withheld"      => "Aporte de par/acudiente retirado por moderación"
     }.freeze
 
     Page = Data.define(:events, :page, :total_pages, :total_count)

@@ -17,10 +17,10 @@
 
 | Campo | Valor |
 |---|---|
-| **Versión** | `v0.5.0` |
-| **Fecha** | 2026-07-17 |
-| **Estado global de referencia** | `PROJECT_STATE.md v1.38.0` — `analytics_bi` AMBAS mitades reales (`InstitutionDashboard`/`CrossTenantReportRoster`) **+ Lente 1 (Mapa de Empatía Espacial) real + Lente 5 (Auras de Cuidado) real + temporalidad año-a-año real** (`student_placements`/`hps_term_snapshots`). |
-| **Estado del dominio** | Filosofía, tiers de confidencialidad, ERD conceptual, modelo de acceso de las 5 lentes, guardas de RLS/clínicas, estrategia de procesamiento y slicing — **fijados**. **Slice 1 (cross-tenant) cerrado** (primera conexión BYPASSRLS real). **Slice 2 (Lente 1, mapa espacial + heat) cerrado (v1.36.0)** — geometría de aula (`classroom_layouts`/`seat_assignments`) net-new en `group_management` (decisión A2), heat derivado in-memory de T1 (notas/asistencia). **Slice 3 (Lente 5, "Auras de Cuidado") cerrado (v1.37.0)** — proyección `care_auras` net-new en `analytics_bi`, escrita SOLO por `AnalyticsBi::Aura::Projector` invocado desde `counseling` (cero PII clínica, cero acoplamiento inverso), leída por el docente como un ícono abstracto sobre la Lente 1 (`hps.aura.view`); aislamiento clínico probado a nivel de MODELO (SQL tap + estructura de asociaciones). **Slice 4 (temporalidad año-a-año) cerrado (v1.38.0)** — `student_placements` net-new en `group_management` (decisión A1 resuelta) efectivo-fechado/append-only vía `GroupManagement::SectionReassigner`, el ÚNICO seam que mueve un estudiante de sección; `hps_term_snapshots` net-new en `analytics_bi` (§7), congelado por `AnalyticsBi::Hps::Snapshotter` vía el fan-out `HpsTermSnapshotJob`/`HpsTermSnapshotAllJob`. Slices 5–8 (net-new, T2 formativo) sin construir aún. |
+| **Versión** | `v0.6.0` |
+| **Fecha** | 2026-07-21 |
+| **Estado global de referencia** | `PROJECT_STATE.md v1.39.0` — `analytics_bi` AMBAS mitades reales (`InstitutionDashboard`/`CrossTenantReportRoster`) **+ Lente 1 real + Lente 5 real + temporalidad año-a-año real + instrumento de carácter (T2) real** (`character_evaluations`/`peer_appreciations`, primer consentimiento del codebase). |
+| **Estado del dominio** | Filosofía, tiers de confidencialidad, ERD conceptual, modelo de acceso de las 5 lentes, guardas de RLS/clínicas, estrategia de procesamiento y slicing — **fijados**. **Slice 1 (cross-tenant) cerrado** (primera conexión BYPASSRLS real). **Slice 2 (Lente 1, mapa espacial + heat) cerrado (v1.36.0)** — geometría de aula (`classroom_layouts`/`seat_assignments`) net-new en `group_management` (decisión A2), heat derivado in-memory de T1 (notas/asistencia). **Slice 3 (Lente 5, "Auras de Cuidado") cerrado (v1.37.0)** — proyección `care_auras` net-new en `analytics_bi`, escrita SOLO por `AnalyticsBi::Aura::Projector` invocado desde `counseling` (cero PII clínica, cero acoplamiento inverso), leída por el docente como un ícono abstracto sobre la Lente 1 (`hps.aura.view`); aislamiento clínico probado a nivel de MODELO (SQL tap + estructura de asociaciones). **Slice 4 (temporalidad año-a-año) cerrado (v1.38.0)** — `student_placements` net-new en `group_management` (decisión A1 resuelta) efectivo-fechado/append-only vía `GroupManagement::SectionReassigner`, el ÚNICO seam que mueve un estudiante de sección; `hps_term_snapshots` net-new en `analytics_bi` (§7), congelado por `AnalyticsBi::Hps::Snapshotter` vía el fan-out `HpsTermSnapshotJob`/`HpsTermSnapshotAllJob`. **Slice 5 (instrumento de carácter, T2) cerrado (v1.39.0)** — el instrumento staff-autoría (`character_frameworks`→`evaluations`→`dimension_scores`, molde rúbrica con `framework_snapshot` congelado) y, SEPARADO, el camino de pares/acudientes (`peer_appreciations`, catálogo cerrado `peer_appreciation_tags`, umbral de agregación, moderación append-only) gateado por el **primer consentimiento del codebase** (`character_program_consents`). Slices 6–8 (Lente 2/ficha, afinidades/Lente 3, núcleo familiar/Lente 4) sin construir aún. |
 
 **Versionado (igual que los demás docs):** MAJOR = cambia una decisión de diseño asentada del dominio
 o su modelo de tiers · MINOR = se cierra un slice o una decisión abierta · PATCH =
@@ -776,15 +776,130 @@ Antes de dar por cerrado cualquier slice de este dominio:
 |---|---|---|
 | **A1** | ¿`student_placements` (§5.2) lo escribe `analytics_bi` o `group_management`? | **✅ RESUELTO (v1.38.0): `group_management`** (dueño de `students`/`sections` — modelo `GroupManagement::StudentPlacement`, escritura vía `GroupManagement::SectionReassigner`, el único seam que mueve un estudiante de sección); `analytics_bi` solo lee (`AnalyticsBi::PlacementScope`). |
 | **A2** | ¿`classroom_layouts`/`seat_assignments` (§5.3) viven en `analytics_bi` o `group_management`? | **✅ RESUELTO (v1.36.0): `group_management`** (dato del aula física — modelos `GroupManagement::ClassroomLayout`/`SeatAssignment`, escritura vía `ClassroomReconfigurer`/`SeatAssigner` gateada por `groups.manage`); `analytics_bi` solo lee (`AnalyticsBi::Lens::SpatialClassroomScope`) para la Lente 1. |
-| **A3** | Umbral N de agregación para tags de pares (§5.4) | N ≥ 3, configurable por institución. |
+| **A3** | Umbral N de agregación para tags de pares (§5.4) | **✅ RESUELTO (v1.39.0): N = 3**, como constante de módulo (`AnalyticsBi::Character::PeerAppreciationRecorder::AGGREGATION_THRESHOLD`), **NO configurable por institución todavía** — no existe ningún mecanismo de settings-por-institución en el codebase, e inventar una tabla genérica para un solo número es especulativo (deferido hasta que una institución real lo pida). |
 | **A4** | ¿`analytics_bi` se vuelve dominio medido (`Usage::Ingest.emit`)? | No por ahora (`metered:false`); sin evento facturable claro. |
-| **A5** | Set inicial de `character_frameworks` y `peer_appreciation_tags` | Curar con orientación pedagógica antes del Slice 5; solo constructivos. |
+| **A5** | Set inicial de `character_frameworks` y `peer_appreciation_tags` | **✅ RESUELTO (v1.39.0): sembrado un set STARTER** (`bin/rails bi:seed_character_starter`) usando el contenido que este mismo §5.4 ya sugiere (dimensiones Lógica/Creatividad/Empatía/Convivencia/Perseverancia; tags Buen compañero/Creativo-a/Ayuda a los demás/Perseverante/Curioso-a) — **NO** es la curación pedagógica real que esta decisión pedía; es el placeholder "aburrido" que reemplaza una UI de autoría de frameworks, deferida hasta una necesidad real de curación. |
 | **A6** | ¿La "tensión del vínculo" y la "alerta de lazos fraternales" (§5.6) se persisten como snapshot o se computan vivas? | Vivas al inicio; snapshot por término si pesa (§7). |
-| **A7** | Fechado de `character_evaluations`/`care_auras`: ¿se acopla a `academic_terms` o calendario independiente? | **✅ RESUELTO para `care_auras` (v1.37.0): acoplado a `academic_terms`** (`care_auras.academic_term_id` FK NOT NULL; el `Projector` toma `Core::AcademicTerm.active`). `character_evaluations` sigue con el lean propuesto; reevaluar B2 al construir el Slice 5. |
+| **A7** | Fechado de `character_evaluations`/`care_auras`: ¿se acopla a `academic_terms` o calendario independiente? | **✅ RESUELTO para ambos.** `care_auras` (v1.37.0): acoplado a `academic_terms` (`care_auras.academic_term_id` FK NOT NULL; el `Projector` toma `Core::AcademicTerm.active`). **`character_evaluations` (v1.39.0): también acoplado a `academic_terms`** (mismo criterio — `academic_term_id` FK NOT NULL, parte de la unicidad `(student, term, framework, author)`; el controller resuelve `Core::AcademicTerm.active`). |
 
 ---
 
 ## 14. Changelog
+
+### v0.6.0 — 2026-07-21 — Slice 5 cerrado: instrumento de carácter (T2) + aportes de pares/acudientes
+
+- **La pieza de mayor tensión NNA construida hasta ahora (Clase S, junto con la Lente 5): el primer
+  tier T2 formativo real, y el primer CONSENTIMIENTO del codebase.** Dos piezas independientes, nunca
+  mezcladas — la evaluación de autoría staff (profesional, T2) y el aporte de pares/acudientes
+  (identidad, con resguardos anti-acoso duros).
+
+- **Instrumento staff-autoría, molde rúbrica exacto** (§5.4): `AnalyticsBi::CharacterFramework` (`name`/
+  `description`/`status` draft·published·archived) → `AnalyticsBi::CharacterDimension` (`name`/
+  `position`/`weight`) → `AnalyticsBi::CharacterLevel` (`label`/`descriptor` cualitativo — **nunca un
+  número**, no-negociable §1.1.2) → `AnalyticsBi::CharacterEvaluation` (`framework_snapshot` jsonb
+  **congelado al publicar**, molde exacto `assignments.rubric_snapshot`/`price_tiers_snapshot`; único
+  índice `(institution, student, term, framework, author)` — un autor no evalúa dos veces al mismo
+  estudiante en el mismo término con el mismo marco) → `AnalyticsBi::CharacterDimensionScore`
+  (`dimension_key` texto que referencia el snapshot CONGELADO, NUNCA un FK vivo — mismo molde que las
+  puntuaciones de rúbrica: editar/archivar un framework después de publicar nunca reescribe una
+  evaluación ya publicada). `AnalyticsBi::Character::Publisher` congela y valida cada selección contra
+  el snapshot (`InvalidSelection` si la dimensión/nivel no existía al momento de publicar).
+
+- **Aportes de pares/acudientes — tabla SEPARADA, con los seis resguardos de §5.4 hechos cumplir por
+  CONSTRUCCIÓN, no por convención:**
+  1. **Sin texto libre, nunca**: `peer_appreciations` no tiene NINGUNA columna de texto — solo
+     `tag_id` hacia `peer_appreciation_tags` (catálogo cerrado, curado, solo-constructivo). Es
+     estructuralmente imposible escribir un insulto, no solo bloqueado a nivel de servicio.
+  2. **Umbral de agregación antes de surfacear** (decisión A3 resuelta: N=3, constante de módulo, NO
+     configurable por institución — no existe mecanismo de settings-por-institución en el codebase,
+     inventar una tabla para un solo número es especulativo, deferido). `AnalyticsBi::Character::
+     PeerAppreciationDigest` es el ÚNICO camino de lectura sancionado — agrega por tag, filtra por
+     umbral, y **nunca expone `giver_student_id`/`giver_guardian_user_id`** (allowlist por
+     construcción: el `Data.define(:tag_label, :category, :count)` de retorno no tiene ningún campo
+     de atribución). Construido y probado ahora aunque nada lo renderiza todavía — el Slice 6/Lente 2
+     lo consume.
+  3. **Nunca atribuible fuera de `hps.character.moderate`**: las columnas de identidad del dador
+     (`giver_student_id`/`giver_guardian_user_id`) existen SOLO para `AnalyticsBi::Character::
+     Moderation` y el rastro de auditoría.
+  4. **Solo fortalezas**: el catálogo `peer_appreciation_tags` es curado y constructivo por diseño
+     (sembrado con el propio contenido de ejemplo de este §5.4 — ver A5 abajo).
+  5. **Consentimiento del acudiente**: ver el primitivo nuevo, abajo.
+  6. **Moderación append-only**: `AnalyticsBi::Character::Moderation.withhold!` es un flip de estado
+     (`active` → `withheld_by_moderation`), **nunca** un `destroy`; cada withhold audita
+     (`peer_appreciation.withheld`, nuevo en `IdentityAccess::AuditEventIndex::ACTIONS`). Idempotente:
+     un segundo withhold sobre una fila ya retirada no vuelve a auditar.
+
+- **XOR de identidad del dador** — `giver_kind` (`peer_student`/`guardian`, string+CHECK) más
+  `num_nonnulls(giver_student_id, giver_guardian_user_id) = 1`, el mismo molde de
+  `messages_sender_identity_check`/`conversation_participants_identity_check`. El acudiente-dador es
+  un `Core::User` global (misma columna de identidad que `guardian_students.guardian_user_id`), NO un
+  `institution_user` — un acudiente no es staff.
+
+- **Anti-duplicado/anti-brigading REFORZADO más allá del boceto de §5.4**: DOS índices únicos
+  parciales `WHERE status='active'` (uno por columna de dador), no uno solo — porque el CHECK XOR
+  garantiza que exactamente una columna de dador es no-nula por fila, y una columna NULL es "distinta"
+  dentro de un índice único de Postgres; un solo índice sobre `giver_student_id` habría dejado a
+  cualquier acudiente repetir el mismo tag al mismo estudiante sin límite (todas sus filas comparten
+  `giver_student_id: NULL`, que Postgres nunca considera "duplicado"). Desviación documentada,
+  endurecimiento real encontrado durante la construcción, no un capricho de diseño.
+
+- **`AnalyticsBi::CharacterProgramConsent` — el primer primitivo de consentimiento del codebase**
+  (§5.4 punto 5). El doc apuntaba a un molde `assignments.requires_consent` que **no existe en ningún
+  lugar del repo** (grep-confirmado) — una referencia obsoleta/aspiracional, la misma clase de
+  corrección que ya hicieron los Slices 2 y 3 sobre otros moldes citados. Reemplazo: una tabla
+  tenant-scoped, PROPIA de `analytics_bi` (deliberadamente NO un framework general de Habeas Data —
+  ese alcance mayor no está pedido ni justificado todavía), append-only (`granted_at`/`revoked_at`,
+  índice único parcial "una consent activa por estudiante" `WHERE revoked_at IS NULL`, molde
+  `care_auras` de una-activa-a-la-vez). `AnalyticsBi::Character::PeerAppreciationRecorder` exige
+  consentimiento activo del **estudiante que recibe** siempre, y del **par que da** si el dador es
+  otro estudiante (un acudiente-dador es adulto, sin gate de consentimiento propio) — rechazo limpio
+  (`ConsentRequired`), nunca un 500. **Alcance deliberadamente acotado**: esta pieza NO incluye la UI
+  de otorgar/revocar consentimiento desde el portal del acudiente — el modelo + `grant!`/`revoke!` +
+  el gate ya están completos y probados; la superficie de portal se construye en el Slice 6 (donde de
+  todas formas se construye el resto del portal del acudiente para este dominio).
+
+- **Permisos nuevos** (`SeedPermissions::CATALOG`): `hps.character.author` (docente/orientador
+  crea/publica evaluaciones — SUPERVISIÓN, molde #4, `authorize!` al inicio de cada acción,
+  scope-cubierto vía `CharacterEvaluation#group_id`/`grade_level_id` delegados al estudiante, mismo
+  truco que `care_aura#group_id`) y `hps.character.moderate` (modera aportes — y es la ÚNICA llave que
+  alguna vez ve atribución). El ACTO de dar un aporte de par/acudiente **no** usa `authorize!` — es una
+  acción de identidad (co-pertenencia + consentimiento, §4), gateada enteramente por
+  `PeerAppreciationRecorder`. Ambas llaves nuevas son per-institución normales (heredadas por
+  `institution_admin` vía bootstrap, NO cross-tenant).
+
+- **Superficie de autoría** (`AnalyticsBi::CharacterEvaluationsController`, `new`/`create` solamente):
+  el punto de entrada es un estudiante ya supervisado (`student_id` en params), nunca un buscador de
+  personas (no-negociable §1.1.6). **Deferido, documentado**: la UI de autoría de
+  frameworks/dimensiones/niveles (CRUD) — en su lugar, `bin/rails bi:seed_character_starter` siembra
+  un framework + catálogo de tags STARTER usando el contenido de ejemplo que este mismo §5.4 ya sugiere
+  (dimensiones Lógica/Creatividad/Empatía/Convivencia/Perseverancia; tags Buen compañero/Creativo-a/
+  Ayuda a los demás/Perseverante/Curioso-a) — **no** es la curación pedagógica real que pedía la
+  decisión A5, es el placeholder aburrido que la reemplaza hasta que haya una necesidad real de
+  curación. Ni la superficie de dar un aporte de par (portal) ni la ficha de la Lente 2 se construyen
+  en este slice — ambas son Slice 6.
+
+- **Decisiones A3/A5/A7 resueltas** (ver §13): umbral N=3 no-configurable-todavía; set starter
+  sembrado (no curado pedagógicamente); `character_evaluations` acoplado a `academic_terms` (mismo
+  criterio que `care_auras`).
+
+- **Tests (22 nuevos, suite completa 657→679 runs / 0 fallos / 1 skip preexistente, en serie
+  `PARALLEL_WORKERS=1`):** congelado del snapshot al publicar + inmutabilidad tras editar el framework
+  + `InvalidSelection` + unicidad autor/estudiante/término/framework (AR y backstop de BD)
+  (`character_evaluation_test.rb`); los seis resguardos anti-acoso (catálogo cerrado, XOR de dador —
+  BD y AR, índice parcial anti-duplicado como backstop de BD, gate de consentimiento rechazando
+  receptor-sin-consentimiento y par-dador-sin-consentimiento limpiamente, revocación corta
+  participación futura, umbral de agregación + proyección jamás atribuible, moderación append-only +
+  auditada + idempotente) (`peer_appreciation_test.rb`); caso de aceptación de seguridad HTTP (la
+  persona por defecto sin `hps.character.author` recibe 403 en `new`/`create`, un titular publica de
+  verdad a través del `Publisher`, el formulario renderiza) (`analytics_bi_character_evaluation_test.rb`).
+
+- **Gotcha real encontrado** (para quien construya sobre esto): los dos índices únicos parciales por
+  columna de dador (arriba) no estaban en el boceto original de §5.4 — se detectaron al razonar sobre
+  qué hace un índice único de Postgres con NULLs (cada NULL es distinto), no al correr un test que
+  fallara. Vale la pena re-chequear ese razonamiento en cualquier índice parcial futuro sobre una
+  columna que puede ser NULL por una XOR.
+
+- Ver `HISTORIA.md` v1.39.0 para la narrativa completa del slice.
 
 ### v0.5.0 — 2026-07-17 — Slice 4 cerrado: temporalidad año-a-año (`student_placements` + `hps_term_snapshots`)
 
