@@ -17,6 +17,53 @@
 > moviera el changelog fuera del doc magro. Las entradas v1.6.0+ se escribieron directamente aquí,
 > ya con el split vigente.
 
+### v1.41.0 — 2026-07-21 — `schedules`: matrícula por materia, acción deliberada (cierre de `CLOSURE_PLAN.md` §4.4)
+
+**No es un slice de `BI_DOCUMENT.md`** — es el primer ítem de `guidelines/CLOSURE_PLAN.md` (el plan de
+cierre end-to-end recién adoptado), insertado por decisión del owner ANTES de continuar con el Slice 7
+de HPS, porque era un hueco de operabilidad real que el propio plan detectó al validar la matriz de
+operabilidad (§2/§4.4 de ese documento).
+
+**El hallazgo**: `Schedules::Enrollment` (tabla `enrollments`, per-subject×term) solo nacía como efecto
+secundario de `Schedules::GradeEntriesController#create` — un `find_or_create_by!` disparado al
+registrar la PRIMERA nota de un estudiante en una materia. La importación de roster CSV tampoco crea
+matrículas (`RosterImport::Strategy` solo despacha `students`/`guardians`). No existía ninguna acción
+deliberada "matricular a este estudiante en esta materia" — un colegio no podía matricular a un
+estudiante ANTES de que existiera una nota, ni matricularlo sin también registrar una.
+
+**La corrección, deliberadamente mínima**: `Schedules::EnrollmentsController#create` (nested bajo
+`resources :subjects, path: "grades"`, `resource :enrollment, only: :create`) expone la MISMA llamada
+idempotente que ya usaba `GradeEntriesController` (`find_or_create_by!` sobre `(institution, student,
+subject)`, mismo lookup por `student_code`, misma resolución del término activo) — pero como su propia
+acción, sin ninguna nota de por medio. **Reusa el permiso existente `grades.write`** (el mismo que ya
+gatea implícitamente la matrícula vía el efecto secundario de calificar) — **ningún permiso nuevo**,
+siguiendo la disciplina de este codebase de revisar el catálogo antes de inventar una llave. Re-enviar
+el mismo código de estudiante es un no-op amable ("Ya estaba matriculado"), nunca un error — el índice
+único `(institution_id, student_id, subject_id)` ya existente es el backstop de BD; un código
+desconocido re-renderiza el show de la materia con un error, nunca un 500 (misma postura que el
+`:new` de `GradeEntriesController`).
+
+**Sin acción de retiro/unenroll — decisión de alcance, no un olvido.** Se evaluó el molde
+`activity_enrollments` de `extracurriculars` (retiro soft-delete, `status: withdrawn`, nunca
+`destroy`) como precedente, pero ese molde depende de un índice único PARCIAL `WHERE status='active'`
+(`idx_activity_enrollments_active_unique`) — el índice único de `enrollments` es PLANO, sin scope por
+`status`. Agregar un retiro real aquí exige o bien un hard-delete que arrastra el historial de
+`Assessment` vía `dependent: :destroy` (pérdida de historia), o bien cambiar el índice único a uno
+parcial (una decisión de migración real, no un añadido trivial al mismo PR). Se dejó documentado en
+`config/routes.rb` y se mantiene como alcance honesto de este cierre — create-only.
+
+**Craft note del constructor**: la orquestación multi-objeto (resolver estudiante → resolver término →
+`find_or_create_by!`) vive en el controller, no en un método de modelo (`@subject.enroll(student)`) —
+inconsistente con el estilo "modelo gordo" que 37signals preferiría, pero deliberado: el sibling
+`GradeEntriesController#create` YA hace exactamente esta misma coreografía en el controller, así que
+partir la lógica en dos formas distintas para dos acciones casi idénticas del mismo dominio habría sido
+peor que la inconsistencia de estilo.
+
+**Tests (4 nuevos, suite completa 700→704 runs / 0 fallos / 1 skip preexistente, en serie
+`PARALLEL_WORKERS=1`):** matricular sin nota ni matrícula previa (el hueco exacto que esto cierra,
+verificado con `assessments.count == 0`); re-matricular es no-op idempotente amable; un código de
+estudiante desconocido responde 422 con mensaje, nunca 500; un rol sin `grades.write` recibe 403.
+
 ### v1.40.0 — 2026-07-21 — `analytics_bi`: Lente 2 "Ficha de Personaje" (Slice 6 de `BI_DOCUMENT.md`)
 
 **Undécimo slice post-MVP, sexto guiado por `guidelines/BI_DOCUMENT.md`, y el primero de AUTOSERVICIO

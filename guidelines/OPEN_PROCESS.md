@@ -168,6 +168,8 @@
     - **Gotcha real**: el comentario `<%# locals: (card:) %>` de un partial Rails debe quedar solo en su línea — prosa adjunta rompe la firma del método compilado (`SyntaxErrorInTemplate`).
     - 21 tests nuevos (679→700 runs totales, 0 fallos, 1 skip preexistente, en serie). Ver `HISTORIA.md` v1.40.0.
 
+26. **`schedules` — matrícula por materia, acción deliberada** (`guidelines/CLOSURE_PLAN.md` §4.4, NO un slice de `BI_DOCUMENT.md`) — ✅ **cerrado (v1.41.0).** Insertado por decisión del owner antes de continuar con el Slice 7 de HPS: `Schedules::Enrollment` solo nacía como efecto secundario de `GradeEntriesController#create` (la primera nota); ahora `Schedules::EnrollmentsController#create` expone la misma llamada idempotente como su propia acción, sin requerir una nota. Reusa `grades.write` (ningún permiso nuevo). Sin retiro/unenroll — el índice único de `enrollments` no está scoped por `status` como el de `activity_enrollments`, así que un retiro real necesita su propia decisión de migración; documentado como alcance honesto, no un olvido. 4 tests nuevos (700→704 runs totales, 0 fallos, 1 skip preexistente, en serie). Ver `HISTORIA.md` v1.41.0.
+
 ---
 
 ## 2. Guardrails operativos (recordatorio permanente)

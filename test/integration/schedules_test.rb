@@ -168,6 +168,65 @@ class SchedulesTest < ActionDispatch::IntegrationTest
     end
   end
 
+  # CLOSURE_PLAN §4.4: matricular ya no depende de calificar. Antes de esta
+  # acción, Schedules::Enrollment SOLO nacía como efecto secundario de
+  # GradeEntriesController#create — este test cubre exactamente el hueco que
+  # cierra: un Enrollment sin ningún Assessment.
+  test "staff with grades.write can enroll a student with no prior grade or enrollment" do
+    student = within_tenant(@institution) do
+      GroupManagement::Student.create!(institution: @institution, first_name: "Mariana", last_name: "Ortiz",
+        gender: "female", birthdate: Date.new(2012, 4, 1), student_code: "COL-E-301", entry_year: 2023,
+        grade_level: @grado_9)
+    end
+
+    as_teacher_9a do
+      post "/schedules/grades/#{@algebra.id}/enrollment", params: { student_id: "COL-E-301" }
+      assert_redirected_to schedules_subject_path(@algebra)
+      follow_redirect!
+      assert_match(/Estudiante matriculado/, flash[:notice].to_s)
+
+      enrollment = Schedules::Enrollment.find_by(institution_id: @institution.id, student_id: student.id, subject_id: @algebra.id)
+      assert_not_nil enrollment
+      assert_equal 0, enrollment.assessments.count
+    end
+  end
+
+  test "enrolling an already-enrolled student is a friendly idempotent no-op" do
+    student = within_tenant(@institution) do
+      GroupManagement::Student.create!(institution: @institution, first_name: "Laura", last_name: "Pérez",
+        gender: "female", birthdate: Date.new(2012, 4, 1), student_code: "COL-E-302", entry_year: 2023,
+        grade_level: @grado_9)
+    end
+
+    as_teacher_9a do
+      post "/schedules/grades/#{@algebra.id}/enrollment", params: { student_id: "COL-E-302" }
+      assert_equal 1,
+        Schedules::Enrollment.where(institution_id: @institution.id, student_id: student.id, subject_id: @algebra.id).count
+
+      post "/schedules/grades/#{@algebra.id}/enrollment", params: { student_id: "COL-E-302" }
+      assert_redirected_to schedules_subject_path(@algebra)
+      follow_redirect!
+      assert_match(/Ya estaba matriculado/, flash[:notice].to_s)
+
+      assert_equal 1,
+        Schedules::Enrollment.where(institution_id: @institution.id, student_id: student.id, subject_id: @algebra.id).count
+    end
+  end
+
+  test "enrolling an unknown student code shows an error, not a 500" do
+    as_teacher_9a do
+      post "/schedules/grades/#{@algebra.id}/enrollment", params: { student_id: "NOPE" }
+      assert_response :unprocessable_entity
+    end
+  end
+
+  test "a role without grades.write is denied the matriculation action (403)" do
+    as_grades_reader do
+      post "/schedules/grades/#{@algebra.id}/enrollment", params: { student_id: "COL-E-303" }
+      assert_response :forbidden
+    end
+  end
+
   test "cross-tenant: a subject seeded in a different institution never leaks into this one's index" do
     other_institution = Core::Institution.create!(name: "Colegio Otro", slug: "sched-other-#{SecureRandom.hex(4)}",
       code: "C-#{SecureRandom.hex(3)}", kind: "school")

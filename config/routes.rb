@@ -211,6 +211,14 @@ Rails.application.routes.draw do
   namespace :schedules do
     resources :subjects, only: %i[index show], path: "grades" do
       resources :grade_entries, only: %i[new create]
+      # Deliberate matriculation, decoupled from grading (CLOSURE_PLAN §4.4).
+      # Singular resource, create-only: an honest, scoped MVP. A "withdraw"
+      # counterpart is deliberately NOT added here — unlike activity_enrollments'
+      # partial unique index (scoped by status: 'active'), this table's unique
+      # index is a plain (institution_id, student_id, subject_id), not scoped
+      # by status, so a real withdraw/re-enroll flow needs its own migration
+      # decision, not a same-PR add-on.
+      resource :enrollment, only: :create, controller: "enrollments"
     end
     resource :my_schedule, only: :show, controller: "my_schedule"
     resource :timetable, only: :show, controller: "timetables"

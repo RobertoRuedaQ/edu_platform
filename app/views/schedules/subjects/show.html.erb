@@ -5,6 +5,19 @@
       subtitle: "#{@subject.grade_level&.name || @subject.program&.name} · #{@subject.term}",
       actions: (can?("grades.write", @subject) ? ui_button("Registrar calificación", href: new_schedules_subject_grade_entry_path(@subject), variant: :primary) : nil) %>
 
+<% if @error -%>
+  <%= render "shared/alert", variant: :danger, message: @error %>
+<% end -%>
+
+<% if can?("grades.write", @subject) -%>
+  <%= form_with url: schedules_subject_enrollment_path(@subject), method: :post do %>
+    <%= render "shared/field", label: "Matricular estudiante", name: "student_id",
+          placeholder: "Código del estudiante", required: true %>
+
+    <%= ui_button "Matricular", type: "submit", variant: :primary %>
+  <% end %>
+<% end -%>
+
 <% if @enrollments.any? -%>
   <%= render layout: "shared/table",
         locals: { headers: ["Estudiante", "Calificaciones"] } do -%>
