@@ -23,11 +23,10 @@
 
 ## 1. Backlog pendiente (orden sugerido)
 
-> **Estado de este backlog (actualizado 2026-07-22, tras cerrar `cafeteria` resto v1.51.0 y M1
-> `cafeteria`/`transportation` v1.52.0):** no queda ningún ítem listo para construir con un default
-> seguro — a diferencia de esos dos (un stub existente con lógica ya inferible, o un evento real ya
-> wireable con un molde idéntico ya usado 6 veces), **todo lo que sigue está gateado por una
-> confirmación explícita del owner o una decisión de negocio real.** Cada ítem indica cuál.
+> **No queda ningún ítem listo para construir con un default seguro** (a diferencia de un stub
+> existente con lógica ya inferible, o un evento real ya wireable con un molde ya usado varias
+> veces) — **todo lo que sigue está gateado por una confirmación explícita del owner o una decisión
+> de negocio real.** Cada ítem indica cuál.
 
 1. **Fase D — greenfield puro, sin urgencia** — ⛔ **gateado: requiere confirmación explícita**
    (`guidelines/CLOSURE_PLAN.md` §5, Tier C de `PROJECT_STATE.md` §4: "crear SOLO bajo confirmación
