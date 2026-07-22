@@ -212,6 +212,13 @@
     - **Primer amendment MAJOR de `BI_DOCUMENT.md`** (v0.9.0→v1.0.0) — cambia la decisión asentada "son exactamente 5 lentes"; resuelto a favor de la enmienda (no un mini-spec separado) para mantener una sola fuente de verdad.
     - 10 tests nuevos (753→763 runs totales, 0 fallos, 1 skip preexistente, en serie). Ver `HISTORIA.md` v1.46.0.
 
+32. **`cafeteria` — chequeo de alérgenos real** (`guidelines/CLOSURE_PLAN.md` Fase D, primer incremento) — ✅ **cerrado (v1.47.0).** Fase D es nice-to-have/driver-based, fuera del criterio de hecho ya completo (v1.46.0) — este incremento arranca la fase a pedido del owner.
+    - **El hallazgo**: `Cafeteria::DietaryRestriction` (tabla + modelo + seed) era real desde el día uno, pero `CheckoutsController` seguía leyendo un stub PARALELO (`DietaryRestrictionRoster`, retirado) — el bloqueo de compra por alergia nunca corría contra un estudiante real.
+    - **Corregida también una afirmación desactualizada en `PROJECT_STATE.md`**: la línea de `cafeteria` decía "lee `student_support`" — el código nunca hizo esa lectura; son dominios independientes.
+    - `DietaryRestriction` ganó `ALLERGEN_NAMES`/`BLOCKING_TYPES` (separa alergias reales de preferencias informativas) + `severity_symbol` (traduce el español sembrado al inglés que `shared/_allergen_flag` espera). `CheckoutsController` resuelve al estudiante por `student_code` real, retirando otro uso de `GroupManagement::StudentRoster`.
+    - **Deliberadamente fuera de alcance**: `MenuRoster`/`Purchase`/`StudentAccount` siguen stub — modelar un menú/compra/saldo real es una pieza más grande, dejada para un futuro incremento driver-based.
+    - 4 tests nuevos + 3 existentes corregidos (dependían del stub con IDs falsos) (763→767 runs totales, 0 fallos, 1 skip preexistente, en serie). Ver `HISTORIA.md` v1.47.0.
+
 ---
 
 ## 2. Guardrails operativos (recordatorio permanente)

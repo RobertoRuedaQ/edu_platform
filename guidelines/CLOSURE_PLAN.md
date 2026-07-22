@@ -20,6 +20,11 @@
 > default, revisar cuando exista una necesidad real" ya aplicado repetidamente en este proyecto. Solo
 > Fase D (tier C, nice-to-have, fuera del criterio de hecho) sigue sin construir — nunca estuvo en
 > alcance de este plan.
+>
+> **Actualización (2026-07-21): Fase D iniciada, a pedido explícito del owner, driver-based (una
+> pieza a la vez).** Primer incremento (v1.47.0): `cafeteria` — chequeo de alérgenos real
+> (`Cafeteria::DietaryRestriction`, que YA era real, ahora conectado de verdad al checkout en vez de
+> un stub paralelo). Ver §5/Fase D abajo para el resto pendiente.
 
 ---
 
@@ -150,11 +155,26 @@ real. Ver `HISTORIA.md` v1.46.0.
   automática). Se apoyó en todo lo anterior, tal como el plan preveía: sin puntos de quiebre porque
   asistencia/notas/auras/disciplinario ya eran reales al llegar aquí. Ver `HISTORIA.md` v1.46.0.
 
-### FASE D — Tier C propiamente (nice-to-have, fuera del criterio de hecho)
-- Resto de `student_support` (medical/accommodations) → habilita alérgenos → `cafeteria` →
-  `transportation` → timetable → `admissions`/`library`. **Driver-based**, como ya fijaba
-  `LINEAMIENTOS_MVP_ITER2.md §4` (doc no localizado en el repo — ver nota de reconciliación arriba).
-  No bloquea nada de A–C.
+### FASE D — Tier C propiamente (nice-to-have, fuera del criterio de hecho) — EN CURSO, driver-based
+> **Corrección a la secuencia original**: este bloque asumía que "habilitar alérgenos" en `cafeteria`
+> dependía de terminar `student_support` (medical/accommodations) primero. El recon del primer
+> incremento (v1.47.0) mostró que NO es así — `cafeteria` ya tenía su propio `Cafeteria::
+> DietaryRestriction` real e independiente, sin ninguna lectura cruzada a `student_support`. Los dos
+> hilos son paralelos, no secuenciales; se corrige aquí (el repo manda sobre el plan).
+
+- ~~**`cafeteria` — chequeo de alérgenos**~~ ✅ **CERRADO (v1.47.0).** `Cafeteria::DietaryRestriction`
+  (ya real) conectado de verdad al checkout, reemplazando el stub paralelo `DietaryRestrictionRoster`.
+  `MenuRoster`/`Purchase`/`StudentAccount` (menú, venta, saldo) siguen stub — deferido, es una pieza
+  más grande (Menú/MenuItem + Compra + deducción de saldo con locking). Ver `HISTORIA.md` v1.47.0.
+- **`student_support` — resto** (`medical_history`/`accommodations`, ambos aún stub con
+  `flash[:notice]` falso en `accommodations#update`) — sin construir. Candidato natural para el
+  próximo incremento: mismo molde que `disciplinary_logs` (v1.45.0) — `medical_history` es de
+  SOLO LECTURA hoy (dos niveles ya modelados vía permisos `medical_history.view`/`.view_summary`);
+  `accommodations` tiene edición (`accommodations.manage`) pero NINGUNA acción de creación en las
+  rutas actuales (`only: %i[index edit update]`) — confirmar con el owner si construir un `new`/
+  `create` real entra en el mismo incremento o se difiere, igual que se hizo con `academic_terms`.
+- **`cafeteria` — resto** (Menú/Compra/Saldo) — sin construir, driver-based, cuando haya necesidad.
+- **`transportation` / timetable / `admissions`/`library`** — sin construir, sin recon todavía.
 
 ---
 

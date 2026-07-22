@@ -42,31 +42,64 @@ class CafeteriaTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "checkout new reflects the allergen block for a student with a matching allergy" do
+  # Cafeteria::DietaryRestriction is real (seeded via db/seeds.rb since day
+  # one); only CheckoutsController read a parallel STUB until guidelines/
+  # CLOSURE_PLAN.md Fase D wired the real model in. These build a real
+  # student + a real restriction row instead of the old stub's fake "s-1".
+  def build_student_with_allergy(restriction_type: "alergia_mani")
+    ActiveRecord::Base.transaction do
+      Tenant::Guc.set_local(@institution.id)
+      grade = GroupManagement::GradeLevel.create!(institution: @institution, name: "Grado 9", level_number: 9)
+      section = GroupManagement::Section.create!(institution: @institution, grade_level: grade, name: "9A", academic_year: 2026)
+      student = GroupManagement::Student.create!(institution: @institution, grade_level: grade, section: section,
+        first_name: "Ana", last_name: "P", gender: "female", birthdate: Date.new(2013, 3, 1),
+        student_code: "CAF-#{SecureRandom.hex(3)}", entry_year: 2023, status: "active")
+      Cafeteria::DietaryRestriction.create!(institution: @institution, student: student,
+        restriction_type: restriction_type, severity: "severa")
+      student
+    end
+  end
+
+  test "checkout new reflects the allergen block for a student with a matching REAL allergy" do
+    student = build_student_with_allergy(restriction_type: "alergia_mani")
+
     as_cafeteria_staff do
-      get "/cafeteria/checkouts/new", params: { student_id: "s-1" } # s-1 has alergia_mani
+      get "/cafeteria/checkouts/new", params: { student_id: student.student_code }
       assert_response :success
 
       assert_select ".checkout-line.is-blocked .checkout-line__name", text: "Sándwich de mantequilla de maní"
-      assert_select ".checkout-line__name", text: "Arroz con pollo" # not blocked, no is-blocked ancestor
       assert_select ".checkout-line:not(.is-blocked) .checkout-line__name", text: "Arroz con pollo"
     end
   end
 
   test "create refuses the sale server-side when a blocked item is submitted, even directly" do
+    student = build_student_with_allergy(restriction_type: "alergia_mani")
+
     as_cafeteria_staff do
-      post "/cafeteria/checkouts", params: { student_id: "s-1", item_ids: [ "menu-2" ] } # blocked: alergia_mani
+      post "/cafeteria/checkouts", params: { student_id: student.id, item_ids: [ "menu-2" ] } # blocked: alergia_mani
       assert_response :unprocessable_entity
       assert_select ".alert--danger", text: /bloqueada/
     end
   end
 
   test "create completes the sale for items with no matching allergen" do
+    student = build_student_with_allergy(restriction_type: "alergia_mani")
+
     as_cafeteria_staff do
-      post "/cafeteria/checkouts", params: { student_id: "s-1", item_ids: [ "menu-1" ] } # Arroz con pollo, safe
+      post "/cafeteria/checkouts", params: { student_id: student.id, item_ids: [ "menu-1" ] } # Arroz con pollo, safe
       assert_redirected_to cafeteria_menu_path
       follow_redirect!
       assert_match "Compra registrada", flash[:notice].to_s
+    end
+  end
+
+  test "a dietary PREFERENCE (never blocks) does not flag any menu line" do
+    student = build_student_with_allergy(restriction_type: "vegetariano")
+
+    as_cafeteria_staff do
+      get "/cafeteria/checkouts/new", params: { student_id: student.student_code }
+      assert_response :success
+      assert_select ".checkout-line.is-blocked", count: 0
     end
   end
 

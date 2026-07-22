@@ -17,6 +17,54 @@
 > moviera el changelog fuera del doc magro. Las entradas v1.6.0+ se escribieron directamente aquí,
 > ya con el split vigente.
 
+### v1.47.0 — 2026-07-21 — `cafeteria`: chequeo de alérgenos real — primer incremento de Fase D (`CLOSURE_PLAN.md`)
+
+**No es parte del criterio de hecho end-to-end** (ya completo desde v1.46.0) — es el primer paso de
+Fase D (tier C, nice-to-have, driver-based), a pedido explícito del owner de continuar el plan de
+cierre.
+
+**El hallazgo**: `Cafeteria::DietaryRestriction` (tabla `dietary_restrictions`) es real desde el
+primer día del proyecto — tabla, modelo, RLS, y sembrada por `db/seeds.rb` para ~5% de los
+estudiantes (vocabulario real: `vegetariano`/`vegano`/`celiaco`/`alergia_mani`/`alergia_lactosa`/
+`intolerancia_gluten`/`kosher`/`halal`/`diabetico`, severidad `leve`/`moderada`/`severa`). Sin
+embargo, `Cafeteria::CheckoutsController` — la única superficie que la necesita — seguía leyendo un
+stub PARALELO (`Cafeteria::DietaryRestrictionRoster`, con estudiantes falsos "s-1"/"s-5"/"s-8") en vez
+del modelo real. El bloqueo de compra por alergia, aunque descrito como "lógica real, no cosmética"
+en el propio comentario del controller, en realidad nunca corría contra el dato de un estudiante de
+verdad.
+
+**Corrección, además, de una afirmación desactualizada en `PROJECT_STATE.md`**: la línea de dominio
+de `cafeteria` decía "bloqueo por alérgeno (lee `student_support`)" — el código nunca hizo esa
+lectura cruzada; `cafeteria` siempre tuvo su propio `DietaryRestriction`, independiente de
+`student_support`'s historia médica general. Corregido en el mismo commit (mismo principio "el
+repositorio es la fuente de verdad" que ya motivó correcciones similares en `BI_DOCUMENT.md`).
+
+**Cambio técnico**: `Cafeteria::DietaryRestriction` ganó `ALLERGEN_NAMES`/`BLOCKING_TYPES` (separa
+alergias/intolerancias, que SÍ bloquean, de preferencias dietéticas como vegetariano/vegano/kosher/
+halal/diabético, que son solo informativas — mismo criterio que el stub retirado ya documentaba, ahora
+respaldado por la tabla real), un scope `blocking`, y `allergen_name`/`severity_symbol` (traduce el
+vocabulario español sembrado — `leve`/`moderada`/`severa` — a los símbolos en inglés que
+`shared/_allergen_flag` espera, el mismo partial que `medical_history` reusa). `CheckoutsController`
+ahora resuelve al estudiante por `student_code` real (`GroupManagement::Student.find_by`, retirando
+otro uso de `GroupManagement::StudentRoster`) y calcula el bloqueo con `DietaryRestriction.blocking`
+directamente — cero stub en el camino de seguridad.
+
+**Deliberadamente fuera de este incremento**: `Cafeteria::MenuRoster` (menú) y la persistencia de la
+compra (`Cafeteria::Purchase`, aún inexistente) siguen stub — construirlos requiere modelar Menú/
+MenuItem + Compra + deducción de saldo con locking, una pieza bastante más grande que este incremento
+"driver-based" no necesitaba resolver de una vez. La MITAD de seguridad (¿este estudiante real tiene
+una alergia real que bloquea esta línea?) es lo que Fase D pedía habilitar primero, y es lo único que
+este incremento entrega.
+
+**Tests (4 nuevos, 3 existentes corregidos — dependían del stub con IDs falsos "s-1" — suite completa
+763→767 runs / 0 fallos / 1 skip preexistente, en serie `PARALLEL_WORKERS=1`):** el scope `blocking`
+excluye preferencias dietéticas; `allergen_name` mapea correctamente el vocabulario sembrado
+(`celiaco`/`intolerancia_gluten` comparten "Gluten"); `severity_symbol` traduce español→inglés
+(`dietary_restriction_test.rb`); el checkout con un estudiante real con alergia real bloquea la línea
+correcta y solo esa; el `create` server-side rechaza una venta bloqueada incluso si se envía
+directamente; una venta sin conflicto se completa; una preferencia dietética (vegetariano) nunca
+bloquea nada (`cafeteria_test.rb`, actualizado).
+
 ### v1.46.0 — 2026-07-21 — `analytics_bi`: Lente 6 "Alertas Tempranas" — `CLOSURE_PLAN.md` Fase C cerrada, criterio de hecho end-to-end COMPLETO
 
 **Décimo cuarto slice post-MVP, y el ÚLTIMO pendiente del plan de cierre end-to-end.** Con las 8

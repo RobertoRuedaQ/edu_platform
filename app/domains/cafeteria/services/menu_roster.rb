@@ -1,7 +1,9 @@
 module Cafeteria
   # STUB menu — no Menu/MenuItem table exists at all. Allergens deliberately
-  # overlap with DietaryRestrictionRoster's vocabulary (Maní/Lactosa/Gluten) so
-  # the checkout block is actually exercised, not just decorative.
+  # overlap with Cafeteria::DietaryRestriction::ALLERGEN_NAMES (Maní/Lactosa/
+  # Gluten, guidelines/CLOSURE_PLAN.md Fase D) so the checkout block is
+  # actually exercised against a real student's real restrictions, not just
+  # decorative.
   #
   # TODO: reemplazar por un modelo real de menú cuando exista.
   module MenuRoster
