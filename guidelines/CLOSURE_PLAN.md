@@ -75,9 +75,12 @@ frecuencia) no se modela — mismo principio anti-especulación del repo.
    `Portals::GuardianCharacterConsentsController` (otorgar/revocar desde el portal del acudiente) +
    `Portals::StudentPeerAppreciationsController` (dar un aporte de par desde el portal del estudiante).
    Slice 6 fue, tal como este plan lo preveía, la terminación operativa de Slice 5, no "más BI".
-2. **`HpsTermSnapshotJob` fuera de `recurring.yml`** (disparo manual, data-dependiente). Para
-   "seguimiento año-a-año" operativo hace falta un **disparador real de fin-de-término** (evento de
-   cierre de término, no reloj) — decisión de producto pendiente (§6.4).
+2. ~~**`HpsTermSnapshotJob` fuera de `recurring.yml`**~~ ✅ **CERRADO (v1.44.0).** Descubierto en el
+   camino: `Core::AcademicTerm` no tenía NINGUNA UI de staff (solo seeds/consola) — se construyó
+   `Core::AcademicTermsController` completo (crear/editar/activar/**cerrar**), y "cerrar término" es
+   el disparador manual confirmado por el owner (§6.4): encola `AnalyticsBi::HpsTermSnapshotJob` para
+   ese término exacto, molde `report_card.publish`, nunca un reloj/cron. Sigue **fuera de
+   `recurring.yml` a propósito** — fin-de-término es un evento de staff, no de calendario fijo.
 3. **Autoría de `character_frameworks` sin UI** (solo `bi:seed_character_starter`) — un colegio no
    puede curar su propio marco. **Confirmado deferido en Slice 6** (v1.40.0): el slice se cerró
    consumiendo el framework STARTER sembrado en Slice 5, sin construir la UI de autoría — decisión
@@ -168,7 +171,7 @@ frecuencia) no se modela — mismo principio anti-especulación del repo.
 - [ ] Todo dato de la fase es real (`grep create_table`), nunca stub asumido.
 - [ ] Los sensibles (disciplinario, carácter, auras) llevan caso de seguridad a nivel de **modelo**.
 - [ ] Cada capacidad nueva es **operable sin rake/consola** (consentimiento ✅ v1.40.0, snapshots
-      ⚠ pendiente §4.2, autoría de frameworks ⚠ diferida a propósito §4.3).
+      ✅ v1.44.0 — botón de cerrar término, autoría de frameworks ⚠ diferida a propósito §4.3).
 - [ ] Cada señal que una alerta consumirá (Fase C) ya está construida y probada antes de la Fase C.
 - [ ] Suite completa en serie (`PARALLEL_WORKERS=1`), 0 fallos, corrida entera (no solo el archivo nuevo).
 - [ ] `HISTORIA.md` + `OPEN_PROCESS.md` + este plan actualizados al cerrar cada fase.

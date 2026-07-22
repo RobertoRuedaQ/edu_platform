@@ -1,0 +1,5 @@
+<% content_for :title, "Editar #{@term.name}" %>
+
+<%= render "shared/page_header", title: "Editar término", subtitle: @term.name %>
+
+<%= render "form", term: @term, url: core_academic_term_path(@term), method: :patch %>

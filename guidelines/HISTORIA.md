@@ -17,6 +17,61 @@
 > moviera el changelog fuera del doc magro. Las entradas v1.6.0+ se escribieron directamente aquí,
 > ya con el split vigente.
 
+### v1.44.0 — 2026-07-21 — `core`: primera UI de términos académicos (cierre de `CLOSURE_PLAN.md` §4.2)
+
+**No es un slice de `BI_DOCUMENT.md`** — cierra el último cabo de operabilidad de la Fase A del plan
+de cierre end-to-end (`guidelines/CLOSURE_PLAN.md`), inmediatamente después de que las 8 lentes del
+HPS quedaran cerradas (v1.43.0).
+
+**El hallazgo, más grande de lo que el propio plan asumía**: `Core::AcademicTerm` — el término
+académico que CASI todo dominio del sistema referencia (matrícula, notas, boletines, HPS) — no tenía
+NINGUNA superficie de staff para crearlo, editarlo, activarlo o cerrarlo. Se creaba EXCLUSIVAMENTE
+por `db/seeds.rb`/consola desde el primer día del proyecto. El ítem §4.2 del plan asumía que solo
+faltaba "un botón de cerrar" sobre un flujo de gestión de términos que ya existía — el recon reveló
+que ese flujo nunca existió. Confirmado con el owner antes de construir: el alcance correcto era
+crear/editar/activar/cerrar completo, no solo el botón de cierre.
+
+**`Core::AcademicTermsController`** (la primera superficie de staff para este modelo): `index` (lista
+por institución), `new`/`create` (siempre nace `upcoming`), `edit`/`update` (código/nombre/fechas). Un
+único permiso unificado `academic_terms.manage` cubre las cuatro capacidades — mismo criterio que
+`attendance.record`/`assignment.manage` (sin split de confidencialidad que lo justifique aquí).
+
+**`activate` y `close` son acciones de MIEMBRO explícitas, no un `update` genérico** — cada una es su
+propia transición de estado real (`upcoming`→`active`, `active`→`closed`), nunca implícita:
+- **`activate`** NO cierra automáticamente el término que ya esté activo — un efecto secundario
+  implícito habría sido sorprendente. El staff cierra el término viejo primero, luego activa el
+  nuevo, dos pasos explícitos. El índice único parcial `index_academic_terms_one_active_per_institution`
+  (ya existía, nunca antes alcanzable sin una UI) es el backstop real; una segunda activación mientras
+  ya hay un término activo se rescata con un mensaje amable ("ya hay un término activo — ciérralo
+  primero"), nunca un 500 — `requires_new: true` (SAVEPOINT) evita que la violación envenene la
+  transacción del request, el mismo guardrail que `SeatAssigner`/`SectionReassigner` ya establecieron.
+- **`close`** flip a `closed` Y encola `AnalyticsBi::HpsTermSnapshotJob` explícitamente PARA ESE
+  TÉRMINO, en la MISMA transacción (`requires_new: true`) — si el encolado fallara, el término no
+  queda cerrado en silencio sin ningún snapshot programado. **Esta es la decisión del owner
+  confirmada explícitamente para `CLOSURE_PLAN.md §4.2`: un botón manual de staff, molde
+  `report_card.publish`, en vez de un disparador programado/cron** — fin-de-término es un evento
+  dependiente de dato (varía por institución/calendario), no un reloj fijo.
+
+**CHECK nuevo en BD: `ends_on >= starts_on`** (`academic_terms_date_range_check`) — la tabla ya
+existía desde el día uno del proyecto, pero como NUNCA había una superficie de escritura real más
+allá de seeds/consola, un rango de fechas inválido nunca fue alcanzable en la práctica. La validación
+de app (`AcademicTerm#ends_on_after_starts_on`) es solo el mensaje amable; el CHECK es el backstop
+real — misma disciplina "la app valida, la BD hace cumplir" que cualquier otra tabla del codebase.
+
+**Sin nueva entrada de `Navigation::Registry`... en realidad SÍ, y es la primera del dominio `core`**
+(`config/navigation/core.rb`, nuevo) — a diferencia de las lentes HPS institución-wide-only (Lente 4),
+esta es una superficie de administración genuina con su propio índice (nunca un directorio de
+personas — son términos académicos, no estudiantes), así que un ítem de nav de nivel superior es el
+punto de entrada correcto.
+
+**Tests (7 nuevos, suite completa 740→747 runs / 0 fallos / 1 skip preexistente, en serie
+`PARALLEL_WORKERS=1`):** 403 sin `academic_terms.manage` en las cinco acciones; creación exitosa
+como `upcoming`; un rango de fechas inválido rechazado con un error amable (422, nunca 500);
+activación exitosa sin conflicto; una segunda activación mientras ya hay un término activo se
+rescata limpio (el backstop de BD funciona de verdad); cerrar un término activo lo deja `closed` Y
+encola `AnalyticsBi::HpsTermSnapshotJob` para ESE término exacto (`assert_enqueued_with`); un id de
+otra institución 404 (nunca fuga cross-tenant).
+
 ### v1.43.0 — 2026-07-21 — `analytics_bi`: Lente 4 "Núcleo Familiar" (Slice 8 de `BI_DOCUMENT.md`) — LAS 8 LENTES DEL ROADMAP ORIGINAL, CERRADAS
 
 **Décimo tercer slice post-MVP, octavo y ÚLTIMO guiado por el roadmap de 8 lentes que

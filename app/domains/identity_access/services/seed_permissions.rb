@@ -166,7 +166,18 @@ module IdentityAccess
       # needed). hps.* is a NORMAL per-institution permission (institution_admin
       # inherits it via bootstrap, like every key EXCEPT cross_tenant_reports.view)
       # — it is NOT cross-tenant.
-      "hps.family.view" => "Ver el núcleo familiar y la alerta de lazos fraternales (Lente 4 del HPS)"
+      "hps.family.view" => "Ver el núcleo familiar y la alerta de lazos fraternales (Lente 4 del HPS)",
+      # core (v1.44.0, guidelines/CLOSURE_PLAN.md §4.2): the first staff-facing
+      # surface for Core::AcademicTerm — until now terms only ever existed via
+      # db/seeds.rb/console, with zero UI to create one or to close an active
+      # one. ONE unified permission (create/edit/activate/close), same
+      # criterion as attendance.record/assignment.manage — there is no
+      # confidentiality split here that would justify a read/write divide.
+      # "Cerrar término" is also the manual trigger for AnalyticsBi::
+      # HpsTermSnapshotJob (BI_DOCUMENT.md §7/Slice 4) — the owner's confirmed
+      # choice (a staff button, molde report_card.publish) over a scheduled/
+      # cron trigger, since end-of-term is data-dependent, not clock-driven.
+      "academic_terms.manage" => "Crear, editar, activar y cerrar términos académicos (dispara el snapshot del HPS al cerrar)"
     }.freeze
 
     def self.call

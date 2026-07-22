@@ -172,6 +172,21 @@ Rails.application.routes.draw do
     end
   end
 
+  # --- core (domain views) --------------------------------------------------
+  # Core::AcademicTerm's first staff-facing surface (guidelines/CLOSURE_PLAN.md
+  # §4.2) — gated by the single unified academic_terms.manage permission.
+  # activate/close are member actions (POST), not a generic update — each is
+  # its own explicit state transition (upcoming->active, active->closed), and
+  # close is ALSO the manual trigger for AnalyticsBi::HpsTermSnapshotJob.
+  namespace :core do
+    resources :academic_terms, only: %i[index new create edit update] do
+      member do
+        post :activate
+        post :close
+      end
+    end
+  end
+
   # --- teacher_management (domain views, Prompt Unificado) ------------------
   # Scope is department (area_lead) or institution (coordinator/principal/HR/
   # secretary/institution_admin) — see TeacherManagement::TeacherScope. The

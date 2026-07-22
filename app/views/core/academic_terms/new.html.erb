@@ -1,0 +1,5 @@
+<% content_for :title, "Nuevo término académico" %>
+
+<%= render "shared/page_header", title: "Nuevo término académico" %>
+
+<%= render "form", term: @term, url: core_academic_terms_path, method: :post %>

@@ -189,6 +189,13 @@
     - **Nota operativa**: construido DIRECTAMENTE por decisión del owner (no delegado a un agente), tras el corte de gasto que interrumpió al agente del Slice 7 — mismo rigor de recon-first/smoke-tests/suite-completa.
     - 18 tests nuevos (722→740 runs totales, 0 fallos, 1 skip preexistente, en serie). Ver `HISTORIA.md` v1.43.0.
 
+29. **`core` — primera UI de términos académicos** (`guidelines/CLOSURE_PLAN.md` §4.2, NO un slice de `BI_DOCUMENT.md`) — ✅ **cerrado (v1.44.0).** El recon reveló que `Core::AcademicTerm` no tenía NINGUNA superficie de staff — se creaba solo por `db/seeds.rb`/consola desde el día uno; el plan asumía que solo faltaba un botón de cierre. Confirmado con el owner: alcance ampliado a crear/editar/activar/cerrar completo.
+    - **`Core::AcademicTermsController`**, permiso único `academic_terms.manage` (mismo criterio unificado que `attendance.record`). `activate`/`close` son acciones de MIEMBRO explícitas, cada una su propia transición real — `activate` NO auto-cierra el término previamente activo (dos pasos explícitos); una segunda activación con otro ya activo se rescata limpio contra el índice único parcial `index_academic_terms_one_active_per_institution` (`requires_new: true`, molde `SeatAssigner`).
+    - **`close` encola `AnalyticsBi::HpsTermSnapshotJob` para ESE término explícito**, misma transacción que el flip a `closed` — la decisión confirmada del owner (botón manual, molde `report_card.publish`, nunca cron) para el disparador de fin-de-término que quedó pendiente desde el Slice 4 de `BI_DOCUMENT.md`.
+    - **CHECK nuevo en BD `ends_on >= starts_on`** — la tabla existía desde el día uno pero un rango inválido nunca era alcanzable sin una superficie de escritura real.
+    - **Primera entrada de `Navigation::Registry` del dominio `core`** (`config/navigation/core.rb`) — a diferencia de las lentes HPS institución-wide-only, esta SÍ es una administración genuina con su propio índice (términos, no personas).
+    - 7 tests nuevos (740→747 runs totales, 0 fallos, 1 skip preexistente, en serie). Ver `HISTORIA.md` v1.44.0.
+
 ---
 
 ## 2. Guardrails operativos (recordatorio permanente)

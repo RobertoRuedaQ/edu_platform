@@ -56,6 +56,7 @@ CREATE TABLE public.academic_terms (
     status character varying DEFAULT 'upcoming'::character varying NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT academic_terms_date_range_check CHECK ((ends_on >= starts_on)),
     CONSTRAINT academic_terms_status_check CHECK (((status)::text = ANY ((ARRAY['upcoming'::character varying, 'active'::character varying, 'closed'::character varying])::text[])))
 );
 
@@ -6988,6 +6989,7 @@ CREATE POLICY teaching_assignments_tenant_isolation ON public.teaching_assignmen
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260721150000'),
 ('20260721140000'),
 ('20260721130000'),
 ('20260721120000'),
