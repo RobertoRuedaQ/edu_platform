@@ -71,13 +71,9 @@
 
 <% if Current.entitled_addon_keys.include?("schedules") -%>
   <% panels["Mi horario"] = capture do %>
-    <%# schedules has no real table yet (not even partially, unlike
-        teachers/students) — this reuses the existing stub roster, filtered
-        by identity (this actor's own groups above), never by can?/RBAC.
-        Marked explicitly as preview data, not to be confused with the real
-        sections above. %>
-    <%= render "shared/alert", variant: :info,
-          message: "Vista previa — el horario todavía corre sobre datos de ejemplo (schedules no tiene tablas reales aún)." %>
+    <%# schedules' timetable half is real since v1.50.0 — filtered by
+        identity (this actor's own groups above), never by can?/RBAC, same
+        discipline as every other self-service panel. %>
     <% if @schedule_events.any? -%>
       <%= render layout: "shared/table", locals: { headers: ["Día", "Hora", "Materia", "Grupo", "Salón"] } do -%>
         <% @schedule_events.each do |event| -%>
@@ -92,8 +88,7 @@
       <% end -%>
     <% else -%>
       <%= render "shared/empty_state", icon: "calendar",
-            title: "No tienes clases en tus grupos (vista previa)",
-            description: "Este dominio todavía no tiene datos reales." %>
+            title: "No tienes clases en tus grupos" %>
     <% end -%>
   <% end %>
 <% end -%>

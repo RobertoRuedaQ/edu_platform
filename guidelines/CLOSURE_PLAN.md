@@ -179,12 +179,18 @@ real. Ver `HISTORIA.md` v1.46.0.
   `shift` am/pm/`boarding_events`). De paso se cerró un hallazgo mayor: el scope `:route` de RBAC
   nunca estuvo conectado al motor real (`role_assignments.scope_route_id` no existía) — ahora sí.
   Ver `HISTORIA.md` v1.49.0.
-- **`schedules` — mitad de horario/timetable** (`rooms`/`meeting_patterns`): mismo dead-end activo
-  que `transportation` tenía (nav "Horario institucional" + rutas reales sobre stub 100% falso,
-  `RoomRoster`/`ScheduleEventRoster`) — ahora el candidato más urgente que queda sin construir.
+- ~~**`schedules` — mitad de horario/timetable**~~ ✅ **CERRADO (v1.50.0).** El otro dead-end activo
+  que `transportation` tenía como par (nav "Horario institucional" + rutas reales sobre
+  `RoomRoster`/`ScheduleEventRoster`, 100% `Data.define`) — cerrado con dos tablas net-new
+  (`rooms`/`meeting_patterns`, patrón plano `day_of_week`+horas, sin tabla `periods` compartida).
+  Doble-booking de salón PERMITIDO (sin `EXCLUDE gist`); el conflicto se CALCULA en lectura
+  (`Schedules::MeetingPatternPresenter`) en vez de reflejar el flag inventado del stub. Ver
+  `HISTORIA.md` v1.50.0.
 - **`admissions`/`library`**: no tienen NINGÚN archivo, ruta, ni entrada de nav — cero superficie,
   cero riesgo de UX. Construirlos sería un dominio enteramente greenfield, no una conversión
-  stub→real — sin urgencia frente al dead-end de `schedules` timetable.
+  stub→real — sin la urgencia de "arreglar un dead-end visible" que ya cerraron los dos ítems
+  anteriores. Con `transportation`/`schedules` timetable cerrados, no queda ningún dead-end activo
+  en el repo — solo greenfield (`admissions`/`library`) y trabajo diferido (`cafeteria` resto).
 
 ---
 

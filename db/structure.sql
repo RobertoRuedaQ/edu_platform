@@ -1207,6 +1207,28 @@ ALTER TABLE ONLY public.medical_histories FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: meeting_patterns; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.meeting_patterns (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    subject_id uuid NOT NULL,
+    section_id uuid NOT NULL,
+    room_id uuid NOT NULL,
+    day_of_week character varying NOT NULL,
+    starts_at time without time zone NOT NULL,
+    ends_at time without time zone NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT meeting_patterns_day_check CHECK (((day_of_week)::text = ANY ((ARRAY['mon'::character varying, 'tue'::character varying, 'wed'::character varying, 'thu'::character varying, 'fri'::character varying])::text[]))),
+    CONSTRAINT meeting_patterns_time_range_check CHECK ((ends_at > starts_at))
+);
+
+ALTER TABLE ONLY public.meeting_patterns FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: messages; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1496,6 +1518,25 @@ CREATE TABLE public.roles (
 );
 
 ALTER TABLE ONLY public.roles FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: rooms; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.rooms (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    name character varying NOT NULL,
+    kind character varying DEFAULT 'classroom'::character varying NOT NULL,
+    capacity integer,
+    building character varying,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT rooms_kind_check CHECK (((kind)::text = ANY ((ARRAY['classroom'::character varying, 'lab'::character varying, 'other'::character varying])::text[])))
+);
+
+ALTER TABLE ONLY public.rooms FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -2611,6 +2652,14 @@ ALTER TABLE ONLY public.medical_histories
 
 
 --
+-- Name: meeting_patterns meeting_patterns_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.meeting_patterns
+    ADD CONSTRAINT meeting_patterns_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: messages messages_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2728,6 +2777,14 @@ ALTER TABLE ONLY public.role_permissions
 
 ALTER TABLE ONLY public.roles
     ADD CONSTRAINT roles_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: rooms rooms_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.rooms
+    ADD CONSTRAINT rooms_pkey PRIMARY KEY (id);
 
 
 --
@@ -3251,6 +3308,20 @@ CREATE UNIQUE INDEX idx_medical_histories_unique_student ON public.medical_histo
 
 
 --
+-- Name: idx_meeting_patterns_on_inst_room; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_meeting_patterns_on_inst_room ON public.meeting_patterns USING btree (institution_id, room_id);
+
+
+--
+-- Name: idx_meeting_patterns_on_inst_section; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_meeting_patterns_on_inst_section ON public.meeting_patterns USING btree (institution_id, section_id);
+
+
+--
 -- Name: idx_messages_on_conversation_and_time; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3360,6 +3431,13 @@ CREATE INDEX idx_ra_inst_user ON public.role_assignments USING btree (institutio
 --
 
 CREATE UNIQUE INDEX idx_ra_unique_scope ON public.role_assignments USING btree (institution_id, institution_user_id, role_id, scope_department_id, scope_grade_level_id, scope_group_id, scope_route_id) NULLS NOT DISTINCT;
+
+
+--
+-- Name: idx_rooms_unique_name_per_institution; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_rooms_unique_name_per_institution ON public.rooms USING btree (institution_id, name);
 
 
 --
@@ -4984,6 +5062,14 @@ ALTER TABLE ONLY public.activity_enrollments
 
 
 --
+-- Name: meeting_patterns fk_rails_41c6f45b40; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.meeting_patterns
+    ADD CONSTRAINT fk_rails_41c6f45b40 FOREIGN KEY (room_id) REFERENCES public.rooms(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: guardian_relationships fk_rails_4298c313af; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -5616,6 +5702,14 @@ ALTER TABLE ONLY public.route_stops
 
 
 --
+-- Name: meeting_patterns fk_rails_85ac26cd3d; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.meeting_patterns
+    ADD CONSTRAINT fk_rails_85ac26cd3d FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: boarding_events fk_rails_864428bde2; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -6160,6 +6254,14 @@ ALTER TABLE ONLY public.conversation_participants
 
 
 --
+-- Name: meeting_patterns fk_rails_cd592e4b53; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.meeting_patterns
+    ADD CONSTRAINT fk_rails_cd592e4b53 FOREIGN KEY (subject_id) REFERENCES public.subjects(id) ON DELETE CASCADE;
+
+
+--
 -- Name: medical_histories fk_rails_cedac8245e; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -6237,6 +6339,14 @@ ALTER TABLE ONLY public.faculties
 
 ALTER TABLE ONLY public.roster_import_rows
     ADD CONSTRAINT fk_rails_d5c3ec3b1c FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: meeting_patterns fk_rails_d5e12c128b; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.meeting_patterns
+    ADD CONSTRAINT fk_rails_d5e12c128b FOREIGN KEY (section_id) REFERENCES public.sections(id) ON DELETE CASCADE;
 
 
 --
@@ -6469,6 +6579,14 @@ ALTER TABLE ONLY public.report_cards
 
 ALTER TABLE ONLY public.role_assignments
     ADD CONSTRAINT fk_rails_f2c879ee03 FOREIGN KEY (scope_group_id) REFERENCES public.sections(id) ON DELETE CASCADE;
+
+
+--
+-- Name: rooms fk_rails_f4d7f67edb; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.rooms
+    ADD CONSTRAINT fk_rails_f4d7f67edb FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
 
 
 --
@@ -7084,6 +7202,19 @@ CREATE POLICY medical_histories_tenant_isolation ON public.medical_histories USI
 
 
 --
+-- Name: meeting_patterns; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.meeting_patterns ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: meeting_patterns meeting_patterns_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY meeting_patterns_tenant_isolation ON public.meeting_patterns USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
 -- Name: messages; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -7224,6 +7355,19 @@ ALTER TABLE public.roles ENABLE ROW LEVEL SECURITY;
 --
 
 CREATE POLICY roles_tenant_isolation ON public.roles USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: rooms; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.rooms ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: rooms rooms_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY rooms_tenant_isolation ON public.rooms USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
 
 
 --
@@ -7572,6 +7716,7 @@ SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
 ('20260722050000'),
+('20260722043000'),
 ('20260721170000'),
 ('20260721160000'),
 ('20260721150000'),

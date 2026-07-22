@@ -23,14 +23,14 @@ class SelfServiceController < ApplicationController
     department_ids = @role_assignments.where.not(scope_department_id: nil).distinct.pluck(:scope_department_id)
     @departments = StaffManagement::Department.where(id: department_ids)
 
-    # schedules has no real backing table at all (not even a partial one,
-    # unlike teachers/students) — reusing the existing stub roster here,
-    # filtered by IDENTITY (the actor's own group ids above), never by
-    # can?/authorize! (this page is not an RBAC surface). Rendered
-    # explicitly labeled "vista previa" — see views/self_service/show.
+    # schedules' timetable half is real since v1.50.0 (Schedules::
+    # MeetingPattern) — filtered by IDENTITY (the actor's own group ids
+    # above), never by can?/authorize! (this page is not an RBAC surface,
+    # same discipline as every other self-service panel).
     if Current.entitled_addon_keys.include?("schedules")
       own_group_ids = group_ids.map(&:to_s)
-      @schedule_events = Schedules::ScheduleEventRoster.all.select { |event| own_group_ids.include?(event.group_id.to_s) }
+      @schedule_events = Schedules::MeetingPatternPresenter.rows_for(Current.institution)
+        .select { |row| own_group_ids.include?(row.group_id.to_s) }
     end
   end
 end

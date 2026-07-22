@@ -17,6 +17,48 @@
 > moviera el changelog fuera del doc magro. Las entradas v1.6.0+ se escribieron directamente aquí,
 > ya con el split vigente.
 
+### v1.50.0 — 2026-07-22 — `schedules`: horario institucional/salones reales — cuarto incremento de Fase D (`CLOSURE_PLAN.md`)
+
+**No es parte del criterio de hecho end-to-end** (completo desde v1.46.0) — es el cuarto paso de
+Fase D, el segundo dead-end activo que el recon de `CLOSURE_PLAN.md §5` (2026-07-21) había señalado
+junto a `transportation` (v1.49.0): nav real ("Horario institucional") + controllers/rutas reales
+sobre `RoomRoster`/`ScheduleEventRoster`, dos `Data.define` con filas 100% inventadas.
+
+**Decisiones confirmadas por el owner antes de migrar**: (1) `meeting_patterns` es un patrón PLANO —
+cada fila lleva su propio `day_of_week`+`starts_at`/`ends_at` directamente, sin una tabla `periods`
+compartida institución-wide — el propio dato del stub nunca asumió un grid de horas común (distintas
+materias usan combinaciones de día/hora libres). (2) el doble-booking de un salón se PERMITE, nunca
+se bloquea en BD — el stub retirado era explícito ("REFLEJA un flag de conflicto, nunca lo calcula")
+y su propio dato de ejemplo tenía dos eventos en el mismo salón marcados como conflicto, no
+rechazados; sin `EXCLUDE gist` (a diferencia de `classroom_layouts`/`seat_assignments`, v1.36.0), el
+conflicto se CALCULA de verdad al leer.
+
+**Cambio técnico**: dos tablas net-new (`rooms`, `meeting_patterns` con FK a `subjects`/`sections`/
+`rooms`, CHECK `day_of_week IN (mon..fri)`, CHECK `ends_at > starts_at`), ambas RLS `ENABLE+FORCE`.
+`Schedules::MeetingPatternPresenter` (molde "una computación, N superficies") calcula el conflicto
+real para cada patrón contra el conjunto COMPLETO de la institución (nunca el subconjunto ya
+filtrado del caller) — dos patrones conflictúan si comparten el mismo día, sus horas se solapan, Y
+comparten salón O sección (un grupo no puede estar en dos clases a la vez, extensión natural de "se
+calcula al leer", no una regla de negocio nueva). Reusado por `ScheduleScope`/`TimetableScope`/
+`RoomsController#show` — las tres superficies nunca pueden discrepar sobre qué conflictúa.
+`RoomsController#show` de paso corrige un bug latente del stub (comparaba eventos por
+`room_name` string en vez de id — ahora filtra por `room_id` real). El panel "Mi horario" del
+autoservicio de staff (`SelfServiceController`, identity-gated, nunca RBAC) también se migró —
+perdió su aviso de "vista previa", ya no aplica.
+
+**Deliberadamente fuera de alcance**: `admissions`/`library` (greenfield puro, sin la urgencia de un
+dead-end activo) y el resto de Fase D (`cafeteria` Menú/Compra/Saldo).
+
+**Tests (suite completa 778→784 runs / 0 fallos / 1 skip preexistente, en serie
+`PARALLEL_WORKERS=1`):** el CHECK de BD rechaza un `day_of_week`/rango de horas inválido incluso
+saltando la validación de app; dos patrones en el mismo salón se persisten sin bloqueo; el conflicto
+se calcula correctamente para solapamiento de salón Y de sección, nunca para eventos secuenciales;
+"mi horario" sigue filtrando por la sección propia del actor (ahora contra `Schedules::
+MeetingPattern` real); el horario institucional muestra el conteo exacto de insignias "Conflicto";
+la página de un salón nunca filtra por nombre (aislamiento por id verificado); un salón inexistente
+404 en vez de reventar (`test/integration/schedules_test.rb`, `test/integration/self_service_test.rb`,
+`test/models/schedules/meeting_pattern_test.rb`, este último nuevo).
+
 ### v1.49.0 — 2026-07-22 — `transportation`: rutas/paradas/pasajeros/abordaje reales — tercer incremento de Fase D (`CLOSURE_PLAN.md`), y el scope `:route` se vuelve real en RBAC
 
 **No es parte del criterio de hecho end-to-end** (completo desde v1.46.0) — es el tercer y más

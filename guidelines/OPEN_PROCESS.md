@@ -23,20 +23,16 @@
 
 ## 1. Backlog pendiente (orden sugerido)
 
-1. **Fase D — `schedules` timetable real (siguiente incremento recomendado)**
-   (`guidelines/CLOSURE_PLAN.md` §5) — mismo dead-end activo que `transportation` tenía antes de
-   v1.49.0: nav real ("Horario institucional") + controllers/rutas reales sobre `RoomRoster`/
-   `ScheduleEventRoster` (100% `Data.define`, `rooms`/`meeting_patterns` sin tabla). Aplicar el mismo
-   molde stub→real de `transportation` (v1.49.0)/`student_support` (v1.48.0)/`cafeteria` (v1.47.0):
-   recon de las decisiones de negocio pendientes (¿qué modela un "período" — bloque de tiempo fijo
-   institución-wide, o algo por sección? ¿un salón puede tener doble-booking real hoy en el stub?)
-   ANTES de migrar, no asumir default.
+1. **Fase D — `cafeteria` resto (Menú/Compra/Saldo)** (`guidelines/CLOSURE_PLAN.md` §5) — sin
+   construir, la pieza más grande que queda: `MenuRoster`/`Purchase`/`StudentAccount`, modelar
+   Menú/MenuItem + Compra + deducción de saldo con locking (mismo molde de `Finance::ChargeCreator`/
+   `PaymentRecorder`, `account.lock!` transaccional). Con `transportation` (v1.49.0) y `schedules`
+   timetable (v1.50.0) ya cerrados, **no queda ningún dead-end activo en el repo** — este es
+   trabajo diferido, no una urgencia.
 
-2. **Fase D — resto** (`guidelines/CLOSURE_PLAN.md` §5, detalle completo ahí — no duplicado aquí):
-   - `cafeteria` — resto (Menú/Compra/Saldo): `MenuRoster`/`Purchase`/`StudentAccount`, sin
-     construir, pieza más grande (deducción de saldo con locking).
-   - `admissions`/`library`: no existen en absoluto (cero archivos/rutas/nav) — greenfield puro, sin
-     la urgencia de "arreglar un dead-end visible" que sí tiene el ítem 1.
+2. **Fase D — greenfield puro, sin urgencia** (`guidelines/CLOSURE_PLAN.md` §5): `admissions`/
+   `library` no existen en absoluto (cero archivos/rutas/nav) — construirlos es un dominio nuevo,
+   no una conversión stub→real, y no hay señal de necesidad real hoy.
 
 3. **Onboarding — hardening no bloqueante, sin necesidad de producción confirmada** (ver
    `HISTORIA.md` v1.7.0/v1.32.0): batch-invite tras el alta de acudientes, full-async de
@@ -52,10 +48,11 @@
    Diferido, sin driver real todavía.
 
 6. **M1 — metering por dominio, resto** (ver `PROJECT_STATE.md` §10, fila M1): sigue abierto para
-   `cafeteria`/`student_support`/`counseling`/`analytics_bi`/`schedules`-timetable (Clase C o sin
-   evento de negocio claro) y ahora también `transportation` — real desde v1.49.0, pero SIN
-   `ControlPlane::Usage::Ingest.emit` cableado todavía (un `boarding_event` sería el candidato
-   natural) — cerrar por dominio, cuando cada uno tenga un evento real que medir, nunca de una vez.
+   `cafeteria`/`student_support`/`counseling`/`analytics_bi` (Clase C o sin evento de negocio claro)
+   y ahora también `transportation`/`schedules`-timetable — ambos reales desde v1.49.0/v1.50.0, pero
+   SIN `ControlPlane::Usage::Ingest.emit` cableado todavía (`boarding_event`/una clase impartida
+   serían los candidatos naturales) — cerrar por dominio, cuando cada uno tenga un evento real que
+   medir, nunca de una vez.
 
 7. **Decisiones abiertas de arquitectura sin backlog de construcción propio** — ver
    `PROJECT_STATE.md` §10 para el detalle: **B2** (¿`role_assignments.valid_from/until` se acopla a

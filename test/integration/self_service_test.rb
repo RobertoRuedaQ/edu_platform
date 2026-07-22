@@ -67,6 +67,20 @@ class SelfServiceTest < ActionDispatch::IntegrationTest
         scope_department_id: department.id)
       StaffManagement::StaffMember.create!(institution: institution_i, institution_user: iu_teacher,
         employee_number: "EMP-T", staff_category: "teaching", employment_type: "full_time", department: department)
+
+      # Real Schedules::MeetingPattern (v1.50.0) for "Mi horario" below: one
+      # tied to 10°A (the actor's own, currently-valid group), one tied to a
+      # DIFFERENT section — the self-service panel filters by identity (own
+      # group ids), same test intent the retired ScheduleEventRoster stub
+      # covered.
+      unrelated_section = GroupManagement::Section.create!(institution: institution_i, name: "8°Z", academic_year: 2026)
+      room = Schedules::Room.create!(institution: institution_i, name: "Aula 1", kind: "classroom")
+      calculo = Schedules::Subject.create!(institution: institution_i, name: "Cálculo", code: "MAT-C", term: "2026-1")
+      sociologia = Schedules::Subject.create!(institution: institution_i, name: "Sociología", code: "SOC-C", term: "2026-1")
+      Schedules::MeetingPattern.create!(institution: institution_i, subject: calculo, section: section_10a,
+        room: room, day_of_week: "mon", starts_at: "07:00", ends_at: "08:00")
+      Schedules::MeetingPattern.create!(institution: institution_i, subject: sociologia, section: unrelated_section,
+        room: room, day_of_week: "tue", starts_at: "07:00", ends_at: "08:00")
     end
 
     # A second teacher U in the SAME institution — must never appear anywhere.
@@ -106,11 +120,12 @@ class SelfServiceTest < ActionDispatch::IntegrationTest
     # Cross-tenant department never shown while acting in I.
     assert_no_match(/Solo-En-J/, response.body)
 
-    # "Mi horario" (schedules entitled): filtered by MY OWN group (10°A) —
-    # the stub event tagged with the SAME canonical section shows; nothing
-    # tagged with a different section does.
+    # "Mi horario" (schedules entitled, real Schedules::MeetingPattern since
+    # v1.50.0): filtered by MY OWN, currently-valid group (10°A) — the
+    # pattern tied to that section shows; one tied to an unrelated section
+    # does not.
     assert_match(/Cálculo/, response.body)
-    assert_no_match(/Sociología/, response.body) # tagged 11B in the stub roster, not this actor's group
+    assert_no_match(/Sociología/, response.body) # tagged to an unrelated section, not this actor's group
 
     # No search surface WITHIN the self-service page's own content (Habeas
     # Data invariant, same as the portals) — scoped to #main to deliberately
