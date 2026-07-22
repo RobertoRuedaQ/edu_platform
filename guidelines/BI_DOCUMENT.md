@@ -4,7 +4,8 @@
 > la arquitectura de datos, el modelo de acceso, las guardas de confidencialidad y la segmentación en
 > slices del *Sistema de Posicionamiento Humano* (HPS). Es hermano de `PROJECT_STATE.md`
 > (arquitectura/estado global), `UX_UI.md` (disciplina de FE), `LINEAMIENTOS_MVP.md` (alcance del
-> MVP), `OPEN_PROCESS.md` (backlog/guardrails) e `HISTORIA.md` (narrativa). Se lee/pega al iniciar
+> MVP), `OPEN_PROCESS.md` (backlog pendiente; guardrails viven en `PROJECT_STATE.md` §13) e
+> `HISTORIA.md` (narrativa). Se lee/pega al iniciar
 > cualquier slice de este dominio.
 >
 > **Regla de precedencia (importante).** Para todo lo relativo a `analytics_bi`, **este documento
@@ -198,10 +199,12 @@ institución). `hps.*` **no** se hereda por el bootstrap `institution_admin` com
 | Metadatos de núcleo familiar (custodia/hogar) | ❌ no | modelar (§5.6) — T2 |
 | Tests emocionales / auras | ⚠️ base clínica sí; proyección no | modelar en `counseling` + proyección (§5.7) |
 
-> **Trampa documentada:** `student_support` (convivencia/incidencias/historia médica/acomodaciones)
-> **NO tiene tablas reales** (Clase C, `OPEN_PROCESS.md`). No es fuente de dato hoy. La libreta de
-> horario/`rooms` de `schedules` tampoco. Cualquier lente que las asuma requiere primero un slice de
-> modelado en su dominio dueño — **no** se inventa esquema ajeno desde `analytics_bi`.
+> **Trampa documentada (actualizada 2026-07-21):** `student_support` (convivencia/incidencias/
+> historia médica/alergias/acomodaciones) **ya tiene tablas reales** desde `HISTORIA.md` v1.45.0/
+> v1.48.0 — dejó de ser Clase C, ya es fuente de dato consumible. La libreta de horario/`rooms` de
+> `schedules` **sigue siendo Clase C** (sin tabla real, ver `guidelines/CLOSURE_PLAN.md` §5).
+> Cualquier lente que asuma datos de un dominio ajeno debe verificar su clase (A/B/C/S) contra
+> `db/migrate/` primero — **no** se inventa esquema ajeno desde `analytics_bi`.
 
 ### 5.1 Reuso de dato existente (T1, solo lectura)
 
