@@ -7,41 +7,53 @@ module Cafeteria
   # create RE-checks server-side and refuses to complete the sale if any
   # selected item is blocked, even if the client somehow submitted it anyway.
   #
-  # Menu/Purchase are STILL stub (Cafeteria::MenuRoster, no real Menu/
-  # MenuItem/Purchase model exists) — deliberately out of scope for this
-  # increment. The safety-critical half (does this real student have a real
-  # allergy that blocks this line) is what "habilita alérgenos" (§Fase D)
-  # actually asked for; persisting a real sale is a separate, larger slice
-  # (needs Menu/MenuItem + Purchase + StudentAccount balance deduction with
-  # locking) left for its own future increment, driver-based.
+  # The sale itself is real too now (cafeteria resto, second half of Fase D's
+  # cafeteria increment): create delegates to Cafeteria::PurchaseRecorder
+  # (Menu/Purchase/Finance::Charge, account.lock! transactional) instead of
+  # the old stub flash-only path.
   class CheckoutsController < ApplicationController
     def new
       authorize!("checkout.manage")
       @student = find_student
-      @items = Cafeteria::MenuRoster.all
+      @items = menu_items
+      @idempotency_key = SecureRandom.uuid
     end
 
     def create
       authorize!("checkout.manage")
       @student = find_student or raise ActiveRecord::RecordNotFound
-      @items = Cafeteria::MenuRoster.all
-      selected = @items.select { |item| Array(params[:item_ids]).include?(item.id) }
+      @items = menu_items
+      selected = @items.select { |item| Array(params[:item_ids]).include?(item.id.to_s) }
       blocked = selected.select { |item| blocked_for_student?(item) }
 
       if blocked.any?
         flash.now[:alert] = "Compra bloqueada: #{blocked.map(&:name).join(', ')} " \
                              "contraindica el registro médico de #{student_name}."
+        @idempotency_key = params[:idempotency_key].presence || SecureRandom.uuid
         render :new, status: :unprocessable_entity
         return
       end
 
-      # STILL STUB: no Cafeteria::Purchase model exists yet — deferred, see
-      # class comment. The allergen check above is real; the sale itself isn't.
-      flash[:notice] = "Compra registrada (stub) para #{student_name}."
+      if selected.empty?
+        flash.now[:alert] = "Selecciona al menos un producto."
+        @idempotency_key = params[:idempotency_key].presence || SecureRandom.uuid
+        render :new, status: :unprocessable_entity
+        return
+      end
+
+      Cafeteria::PurchaseRecorder.call(
+        institution: Current.institution, student: @student, menu_items: selected,
+        recorded_by: Current.institution_user, idempotency_key: params[:idempotency_key]
+      )
+      flash[:notice] = "Compra registrada para #{student_name}."
       redirect_to cafeteria_menu_path
     end
 
     private
+
+    def menu_items
+      Cafeteria::MenuItem.where(institution_id: Current.institution_id).available.order(:category, :name)
+    end
 
     # The search form takes a student_code (cashier types it in, "Ej.
     # COL-E-101"); the hidden field on the confirm step re-submits the
@@ -61,7 +73,7 @@ module Cafeteria
       allergen_names = Cafeteria::DietaryRestriction
         .where(institution_id: Current.institution_id, student_id: @student.id)
         .blocking.map(&:allergen_name)
-      item.allergens.any? { |allergen| allergen_names.include?(allergen.name) }
+      item.allergens.any? { |allergen| allergen_names.include?(allergen) }
     end
   end
 end

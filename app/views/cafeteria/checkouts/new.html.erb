@@ -17,10 +17,11 @@
 
   <%= form_with url: cafeteria_checkouts_path, method: :post do %>
     <%= hidden_field_tag :student_id, @student.id %>
+    <%= hidden_field_tag :idempotency_key, @idempotency_key %>
 
     <% allergen_names = Cafeteria::DietaryRestriction.where(institution_id: Current.institution_id, student_id: @student.id).blocking.map(&:allergen_name) -%>
     <% @items.each do |item| -%>
-      <% blocked = item.allergens.any? { |allergen| allergen_names.include?(allergen.name) } -%>
+      <% blocked = item.allergens.any? { |allergen| allergen_names.include?(allergen) } -%>
       <div class="checkout-line-row">
         <% unless blocked -%>
           <label class="checkout-line-row__select">
@@ -29,8 +30,8 @@
           </label>
         <% end -%>
         <%= render "cafeteria/checkout_line",
-              name: item.name, unit_price: item.price, blocked: blocked,
-              allergens: item.allergens.map { |a| { name: a.name, severity: a.severity, reaction: a.reaction } } %>
+              name: item.name, unit_price: item.price_amount, blocked: blocked,
+              allergens: item.allergens.map { |name| { name: name } } %>
       </div>
     <% end -%>
 

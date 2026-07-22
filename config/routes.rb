@@ -275,12 +275,15 @@ Rails.application.routes.draw do
   end
 
   # --- cafeteria (domain views, Prompt Unificado) ---------------------------
-  # Only DietaryRestriction is real (seeded); Menu/Purchase/StudentAccount
-  # don't exist as models. The checkout block is genuine logic (cross-
-  # referencing the student's allergies against the menu item), not cosmetic —
-  # _checkout_line only ever REFLECTS the flag this controller computes.
-  # balance.view reuses the existing finance.read (treasury already owns
-  # "cartera y pagos"); menu has no group/department dimension to scope by.
+  # DietaryRestriction, MenuItem, and Purchase are all real (guidelines/
+  # CLOSURE_PLAN.md Fase D — cafeteria resto closes the last stub half:
+  # a purchase is a Finance::Charge against the ONE shared student_accounts
+  # wallet, account.lock! transactional, molde Finance::ChargeCreator/
+  # Extracurriculars::EnrollmentCreator). The checkout block is genuine logic
+  # (cross-referencing the student's allergies against the menu item), not
+  # cosmetic — _checkout_line only ever REFLECTS the flag this controller
+  # computes. balance.view reuses the existing finance.read (treasury already
+  # owns "cartera y pagos"); menu has no group/department dimension to scope by.
   namespace :cafeteria do
     get "menu", to: "menu#index", as: "menu"
     resources :checkouts, only: %i[new create]

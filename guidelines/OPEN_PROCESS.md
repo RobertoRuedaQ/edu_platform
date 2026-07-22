@@ -23,38 +23,34 @@
 
 ## 1. Backlog pendiente (orden sugerido)
 
-1. **Fase D — `cafeteria` resto (Menú/Compra/Saldo)** (`guidelines/CLOSURE_PLAN.md` §5) — sin
-   construir, la pieza más grande que queda: `MenuRoster`/`Purchase`/`StudentAccount`, modelar
-   Menú/MenuItem + Compra + deducción de saldo con locking (mismo molde de `Finance::ChargeCreator`/
-   `PaymentRecorder`, `account.lock!` transaccional). Con `transportation` (v1.49.0) y `schedules`
-   timetable (v1.50.0) ya cerrados, **no queda ningún dead-end activo en el repo** — este es
-   trabajo diferido, no una urgencia.
-
-2. **Fase D — greenfield puro, sin urgencia** (`guidelines/CLOSURE_PLAN.md` §5): `admissions`/
+1. **Fase D — greenfield puro, sin urgencia** (`guidelines/CLOSURE_PLAN.md` §5): `admissions`/
    `library` no existen en absoluto (cero archivos/rutas/nav) — construirlos es un dominio nuevo,
-   no una conversión stub→real, y no hay señal de necesidad real hoy.
+   no una conversión stub→real, y no hay señal de necesidad real hoy. Con `cafeteria` resto
+   (v1.51.0) cerrado junto con `transportation` (v1.49.0) y `schedules` timetable (v1.50.0), **Fase
+   D queda reducida a esto únicamente** — no queda ningún dead-end activo ni trabajo diferido en el
+   repo.
 
-3. **Onboarding — hardening no bloqueante, sin necesidad de producción confirmada** (ver
+2. **Onboarding — hardening no bloqueante, sin necesidad de producción confirmada** (ver
    `HISTORIA.md` v1.7.0/v1.32.0): batch-invite tras el alta de acudientes, full-async de
    parse+validar de `RosterImport`, purga de `roster_import_rows` post-commit; webhook real para
    `Invitations::BounceHandler` (requiere integración con el proveedor de correo elegido).
 
-4. **Billing — hardening pendiente** (ver `HISTORIA.md` v1.33.0 para lo ya cerrado): estos tres
+3. **Billing — hardening pendiente** (ver `HISTORIA.md` v1.33.0 para lo ya cerrado): estos tres
    requieren una decisión de negocio real, no son defaults seguros de asumir — prorrateo de
    `addon_fee`; edición manual de líneas de un borrador; tabla `billing_periods` explícita.
 
-5. **Tiempo real** (Turbo Streams sobre Solid Cable, sin Redis) — `transportation` (broadcast de
+4. **Tiempo real** (Turbo Streams sobre Solid Cable, sin Redis) — `transportation` (broadcast de
    `boarding_events`, cuya persistencia ya es real desde v1.49.0) y `communication` (canales).
    Diferido, sin driver real todavía.
 
-6. **M1 — metering por dominio, resto** (ver `PROJECT_STATE.md` §10, fila M1): sigue abierto para
+5. **M1 — metering por dominio, resto** (ver `PROJECT_STATE.md` §10, fila M1): sigue abierto para
    `cafeteria`/`student_support`/`counseling`/`analytics_bi` (Clase C o sin evento de negocio claro)
-   y ahora también `transportation`/`schedules`-timetable — ambos reales desde v1.49.0/v1.50.0, pero
-   SIN `ControlPlane::Usage::Ingest.emit` cableado todavía (`boarding_event`/una clase impartida
-   serían los candidatos naturales) — cerrar por dominio, cuando cada uno tenga un evento real que
-   medir, nunca de una vez.
+   y también `transportation`/`schedules`-timetable — todos reales ya, pero SIN
+   `ControlPlane::Usage::Ingest.emit` cableado todavía (`cafeteria_purchase`/`boarding_event`/una
+   clase impartida serían los candidatos naturales) — cerrar por dominio, cuando cada uno tenga un
+   evento real que medir, nunca de una vez.
 
-7. **Decisiones abiertas de arquitectura sin backlog de construcción propio** — ver
+6. **Decisiones abiertas de arquitectura sin backlog de construcción propio** — ver
    `PROJECT_STATE.md` §10 para el detalle: **B2** (¿`role_assignments.valid_from/until` se acopla a
    `academic_terms`?), **P2** (¿qué hacer con `institution_users.role`, columna libre sin lectores?).
 

@@ -441,6 +441,68 @@ ALTER TABLE ONLY public.boarding_events FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: cafeteria_menu_items; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.cafeteria_menu_items (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    name character varying NOT NULL,
+    category character varying NOT NULL,
+    price_cents bigint NOT NULL,
+    allergens character varying[] DEFAULT '{}'::character varying[] NOT NULL,
+    dietary_tags character varying[] DEFAULT '{}'::character varying[] NOT NULL,
+    available boolean DEFAULT true NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT cafeteria_menu_items_category_check CHECK (((category)::text = ANY ((ARRAY['Almuerzo'::character varying, 'Snack'::character varying])::text[]))),
+    CONSTRAINT cafeteria_menu_items_price_check CHECK ((price_cents > 0))
+);
+
+ALTER TABLE ONLY public.cafeteria_menu_items FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: cafeteria_purchase_lines; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.cafeteria_purchase_lines (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    purchase_id uuid NOT NULL,
+    menu_item_id uuid NOT NULL,
+    item_name character varying NOT NULL,
+    unit_price_cents bigint NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT cafeteria_purchase_lines_price_check CHECK ((unit_price_cents > 0))
+);
+
+ALTER TABLE ONLY public.cafeteria_purchase_lines FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: cafeteria_purchases; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.cafeteria_purchases (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    student_id uuid NOT NULL,
+    recorded_by_institution_user_id uuid NOT NULL,
+    charge_id uuid NOT NULL,
+    total_price_cents bigint NOT NULL,
+    idempotency_key character varying,
+    purchased_at timestamp(6) without time zone NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT cafeteria_purchases_total_check CHECK ((total_price_cents > 0))
+);
+
+ALTER TABLE ONLY public.cafeteria_purchases FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: calendar_events; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2324,6 +2386,30 @@ ALTER TABLE ONLY public.boarding_events
 
 
 --
+-- Name: cafeteria_menu_items cafeteria_menu_items_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cafeteria_menu_items
+    ADD CONSTRAINT cafeteria_menu_items_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: cafeteria_purchase_lines cafeteria_purchase_lines_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cafeteria_purchase_lines
+    ADD CONSTRAINT cafeteria_purchase_lines_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: cafeteria_purchases cafeteria_purchases_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cafeteria_purchases
+    ADD CONSTRAINT cafeteria_purchases_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: calendar_events calendar_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3175,6 +3261,13 @@ CREATE INDEX idx_boarding_events_on_inst_route ON public.boarding_events USING b
 
 
 --
+-- Name: idx_cafeteria_purchases_idempotency; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_cafeteria_purchases_idempotency ON public.cafeteria_purchases USING btree (institution_id, idempotency_key);
+
+
+--
 -- Name: idx_care_auras_on_inst_student_from; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3326,6 +3419,13 @@ CREATE INDEX idx_meeting_patterns_on_inst_section ON public.meeting_patterns USI
 --
 
 CREATE INDEX idx_messages_on_conversation_and_time ON public.messages USING btree (institution_id, conversation_id, created_at);
+
+
+--
+-- Name: idx_on_institution_id_purchase_id_21da670fc8; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_on_institution_id_purchase_id_21da670fc8 ON public.cafeteria_purchase_lines USING btree (institution_id, purchase_id);
 
 
 --
@@ -3725,6 +3825,27 @@ CREATE INDEX index_audit_events_on_institution_and_created_at ON public.audit_ev
 --
 
 CREATE INDEX index_audit_events_on_institution_and_target ON public.audit_events USING btree (institution_id, target_type, target_id);
+
+
+--
+-- Name: index_cafeteria_menu_items_on_institution_id_and_available; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_cafeteria_menu_items_on_institution_id_and_available ON public.cafeteria_menu_items USING btree (institution_id, available);
+
+
+--
+-- Name: index_cafeteria_purchases_on_institution_id_and_charge_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_cafeteria_purchases_on_institution_id_and_charge_id ON public.cafeteria_purchases USING btree (institution_id, charge_id);
+
+
+--
+-- Name: index_cafeteria_purchases_on_institution_id_and_student_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_cafeteria_purchases_on_institution_id_and_student_id ON public.cafeteria_purchases USING btree (institution_id, student_id);
 
 
 --
@@ -4774,6 +4895,14 @@ ALTER TABLE ONLY public.student_placements
 
 
 --
+-- Name: cafeteria_purchase_lines fk_rails_1d941855d7; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cafeteria_purchase_lines
+    ADD CONSTRAINT fk_rails_1d941855d7 FOREIGN KEY (menu_item_id) REFERENCES public.cafeteria_menu_items(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: roster_import_batches fk_rails_1ddd8e9cad; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4982,6 +5111,14 @@ ALTER TABLE ONLY public.rubric_evaluations
 
 
 --
+-- Name: cafeteria_menu_items fk_rails_38d6e35ebe; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cafeteria_menu_items
+    ADD CONSTRAINT fk_rails_38d6e35ebe FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: session_notes fk_rails_39e6058ec2; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -5067,6 +5204,14 @@ ALTER TABLE ONLY public.activity_enrollments
 
 ALTER TABLE ONLY public.meeting_patterns
     ADD CONSTRAINT fk_rails_41c6f45b40 FOREIGN KEY (room_id) REFERENCES public.rooms(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: cafeteria_purchases fk_rails_42352139f0; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cafeteria_purchases
+    ADD CONSTRAINT fk_rails_42352139f0 FOREIGN KEY (charge_id) REFERENCES public.charges(id) ON DELETE RESTRICT;
 
 
 --
@@ -5574,6 +5719,14 @@ ALTER TABLE ONLY public.group_memberships
 
 
 --
+-- Name: cafeteria_purchases fk_rails_76a09b3352; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cafeteria_purchases
+    ADD CONSTRAINT fk_rails_76a09b3352 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: institution_entitlements fk_rails_789c0738df; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -5734,6 +5887,14 @@ ALTER TABLE ONLY public.routes
 
 
 --
+-- Name: cafeteria_purchases fk_rails_8943ffe370; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cafeteria_purchases
+    ADD CONSTRAINT fk_rails_8943ffe370 FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: guardian_students fk_rails_8a488ba66f; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -5795,6 +5956,14 @@ ALTER TABLE ONLY public.calendar_events
 
 ALTER TABLE ONLY public.installments
     ADD CONSTRAINT fk_rails_91c63f70fd FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: cafeteria_purchase_lines fk_rails_9243c2ac39; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cafeteria_purchase_lines
+    ADD CONSTRAINT fk_rails_9243c2ac39 FOREIGN KEY (purchase_id) REFERENCES public.cafeteria_purchases(id) ON DELETE CASCADE;
 
 
 --
@@ -5947,6 +6116,14 @@ ALTER TABLE ONLY public.assignments
 
 ALTER TABLE ONLY public.conversation_participants
     ADD CONSTRAINT fk_rails_af3ab0831d FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: cafeteria_purchases fk_rails_b0a31c85fd; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cafeteria_purchases
+    ADD CONSTRAINT fk_rails_b0a31c85fd FOREIGN KEY (recorded_by_institution_user_id) REFERENCES public.institution_users(id) ON DELETE RESTRICT;
 
 
 --
@@ -6171,6 +6348,14 @@ ALTER TABLE ONLY public.submission_groups
 
 ALTER TABLE ONLY public.active_storage_attachments
     ADD CONSTRAINT fk_rails_c3b3935057 FOREIGN KEY (blob_id) REFERENCES public.active_storage_blobs(id);
+
+
+--
+-- Name: cafeteria_purchase_lines fk_rails_c3c97878cf; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cafeteria_purchase_lines
+    ADD CONSTRAINT fk_rails_c3c97878cf FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
 
 
 --
@@ -6783,6 +6968,45 @@ ALTER TABLE public.boarding_events ENABLE ROW LEVEL SECURITY;
 --
 
 CREATE POLICY boarding_events_tenant_isolation ON public.boarding_events USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: cafeteria_menu_items; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.cafeteria_menu_items ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: cafeteria_menu_items cafeteria_menu_items_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY cafeteria_menu_items_tenant_isolation ON public.cafeteria_menu_items USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: cafeteria_purchase_lines; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.cafeteria_purchase_lines ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: cafeteria_purchase_lines cafeteria_purchase_lines_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY cafeteria_purchase_lines_tenant_isolation ON public.cafeteria_purchase_lines USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: cafeteria_purchases; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.cafeteria_purchases ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: cafeteria_purchases cafeteria_purchases_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY cafeteria_purchases_tenant_isolation ON public.cafeteria_purchases USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
 
 
 --
@@ -7715,6 +7939,7 @@ CREATE POLICY teaching_assignments_tenant_isolation ON public.teaching_assignmen
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260722060000'),
 ('20260722050000'),
 ('20260722043000'),
 ('20260721170000'),

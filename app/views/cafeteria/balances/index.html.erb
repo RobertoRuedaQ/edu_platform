@@ -5,8 +5,8 @@
 <%= render layout: "shared/table", locals: { headers: ["Estudiante", "Grupo", "Saldo"] } do -%>
   <% @accounts.each do |account| -%>
     <tr>
-      <td><%= account.student_name %></td>
-      <td><%= account.group_name %></td>
+      <td><%= "#{account.student.first_name} #{account.student.last_name}" %></td>
+      <td><%= account.student.section&.name || "—" %></td>
       <td><%= money(account.balance, currency: account.currency) %></td>
     </tr>
   <% end -%>

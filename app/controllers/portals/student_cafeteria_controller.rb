@@ -1,10 +1,12 @@
 module Portals
-  # Resolved by relation, same as StudentPortalController — no authorize! here.
+  # Resolved by self-scope (Core::Access::StudentSelfScope), no authorize! —
+  # same discipline as StudentAttendanceController.
   class StudentCafeteriaController < ApplicationController
     layout "portal"
 
     def show
-      @account = Portals::StudentCafeteriaAccount.stub
+      @student = Core::Access::StudentSelfScope.for(Current.user)
+      @account = Portals::StudentCafeteriaAccount.for(@student)
       @portal_label = "Portal del estudiante"
       @portal_person_name = Current.user.name
     end

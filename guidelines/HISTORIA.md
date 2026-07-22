@@ -17,6 +17,65 @@
 > moviera el changelog fuera del doc magro. Las entradas v1.6.0+ se escribieron directamente aquí,
 > ya con el split vigente.
 
+### v1.51.0 — 2026-07-22 — `cafeteria`: Menú/Compra/Saldo reales — quinto incremento de Fase D (`CLOSURE_PLAN.md`), cierra `OPEN_PROCESS.md` ítem #1
+
+**No es parte del criterio de hecho end-to-end** (completo desde v1.46.0) — es el quinto paso de
+Fase D y cierra la pieza que v1.47.0 dejó deliberadamente fuera ("Menú/Compra/Saldo... deferido, es
+una pieza más grande"): `CheckoutsController#create` solo flasheaba "Compra registrada (stub)" y no
+persistía nada; `Cafeteria::MenuRoster`/`StudentAccountRoster` (ambos `Data.define`) eran los dos
+últimos stubs del dominio.
+
+**Decisiones tomadas (recomendado/conservador, sin regla de negocio nueva confirmada por el owner —
+misma postura que cada incremento previo de Fase D)**: (1) **sin wallet propio de cafetería** —
+`finance.student_accounts` sigue siendo la ÚNICA cuenta que toda la app carga (precedente ya
+establecido por `Extracurriculars::EnrollmentCreator#charge_for_paid_activity`); los TODOs de los
+dos stubs de portal nombraban un `Cafeteria::StudentAccount` hipotético que nunca existió y
+contradecía este precedente — corregido, no construido. (2) **una compra es un `Finance::Charge`**
+(aumenta lo que la familia debe), nunca una deducción de crédito prepago — no existe ningún flujo de
+"recarga" en la app, así que "saldo" aquí significa cartera por cobrar, igual que pensión y cuotas de
+extracurriculares. (3) Dinero NUEVO en este dominio → `*_cents bigint` (F6), nunca `decimal` (ese
+grandfathering queda solo para las 5 tablas originales de `finance`); `MenuItem#price_amount`/
+`Purchase#total_price_amount` son el único puente cents→BigDecimal/100 cada uno, molde
+`Extracurriculars::Activity#fee_amount`. (4) **sin UI de autoría de menú** en este incremento — misma
+postura ya aplicada a `character_frameworks` (Slice 6, diferido, documentado); `cafeteria_menu_items`
+se siembra igual que `dietary_restrictions`. (5) `cafeteria_purchase_lines` congela `item_name`/
+`unit_price_cents` al vender (molde `lines_snapshot`/`framework_snapshot`) — un cambio posterior de
+precio/nombre del menú nunca reescribe una venta ya hecha.
+
+**Cambio técnico**: tres tablas net-new (`cafeteria_menu_items`, `cafeteria_purchases`,
+`cafeteria_purchase_lines`), las tres RLS `ENABLE+FORCE`. `Cafeteria::PurchaseRecorder` (molde
+`Finance::ChargeCreator`/`PaymentRecorder`/`Extracurriculars::EnrollmentCreator`): find-or-create la
+cuenta compartida, `account.lock!` transaccional, doble chequeo de idempotencia (propio, por el
+`idempotency_key` de `Cafeteria::Purchase` — sin el lock previo, dos envíos concurrentes de la misma
+clave pasarían ambos el chequeo antes del lock y competirían contra el índice único, aflorando un
+`ActiveRecord::RecordNotUnique` crudo en vez de devolver la venta ya existente), delega en
+`Finance::ChargeCreator.call` DENTRO de la misma transacción (si el cargo falla, la venta no queda).
+`CheckoutsController#blocked_for_student?` sigue siendo la misma lógica real (v1.47.0), ahora contra
+`Cafeteria::MenuItem#allergens` (array de nombres de alérgeno, `text[]`, validado contra
+`Cafeteria::DietaryRestriction::ALLERGEN_NAMES.values` — mismo vocabulario, sin capa de traducción).
+`Cafeteria::AccountScope` (nuevo, duplica intencionalmente 5 líneas de `Finance::AccountScope` en vez
+de tocar el query object de `finance` solo para agregar un eager-load de `section` que cafetería
+necesita para su columna "Grupo"). Los dos portales de acudiente/estudiante (antes 100% stub, con
+TODOs que ya apuntaban a esta corrección) se reescribieron sobre `Core::Access::GuardianScope`/
+`StudentSelfScope` (molde `Portals::GuardianFinanceController`/`StudentAttendanceController`) leyendo
+`Finance::StudentAccount` real + las propias `Cafeteria::Purchase` del estudiante como "movimientos".
+
+**Deliberadamente fuera de alcance**: `admissions`/`library` (greenfield puro) y M1 metering para
+`cafeteria` (`ControlPlane::Usage::Ingest.emit` — mismo criterio que `transportation`/`schedules`
+timetable en v1.49.0/v1.50.0: se cierra por dominio cuando exista el evento real que medir, nunca en
+el mismo incremento que lo crea). Con esto, **`OPEN_PROCESS.md` ítem #1 (Fase D `cafeteria` resto)
+queda cerrado** — solo queda `admissions`/`library` en el backlog de Fase D.
+
+**Tests (suite completa 784→792 runs / 0 fallos / 1 skip preexistente, en serie
+`PARALLEL_WORKERS=1`):** el CHECK de BD rechaza `category`/`price_cents` inválidos incluso saltando
+la validación de app; `PurchaseRecorder` crea exactamente un `Charge` y un `Purchase` y aumenta el
+saldo real; idempotencia probada tanto a nivel de servicio (llamar dos veces con la misma clave
+devuelve la MISMA compra, nunca duplica `Charge` ni `Purchase`) como de controller (resubmit HTTP);
+el bloqueo por alergia sigue rechazando la venta server-side aun si el cliente la envía directo;
+`balances`/los dos portales leen datos reales, nunca los dos nombres hardcodeados del stub retirado
+(`test/models/cafeteria/menu_item_test.rb`, `test/models/cafeteria/purchase_test.rb`, ambos nuevos;
+`test/integration/cafeteria_test.rb` reescrito).
+
 ### v1.50.0 — 2026-07-22 — `schedules`: horario institucional/salones reales — cuarto incremento de Fase D (`CLOSURE_PLAN.md`)
 
 **No es parte del criterio de hecho end-to-end** (completo desde v1.46.0) — es el cuarto paso de

@@ -172,7 +172,14 @@ real. Ver `HISTORIA.md` v1.46.0.
   update]`, sin ningún camino de creación real) — mismo criterio que `academic_terms` (v1.44.0): sin
   eso la pantalla quedaba permanentemente vacía. `StudentAllergiesController` (nuevo, `new`/`create`)
   gateado por el tier completo únicamente. Ver `HISTORIA.md` v1.48.0.
-- **`cafeteria` — resto** (Menú/Compra/Saldo) — sin construir, driver-based, cuando haya necesidad.
+- ~~**`cafeteria` — resto** (Menú/Compra/Saldo)~~ ✅ **CERRADO (v1.51.0).** `Cafeteria::MenuItem`/
+  `Purchase`/`PurchaseLine` reemplazan `MenuRoster`/`StudentAccountRoster`. Sin wallet propio de
+  cafetería — una compra es un `Finance::Charge` contra la ÚNICA cuenta compartida
+  (`finance.student_accounts`, mismo precedente que `Extracurriculars::EnrollmentCreator`), nunca una
+  deducción de crédito prepago. `Cafeteria::PurchaseRecorder` (molde `ChargeCreator`/
+  `PaymentRecorder`/`EnrollmentCreator`): `account.lock!` transaccional, idempotencia propia. Sin UI
+  de autoría de menú (seeded, molde `dietary_restrictions`/`character_frameworks`). Ver
+  `HISTORIA.md` v1.51.0.
 - ~~**`transportation`**~~ ✅ **CERRADO (v1.49.0).** El peor de los cuatro candidatos de recon — nav
   real ("Rutas"/"Abordaje") + controllers/rutas reales sobre `RouteRoster`/`RiderRoster` (100%
   `Data.define`) — cerrado con cuatro tablas net-new (`routes`/`route_stops`/`route_riders` con
@@ -188,9 +195,10 @@ real. Ver `HISTORIA.md` v1.46.0.
   `HISTORIA.md` v1.50.0.
 - **`admissions`/`library`**: no tienen NINGÚN archivo, ruta, ni entrada de nav — cero superficie,
   cero riesgo de UX. Construirlos sería un dominio enteramente greenfield, no una conversión
-  stub→real — sin la urgencia de "arreglar un dead-end visible" que ya cerraron los dos ítems
-  anteriores. Con `transportation`/`schedules` timetable cerrados, no queda ningún dead-end activo
-  en el repo — solo greenfield (`admissions`/`library`) y trabajo diferido (`cafeteria` resto).
+  stub→real — sin la urgencia de "arreglar un dead-end visible" que ya cerraron los ítems
+  anteriores. Con `transportation`/`schedules` timetable/`cafeteria` resto todos cerrados
+  (v1.49.0/v1.50.0/v1.51.0), **Fase D queda reducida a esto únicamente** — no queda ningún dead-end
+  ni trabajo diferido en el repo, solo este greenfield puro.
 
 ---
 

@@ -11,8 +11,8 @@
 <div class="tile-grid">
   <% @items.each do |item| -%>
     <%= render "cafeteria/menu_item",
-          name: item.name, price: item.price, category: item.category,
+          name: item.name, price: item.price_amount, category: item.category,
           dietary_tags: item.dietary_tags, available: item.available,
-          allergens: item.allergens.map { |a| { name: a.name, severity: a.severity, reaction: a.reaction } } %>
+          allergens: item.allergens.map { |name| { name: name } } %>
   <% end -%>
 </div>
