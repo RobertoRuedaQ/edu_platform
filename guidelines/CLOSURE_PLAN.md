@@ -12,11 +12,14 @@
 > plan además llegó con **Slice 6 marcado "en curso"**; al momento de guardarlo, **Slice 6 ya está
 > cerrado (v1.40.0)** — ver `HISTORIA.md` v1.40.0 y la corrección en §4/§5/§6 abajo.
 >
-> **Actualización (2026-07-21, tras Fase B):** Fases A y B están cerradas. Queda SOLO Fase C (alertas
-> tempranas) para completar el criterio de hecho §1 — el owner autorizó continuar asumiendo la opción
-> recomendada en cada decisión abierta que quedara sin confirmar explícitamente (ver §6.3, resuelta
-> con un default documentado, no una regla de negocio real confirmada — mismo principio de "boring
-> default, revisar cuando exista una necesidad real" ya aplicado repetidamente en este proyecto).
+> **Actualización final (2026-07-21): TODAS las fases (A/B/C) están cerradas — el criterio de hecho
+> end-to-end de §1 está completo.** El owner autorizó proceder asumiendo la opción recomendada/más
+> conservadora en cada decisión abierta que quedara sin confirmar explícitamente — la Fase C (alertas
+> tempranas, §3.2/§6.3) se construyó así, con una heurística documentada explícitamente como
+> PLACEHOLDER (no una regla de negocio real confirmada por el owner) — mismo principio de "boring
+> default, revisar cuando exista una necesidad real" ya aplicado repetidamente en este proyecto. Solo
+> Fase D (tier C, nice-to-have, fuera del criterio de hecho) sigue sin construir — nunca estuvo en
+> alcance de este plan.
 
 ---
 
@@ -42,12 +45,13 @@ timetable/`admissions`/`library`) es **nice-to-have**, explícitamente fuera de 
 | **Seguimiento disciplinario** | `student_support` | ✅ **CERRADO (v1.45.0)** | `StudentSupport::DisciplinaryLog`, molde `counseling`, ver §3.1 — corte mínimo (solo convivencia; `medical_history`/`accommodations` siguen stub). |
 | **Psicoorientación** | `counseling` | ✅ | Casos/sesiones/remisiones reales + proyección `care_auras` (v1.37.0). **No** es lo mismo que disciplinario. |
 | **Emisión de boletines** | `report_cards` | ✅ | Snapshot congelado al publicar (v1.17.0). |
-| **Alertas tempranas** (docente/acudiente) | — | ❌ **GAP** | No diseñado. Existen señales crudas (heat/auras/carácter), no una capa de síntesis+entrega (§3.2). |
+| **Alertas tempranas** (docente/acudiente) | `analytics_bi` | ✅ **CERRADO (v1.46.0)** | `AnalyticsBi::Lens::EarlyWarningScope`, Lente 6 (amendment MAJOR, `BI_DOCUMENT.md §5.8`) — ver §3.2. Heurística PLACEHOLDER, sin regla de negocio real confirmada. |
 
-**Conclusión de la validación (actualizada 2026-07-21, Fase B cerrada):** las 8 lentes/slices de
-`analytics_bi` (Fase A, v1.35.0→v1.43.0) y el seguimiento disciplinario (Fase B, v1.45.0) están
-CERRADOS — ver `HISTORIA.md` v1.43.0/v1.45.0. Queda un único proceso sin construir para el criterio de
-hecho §1: **alertas tempranas (Fase C)**.
+**Conclusión de la validación (actualizada 2026-07-21, Fase C cerrada — PLAN COMPLETO):** los NUEVE
+procesos del criterio de hecho §1 son todos reales. Las 8 lentes/slices de `analytics_bi` (Fase A,
+v1.35.0→v1.43.0), el seguimiento disciplinario (Fase B, v1.45.0), y alertas tempranas (Fase C,
+v1.46.0) están CERRADOS — ver `HISTORIA.md` v1.43.0/v1.45.0/v1.46.0. Solo Fase D (tier C,
+nice-to-have) queda sin construir, y nunca estuvo dentro del criterio de hecho.
 
 ---
 
@@ -61,15 +65,18 @@ de convivencia) como slice **sensible (S)**, molde `counseling` (carve-out, caso
 seguridad a nivel de modelo). `medical_history`/`accommodations` (que alimentan alérgenos de cafetería)
 **siguen diferidos** — no se arrastra el Clase C completo para cerrar una necesidad acotada.
 
-### 3.2 Alertas tempranas — capstone de síntesis (net-new, no en `BI_DOCUMENT.md`)
-Todo el dato de señal ya existe: riesgo de asistencia (`Attendance`), caída de notas (`Assessment`),
-auras de cuidado (`counseling`→proyección), carácter (T2, con Lente 2/ficha ya real desde v1.40.0), y
-—una vez exista— incidencias (§3.1). Falta la capa que (a) evalúa **reglas de riesgo** contra esas
-señales, (b) genera un **artefacto de alerta** y (c) lo **entrega** al docente/acudiente por los
-canales ya construidos (`communication` + portal). **Punto de gobernanza:** `BI_DOCUMENT.md` fija 5
-lentes; una capa de alertas es capacidad NUEVA → decidir si es enmienda a ese doc (¿"Lente 6"?) o
-mini-spec propio. Sin regla de negocio real confirmada (umbrales, a quién notifica, con qué
-frecuencia) no se modela — mismo principio anti-especulación del repo.
+### 3.2 Alertas tempranas — capstone de síntesis — ✅ CERRADO (v1.46.0)
+~~Todo el dato de señal ya existe...~~ **RESUELTO.** `AnalyticsBi::Lens::EarlyWarningScope` (Lente 6,
+amendment MAJOR de `BI_DOCUMENT.md §5.8`) sintetiza heat (`hps_term_snapshots`), `disciplinary_logs`
+recientes, y la alerta de lazos fraternales (Lente 4) — cero tabla propia, cero dato re-derivado.
+**Punto de gobernanza resuelto: enmienda a `BI_DOCUMENT.md`** (Lente 6), no un mini-spec separado.
+**Entrega**: nunca automática — la superficie solo enlaza a `communication` (`conversation.compose`)
+y a la Lente 4 para que un humano decida contactar a la familia; cero job/cron/auto-mensaje.
+**Construido SIN una regla de negocio real confirmada** (el propio anti-especulación de este párrafo
+seguía vigente) — el owner autorizó explícitamente proceder con la opción recomendada/conservadora;
+los umbrales (`HEAT_RISK_THRESHOLD`/`RECENT_DISCIPLINARY_WINDOW_DAYS`/`TRIGGER_MIN_SIGNALS`) quedan
+documentados como PLACEHOLDER en el código y en `BI_DOCUMENT.md §13` (decisión A8), no como política
+real. Ver `HISTORIA.md` v1.46.0.
 
 ---
 
@@ -136,11 +143,12 @@ frecuencia) no se modela — mismo principio anti-especulación del repo.
   v1.41.0 para la narrativa completa. Retiro/unenroll deferido (decisión de migración real, no
   trivial — ver §4.4).
 
-### FASE C — Alertas tempranas (capstone, §3.2)
-- **Mini-spec o enmienda a `BI_DOCUMENT.md`** con las reglas de riesgo confirmadas por el owner.
-- **Capa de síntesis** que lee señales existentes (asistencia/notas/auras/carácter/incidencias) +
-  **entrega** por `communication`/portal. Se apoya en todo lo anterior — por eso va al final: no tiene
-  puntos de quiebre solo si asistencia, notas, auras y disciplinario ya son reales.
+### FASE C — Alertas tempranas (capstone, §3.2) — ✅ CERRADA (v1.46.0) — PLAN COMPLETO
+- ~~**Mini-spec o enmienda a `BI_DOCUMENT.md`**~~ ✅ **Enmienda MAJOR** (§5.8, Lente 6).
+- ~~**Capa de síntesis**~~ ✅ **`AnalyticsBi::Lens::EarlyWarningScope`** — lee heat/convivencia/lazos
+  fraternales (todo real desde Fases A/B), entrega vía enlace a `communication` + Lente 4 (nunca
+  automática). Se apoyó en todo lo anterior, tal como el plan preveía: sin puntos de quiebre porque
+  asistencia/notas/auras/disciplinario ya eran reales al llegar aquí. Ver `HISTORIA.md` v1.46.0.
 
 ### FASE D — Tier C propiamente (nice-to-have, fuera del criterio de hecho)
 - Resto de `student_support` (medical/accommodations) → habilita alérgenos → `cafeteria` →
@@ -157,9 +165,12 @@ frecuencia) no se modela — mismo principio anti-especulación del repo.
 2. ~~**⚠ Disciplinario**~~ **RESUELTO (owner, 2026-07-21): el corte mínimo basta** —
    `disciplinary_logs` solo (molde `counseling`), `medical_history`/`accommodations` siguen diferidos
    como tier C. Fase B queda así de alcance, sin reabrir la pregunta al llegar ahí.
-3. **⚠ Alertas tempranas:** sigue abierta — reglas de negocio (qué dispara una alerta, a quién
-   notifica — docente/acudiente/ambos—, umbral, frecuencia, y si es "Lente 6" en `BI_DOCUMENT.md` o
-   spec propio). Se retoma al llegar a Fase C, no bloquea nada antes.
+3. ~~**⚠ Alertas tempranas**~~ **RESUELTO (owner, 2026-07-21): proceder con la opción recomendada/
+   conservadora, sin esperar una regla de negocio real.** Construido como Lente 6 en `BI_DOCUMENT.md`
+   (enmienda, no spec propio); disparo por cualquier señal real (heat/convivencia/lazos fraternales);
+   entrega SIEMPRE vía un enlace a `communication`/Lente 4, nunca automática. Los umbrales quedan
+   documentados como PLACEHOLDER (decisión A8 de `BI_DOCUMENT.md §13`) — revisar en cuanto exista una
+   regla de negocio real confirmada por el owner.
 4. ~~**Fin-de-término**~~ **RESUELTO (owner, 2026-07-21): botón manual de staff**, molde
    `report_cards.publish` — una acción explícita "Cerrar término y congelar HPS", no un reloj/fecha
    programada. Construir al cerrar Fase A (después de Slice 8).
@@ -167,18 +178,23 @@ frecuencia) no se modela — mismo principio anti-especulación del repo.
    **RESUELTO por lo ya construido:** Slice 6 se cerró SIN autoría de frameworks (diferida,
    documentada). Reabrir solo si surge una necesidad real de curación (A5).
 
-**Secuencia confirmada:** Fase B' (matrícula, mini-slice) → Slice 7 (afinidades/Lente 3) → Slice 8
-(núcleo familiar/Lente 4) → disparador real de fin-de-término (botón manual) cierra Fase A → Fase B
-(`disciplinary_logs`, corte mínimo ya confirmado) → Fase C (alertas, pendiente de reglas de negocio).
+**Secuencia ejecutada (completa):** Fase B' (matrícula, v1.41.0) → Slice 7 (afinidades/Lente 3,
+v1.42.0) → Slice 8 (núcleo familiar/Lente 4, v1.43.0) → disparador real de fin-de-término (v1.44.0,
+cierra Fase A) → Fase B (`disciplinary_logs`, v1.45.0) → Fase C (alertas tempranas/Lente 6, v1.46.0).
+**Con esto, el plan de cierre end-to-end está completo** — solo Fase D (tier C, nice-to-have) queda
+como backlog futuro fuera de este criterio.
 
 ---
 
-## 7. Checklist "sin puntos de quiebre" (por fase, antes de dar por cerrada)
+## 7. Checklist "sin puntos de quiebre" (verificación final, plan completo)
 
-- [ ] Todo dato de la fase es real (`grep create_table`), nunca stub asumido.
-- [ ] Los sensibles (disciplinario, carácter, auras) llevan caso de seguridad a nivel de **modelo**.
-- [ ] Cada capacidad nueva es **operable sin rake/consola** (consentimiento ✅ v1.40.0, snapshots
-      ✅ v1.44.0 — botón de cerrar término, autoría de frameworks ⚠ diferida a propósito §4.3).
-- [ ] Cada señal que una alerta consumirá (Fase C) ya está construida y probada antes de la Fase C.
-- [ ] Suite completa en serie (`PARALLEL_WORKERS=1`), 0 fallos, corrida entera (no solo el archivo nuevo).
-- [ ] `HISTORIA.md` + `OPEN_PROCESS.md` + este plan actualizados al cerrar cada fase.
+- [x] Todo dato de cada fase es real (`grep create_table`), nunca stub asumido.
+- [x] Los sensibles (disciplinario v1.45.0, carácter v1.39.0, auras v1.37.0) llevan caso de seguridad a nivel de **modelo**.
+- [x] Cada capacidad nueva es **operable sin rake/consola** (consentimiento ✅ v1.40.0, snapshots ✅ v1.44.0 — botón de cerrar término; autoría de frameworks ⚠ diferida a propósito §4.3, no bloquea el criterio de hecho).
+- [x] Cada señal que la Fase C consumió (heat, convivencia, lazos fraternales) ya estaba construida y probada ANTES de construir la Fase C (v1.46.0).
+- [x] Suite completa en serie (`PARALLEL_WORKERS=1`), 0 fallos, corrida entera — 763 runs / 0 fallos / 1 skip preexistente al cierre de Fase C.
+- [x] `HISTORIA.md` + `OPEN_PROCESS.md` + este plan actualizados al cerrar cada fase (v1.41.0 → v1.46.0).
+
+**Plan de cierre end-to-end: COMPLETO (2026-07-21).** Los nueve procesos de §1 son reales, verificados
+contra el repositorio, con caso de aceptación (HTTP y/o modelo) para cada uno. Fase D (tier C) queda
+como backlog futuro, explícitamente fuera de este criterio de hecho.

@@ -1,0 +1,39 @@
+<% content_for :title, "Alertas tempranas" %>
+
+<%= render "shared/page_header", title: "Alertas tempranas",
+      subtitle: "Síntesis de señales ya existentes (asistencia/notas, convivencia, lazos fraternales) — nunca un veredicto, una cola de triage para conversar con la familia (Lente 6 del HPS)." %>
+
+<%= render "shared/alert", variant: :info,
+      message: "Ningún mensaje se envía automáticamente. Esta pantalla solo reúne señales ya visibles en otros lugares — la decisión de contactar a la familia siempre la toma una persona." %>
+
+<% if @flags.any? -%>
+  <%= render layout: "shared/table", locals: { headers: ["Estudiante", "Señales", "Aura de cuidado", ""] } do -%>
+    <% @flags.each do |flag| -%>
+      <tr>
+        <td>
+          <%= "#{flag.student.first_name} #{flag.student.last_name}" %>
+          <% if flag.student.section_id -%>
+            <br><span class="text-muted"><%= link_to "Ver mapa del aula", analytics_bi_spatial_classroom_path(flag.student.section_id) %></span>
+          <% end -%>
+        </td>
+        <td>
+          <ul>
+            <% flag.signal_labels.each do |label| -%>
+              <li><%= ui_badge label, variant: :warning %></li>
+            <% end -%>
+          </ul>
+        </td>
+        <td><%= flag.care_aura_present ? "♥ Activa" : "—" %></td>
+        <td>
+          <%= safe_join([
+                ui_button("Núcleo familiar", href: analytics_bi_family_core_path(flag.student.id), variant: :secondary, size: :sm),
+                (ui_button("Contactar acudiente", href: new_communication_conversation_path, variant: :primary, size: :sm) if can?("conversation.compose"))
+              ].compact, " ") %>
+        </td>
+      </tr>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state", title: "Sin alertas activas",
+        description: "Ningún estudiante muestra señales de riesgo en tu alcance en este momento." %>
+<% end -%>

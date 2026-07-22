@@ -17,6 +17,109 @@
 > moviera el changelog fuera del doc magro. Las entradas v1.6.0+ se escribieron directamente aquí,
 > ya con el split vigente.
 
+### v1.46.0 — 2026-07-21 — `analytics_bi`: Lente 6 "Alertas Tempranas" — `CLOSURE_PLAN.md` Fase C cerrada, criterio de hecho end-to-end COMPLETO
+
+**Décimo cuarto slice post-MVP, y el ÚLTIMO pendiente del plan de cierre end-to-end.** Con las 8
+lentes del HPS (Fase A, v1.35.0→v1.43.0) y el seguimiento disciplinario (Fase B, v1.45.0) ya cerrados,
+esta es la pieza final que `guidelines/CLOSURE_PLAN.md §1` exigía para que la aplicación ejecute
+"de principio a fin" los nueve procesos académicos declarados: **alertas tempranas para docentes y
+acudientes.**
+
+**El punto de partida honesto**: `BI_DOCUMENT.md §3.2` decía, sin rodeos, "sin regla de negocio real
+confirmada (umbrales, a quién notifica, con qué frecuencia) no se modela — mismo principio
+anti-especulación del repo". Esa regla de negocio SIGUE sin confirmar. Este slice se construyó de
+todas formas porque el owner autorizó explícitamente proceder asumiendo la opción recomendada/más
+conservadora en cada decisión abierta pendiente del plan de cierre — una excepción documentada, no
+una violación silenciosa del principio.
+
+**Primer AMENDMENT MAJOR de `BI_DOCUMENT.md` desde su v0.1.0** (v0.9.0 → v1.0.0): el diseño original
+fijaba "son exactamente 5 lentes" como una decisión de diseño asentada — agregar una sexta cambia esa
+decisión, de ahí el bump MAJOR (no MINOR como cerrar-un-slice-ya-previsto). El punto de gobernanza que
+§3.2 dejaba abierto ("¿enmienda a `BI_DOCUMENT.md` o mini-spec propio?") se resolvió a favor de la
+enmienda: el capstone es, en espíritu, una lente más del HPS (misma metáfora de "gatillar una
+intervención humana", §1 del propio doc), así que mantener una sola fuente de verdad pesa más que
+fragmentar en un documento separado que podría desincronizarse.
+
+**Cero tabla nueva — el punto central del diseño.** `AnalyticsBi::Lens::EarlyWarningScope` es un
+read-model puro (§7 default, computado en memoria en cada request, nunca persistido — mismo criterio
+"vivas al inicio" que `BondTension`/`SiblingBondAlert` de la Lente 4 ya establecieron) que SINTETIZA
+señales que otros slices YA construyeron, sin poseer ni escribir ninguna:
+
+- **Riesgo académico/asistencia**: el `heat` ya congelado en `hps_term_snapshots` (Slice 4) para el
+  término activo del estudiante — nunca recomputado desde el crudo, se lee el snapshot ya existente.
+- **Incidente de convivencia reciente**: cualquier `StudentSupport::DisciplinaryLog` (Fase B, recién
+  cerrada) dentro de una ventana móvil.
+- **Alerta de lazos fraternales**: el estudiante aparece en `AnalyticsBi::Lens::SiblingBondAlert`
+  (Lente 4, Slice 8) — REUSADO tal cual, cero reimplementación de esa lógica.
+- **Aura de cuidado activa**: mostrada como contexto informativo, y ESTO ES DELIBERADO — **nunca
+  dispara la alerta por sí sola**. Una aura activa significa que orientación YA está atendiendo el
+  caso; tratarla como un "riesgo nuevo" habría sido contarla dos veces y, peor, habría convertido una
+  señal de cuidado ya en marcha en una alarma.
+
+**El disparador (decisión A8, documentado como PLACEHOLDER, no política real): cualquiera de las tres
+señales reales (académica, convivencia, lazos fraternales) basta** — `TRIGGER_MIN_SIGNALS = 1`. Un
+estudiante con CERO señales reales nunca aparece en la lista — esto es una cola de triage para
+conversar con familias específicas, nunca un roster completo de "todos con su semáforo", que habría
+sido, en la práctica, un score/ranking disfrazado (violación indirecta del no-negociable §1.1.3 si se
+hubiera hecho distinto).
+
+**El invariante más importante del slice, probado con 7 tests de modelo dedicados: gating POR-SEÑAL,
+no solo por-permiso-paraguas.** `hps.early_warning.view` (permiso NUEVO, institución-wide
+ÚNICAMENTE — sin scope reader más pequeño posible, porque una cola de triage cruza secciones/grados
+por definición, mismo criterio que `hps.family.view`) solo desbloquea la SUPERFICIE de síntesis. Cada
+señal individual REVALIDA el permiso que YA la protege en su lente de origen:
+- convivencia revalida `disciplinary_logs.manage` por fila;
+- el lazo fraternal revalida `hps.family.view`;
+- el aura de contexto revalida `hps.aura.view` por fila.
+
+Un observador con `hps.early_warning.view` pero SIN, por ejemplo, `disciplinary_logs.manage` nunca ve
+la señal de convivencia de NINGÚN estudiante — la fila simplemente pierde esa señal específica, nunca
+se oculta al estudiante entero por eso (probado explícitamente: "sin ese permiso, cero alertas"
+cuando el ÚNICO signal real disponible era el de convivencia). Este NO es un principio inventado para
+este slice: es el mismo criterio EXACTO que `StudentSupport::SupportDashboardController` ya
+documentaba desde antes ("holding [el permiso paraguas] alone never leaks a section the actor lacks
+the specific permission for") — la segunda aplicación real de ese patrón en el codebase, ahora
+formalizada como el molde a seguir para cualquier dashboard de síntesis futuro.
+
+**Entrega: NUNCA automática — un fast-path a un humano decidiendo, jamás un envío.**
+`AnalyticsBi::EarlyWarningsController#index` no envía absolutamente nada por su cuenta: cada fila
+enlaza a la superficie de composición YA EXISTENTE de `communication` (`conversation.compose`, sin
+ningún cambio a su lógica interna) para que un humano decida qué escribir y a quién, y a la Lente 4
+(núcleo familiar) para el detalle completo del estudiante. Cero job, cero cron, cero mensaje
+auto-generado — coherente con el no-negociable §1.1.4 ("la vista del acudiente es digna") aplicado
+transitivamente: nunca se le escribe a una familia sobre un "riesgo" académico o de convivencia sin
+que una persona lo decida activamente, cada vez.
+
+**Tests (10 nuevos, suite completa 753→763 runs / 0 fallos / 1 skip preexistente, en serie
+`PARALLEL_WORKERS=1`):** ningún signal → nunca aparece (lista honesta, nunca "todos con ceros");
+heat alto flaggea, heat bajo no; un incidente reciente flaggea SOLO para quien tiene
+`disciplinary_logs.manage`, invisible por completo sin ese permiso; un incidente FUERA de la ventana
+reciente no flaggea; la alerta de hermanos flaggea SOLO para quien tiene `hps.family.view`, invisible
+sin él; un aura activa JAMÁS dispara la alerta por sí sola, ni con todos los permisos
+(`early_warning_scope_test.rb`). Caso de aceptación HTTP completo: 403 sin
+`hps.early_warning.view`, el estado vacío honesto cuando no hay ninguna alerta real, un estudiante
+flaggeado aparece con enlace a su núcleo familiar, y una aserción explícita de que NINGÚN texto en la
+respuesta sugiere un mensaje ya enviado (`analytics_bi_early_warning_test.rb`).
+
+**Con este slice, el criterio de hecho end-to-end completo de `guidelines/CLOSURE_PLAN.md §1` queda
+cubierto de punta a punta**: matrícula · asignación de grupos · registro de notas · evaluación ·
+seguimiento académico · seguimiento disciplinario · psicoorientación · emisión de boletines ·
+alertas tempranas — los nueve procesos, todos reales, verificados contra el código (nunca un stub
+asumido), con 763 tests corriendo en serie sin un solo fallo. Fase D (tier C: cafetería/transporte/
+horario/admisiones/biblioteca) sigue explícitamente fuera de este criterio — nice-to-have,
+driver-based, sin bloquear nada de lo ya cerrado.
+
+**Guardrails nuevos** (ver `OPEN_PROCESS.md` §2): "un capstone de síntesis que lee de varias lentes/
+dominios sensibles sin poseer tabla propia revalida el permiso ORIGINAL de cada señal por separado,
+nunca confía en que el permiso-paraguas de la superficie ya cubrió esa señal — el mismo criterio de
+`SupportDashboardController`, ahora con un segundo caso de uso real que lo confirma como patrón
+general, no una casualidad de un solo controller"; "una superficie que sintetiza señales sensibles
+sobre personas nunca envía nada por sí misma — siempre un enlace a un canal de comunicación YA
+EXISTENTE donde un humano decide, nunca un job/cron/auto-mensaje, incluso cuando la regla de negocio
+real todavía no está confirmada"; "cuando el owner autoriza explícitamente proceder sin una regla de
+negocio confirmada, los umbrales resultantes se documentan como PLACEHOLDER en el propio código y en
+el doc — nunca se presentan como si fueran una decisión de producto validada".
+
 ### v1.45.0 — 2026-07-21 — `student_support`: `disciplinary_logs` real (Fase B de `CLOSURE_PLAN.md`, §3.1)
 
 **Cierra el proceso "seguimiento disciplinario" del criterio de hecho (§1) — la única salvedad de tier

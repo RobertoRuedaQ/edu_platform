@@ -177,7 +177,23 @@ module IdentityAccess
       # HpsTermSnapshotJob (BI_DOCUMENT.md §7/Slice 4) — the owner's confirmed
       # choice (a staff button, molde report_card.publish) over a scheduled/
       # cron trigger, since end-of-term is data-dependent, not clock-driven.
-      "academic_terms.manage" => "Crear, editar, activar y cerrar términos académicos (dispara el snapshot del HPS al cerrar)"
+      "academic_terms.manage" => "Crear, editar, activar y cerrar términos académicos (dispara el snapshot del HPS al cerrar)",
+      # analytics_bi HPS Lens 6 (v1.46.0, BI_DOCUMENT.md §5.8 amendment,
+      # guidelines/CLOSURE_PLAN.md §3.2, Fase C): "Alertas Tempranas", the
+      # cross-domain synthesis capstone. INSTITUTION-WIDE ONLY (orientación/
+      # directivas), no smaller scope reader — same criterion as
+      # hps.family.view (a triage queue spans sections/grades by definition).
+      # This permission ONLY grants access to the SYNTHESIS SURFACE — it does
+      # NOT itself unlock any underlying signal. AnalyticsBi::Lens::
+      # EarlyWarningScope re-checks hps.aura.view/disciplinary_logs.manage/
+      # hps.family.view per signal before including it, same "each section its
+      # own permission" discipline as StudentSupport::SupportDashboardController.
+      # NO business rule (thresholds/audience/frequency) was ever confirmed —
+      # BI_DOCUMENT.md §3.2 says explicitly not to model this without one; it
+      # ships anyway on the owner's explicit instruction to assume a
+      # documented, conservative default (see EarlyWarningScope's own
+      # comment) — revisit the moment a real policy is defined.
+      "hps.early_warning.view" => "Ver la síntesis de alertas tempranas (Lente 6 del HPS)"
     }.freeze
 
     def self.call

@@ -17,10 +17,10 @@
 
 | Campo | Valor |
 |---|---|
-| **Versión** | `v0.9.0` |
+| **Versión** | `v1.0.0` |
 | **Fecha** | 2026-07-21 |
-| **Estado global de referencia** | `PROJECT_STATE.md v1.43.0` — **LAS 8 LENTES/SLICES DEL ROADMAP ORIGINAL ESTÁN CERRADAS.** `analytics_bi` AMBAS mitades reales (`InstitutionDashboard`/`CrossTenantReportRoster`) + Lentes 1/2/3/5 reales + temporalidad año-a-año real + instrumento de carácter (T2) real + **Lente 4 (Núcleo Familiar) real**. |
-| **Estado del dominio** | Filosofía, tiers de confidencialidad, ERD conceptual, modelo de acceso de las 5 lentes, guardas de RLS/clínicas, estrategia de procesamiento y slicing — **fijados**. **Slice 1 (cross-tenant) cerrado** (primera conexión BYPASSRLS real). **Slice 2 (Lente 1, mapa espacial + heat) cerrado (v1.36.0)** — geometría de aula (`classroom_layouts`/`seat_assignments`) net-new en `group_management` (decisión A2), heat derivado in-memory de T1 (notas/asistencia). **Slice 3 (Lente 5, "Auras de Cuidado") cerrado (v1.37.0)** — proyección `care_auras` net-new en `analytics_bi`, escrita SOLO por `AnalyticsBi::Aura::Projector` invocado desde `counseling` (cero PII clínica, cero acoplamiento inverso), leída por el docente como un ícono abstracto sobre la Lente 1 (`hps.aura.view`); aislamiento clínico probado a nivel de MODELO (SQL tap + estructura de asociaciones). **Slice 4 (temporalidad año-a-año) cerrado (v1.38.0)** — `student_placements` net-new en `group_management` (decisión A1 resuelta) efectivo-fechado/append-only vía `GroupManagement::SectionReassigner`, el ÚNICO seam que mueve un estudiante de sección; `hps_term_snapshots` net-new en `analytics_bi` (§7), congelado por `AnalyticsBi::Hps::Snapshotter` vía el fan-out `HpsTermSnapshotJob`/`HpsTermSnapshotAllJob`. **Slice 5 (instrumento de carácter, T2) cerrado (v1.39.0)** — el instrumento staff-autoría (`character_frameworks`→`evaluations`→`dimension_scores`, molde rúbrica con `framework_snapshot` congelado) y, SEPARADO, el camino de pares/acudientes (`peer_appreciations`, catálogo cerrado `peer_appreciation_tags`, umbral de agregación, moderación append-only) gateado por el **primer consentimiento del codebase** (`character_program_consents`). **Slice 6 (Lente 2, "Ficha de Personaje") cerrado (v1.40.0)** — la primera lente de AUTOSERVICIO: radar/brújula/medallas/crecimiento consumidos en solo-lectura de las tablas del Slice 5 (cero tablas nuevas), la UI de consentimiento del acudiente y la superficie de dar un aporte de par (ambas deferidas del Slice 5), gateadas por identidad (`GuardianScope`/`StudentSelfScope`), nunca RBAC. **Slice 7 (Lente 3, "Constelación de Afinidades") cerrado (v1.42.0)** — `affinity_taxonomy`/`student_affinities` net-new (T2), scope institución-wide o `department_id` (especialista, reusando el `:department` scope reader existente), relajación acotada de §10.3 con Cytoscape.js (importmap, progressive enhancement — fallback accesible siempre real). **Slice 8 (Lente 4, "Núcleo Familiar") cerrado (v1.43.0)** — `households`/`guardian_relationships` net-new (T2, extienden `core.guardian_students` 1:1, nunca lo duplican); grafo orbital con Cytoscape.js REUSADO (segunda librería, cero librerías nuevas); detección de hermanos vía query (cero tabla nueva); "tensión del vínculo" computada en vivo de señales T1 reales; alerta de lazos fraternales (read-model, auditada); `custody_kind` segregado por construcción (nunca en el grafo). **Con esto, las 8 lentes/slices del roadmap original de este documento (§11) están todas cerradas.** Trabajo futuro del dominio (Lente 6 "alertas tempranas" del `guidelines/CLOSURE_PLAN.md`, autoría real de frameworks/taxonomías, portal de afinidades/aportes-de-acudiente) es backlog nuevo, no deuda de este roadmap. |
+| **Estado global de referencia** | `PROJECT_STATE.md v1.46.0` — **LAS 8 LENTES/SLICES DEL ROADMAP ORIGINAL ESTÁN CERRADAS + LENTE 6 "ALERTAS TEMPRANAS" AMENDMENT REAL.** `analytics_bi` AMBAS mitades reales (`InstitutionDashboard`/`CrossTenantReportRoster`) + Lentes 1/2/3/4/5 reales + temporalidad año-a-año real + instrumento de carácter (T2) real + **Lente 6 (Alertas Tempranas, capstone de síntesis) real**. |
+| **Estado del dominio** | Filosofía, tiers de confidencialidad, ERD conceptual, modelo de acceso de las 5 lentes, guardas de RLS/clínicas, estrategia de procesamiento y slicing — **fijados**. **Slice 1 (cross-tenant) cerrado** (primera conexión BYPASSRLS real). **Slice 2 (Lente 1, mapa espacial + heat) cerrado (v1.36.0)** — geometría de aula (`classroom_layouts`/`seat_assignments`) net-new en `group_management` (decisión A2), heat derivado in-memory de T1 (notas/asistencia). **Slice 3 (Lente 5, "Auras de Cuidado") cerrado (v1.37.0)** — proyección `care_auras` net-new en `analytics_bi`, escrita SOLO por `AnalyticsBi::Aura::Projector` invocado desde `counseling` (cero PII clínica, cero acoplamiento inverso), leída por el docente como un ícono abstracto sobre la Lente 1 (`hps.aura.view`); aislamiento clínico probado a nivel de MODELO (SQL tap + estructura de asociaciones). **Slice 4 (temporalidad año-a-año) cerrado (v1.38.0)** — `student_placements` net-new en `group_management` (decisión A1 resuelta) efectivo-fechado/append-only vía `GroupManagement::SectionReassigner`, el ÚNICO seam que mueve un estudiante de sección; `hps_term_snapshots` net-new en `analytics_bi` (§7), congelado por `AnalyticsBi::Hps::Snapshotter` vía el fan-out `HpsTermSnapshotJob`/`HpsTermSnapshotAllJob`. **Slice 5 (instrumento de carácter, T2) cerrado (v1.39.0)** — el instrumento staff-autoría (`character_frameworks`→`evaluations`→`dimension_scores`, molde rúbrica con `framework_snapshot` congelado) y, SEPARADO, el camino de pares/acudientes (`peer_appreciations`, catálogo cerrado `peer_appreciation_tags`, umbral de agregación, moderación append-only) gateado por el **primer consentimiento del codebase** (`character_program_consents`). **Slice 6 (Lente 2, "Ficha de Personaje") cerrado (v1.40.0)** — la primera lente de AUTOSERVICIO: radar/brújula/medallas/crecimiento consumidos en solo-lectura de las tablas del Slice 5 (cero tablas nuevas), la UI de consentimiento del acudiente y la superficie de dar un aporte de par (ambas deferidas del Slice 5), gateadas por identidad (`GuardianScope`/`StudentSelfScope`), nunca RBAC. **Slice 7 (Lente 3, "Constelación de Afinidades") cerrado (v1.42.0)** — `affinity_taxonomy`/`student_affinities` net-new (T2), scope institución-wide o `department_id` (especialista, reusando el `:department` scope reader existente), relajación acotada de §10.3 con Cytoscape.js (importmap, progressive enhancement — fallback accesible siempre real). **Slice 8 (Lente 4, "Núcleo Familiar") cerrado (v1.43.0)** — `households`/`guardian_relationships` net-new (T2, extienden `core.guardian_students` 1:1, nunca lo duplican); grafo orbital con Cytoscape.js REUSADO (segunda librería, cero librerías nuevas); detección de hermanos vía query (cero tabla nueva); "tensión del vínculo" computada en vivo de señales T1 reales; alerta de lazos fraternales (read-model, auditada); `custody_kind` segregado por construcción (nunca en el grafo). **Con esto, las 8 lentes/slices del roadmap original de este documento (§11) están todas cerradas.** **Amendment MAJOR (v1.0.0): Lente 6, "Alertas Tempranas"** — el capstone de síntesis que `guidelines/CLOSURE_PLAN.md §3.2` pedía, ahora real. Sin tabla nueva: un read-model puro (`AnalyticsBi::Lens::EarlyWarningScope`) que sintetiza señales YA construidas por slices anteriores (heat de `hps_term_snapshots`, incidentes de `disciplinary_logs`, la alerta de lazos fraternales de la Lente 4), gateado por un permiso-paraguas institución-wide (`hps.early_warning.view`) que NUNCA filtra por sí solo una señal cuyo permiso específico el observador no tenga (mismo criterio que `SupportDashboardController`). **Heurística documentada explícitamente como PLACEHOLDER**, sin regla de negocio real confirmada por el owner (ver §13) — construida solo porque el owner autorizó explícitamente proceder asumiendo la opción recomendada en cada decisión abierta. Trabajo futuro del dominio (autoría real de frameworks/taxonomías, portal de afinidades/aportes-de-acudiente, umbral real de alertas cuando exista una regla de negocio confirmada) es backlog nuevo, no deuda de este roadmap. |
 
 **Versionado (igual que los demás docs):** MAJOR = cambia una decisión de diseño asentada del dominio
 o su modelo de tiers · MINOR = se cierra un slice o una decisión abierta · PATCH =
@@ -59,7 +59,12 @@ postura de Habeas Data de `PROJECT_STATE.md §9.2`, y son vinculantes para todo 
 6. **Sin buscador de personas, nunca.** Ninguna lente introduce autocompletar por nombre/documento ni
    directorios navegables de menores (regla vigente de `GuardianScope`).
 
-### 1.2 Las cinco lentes (resumen)
+### 1.2 Las lentes (resumen)
+
+> **Amendment v1.0.0**: el diseño original fijaba exactamente 5 lentes ("Las cinco lentes"). Una
+> sexta lente, "Alertas Tempranas", se agregó como amendment MAJOR después de que las 8 slices del
+> roadmap original cerraran — es un capstone de SÍNTESIS transversal (lee de varias lentes, no posee
+> ninguna tabla propia), pedido explícitamente por `guidelines/CLOSURE_PLAN.md §3.2`. Ver §5.8.
 
 | # | Lente | Observador | Metáfora |
 |---|---|---|---|
@@ -68,6 +73,7 @@ postura de Habeas Data de `PROJECT_STATE.md §9.2`, y son vinculantes para todo 
 | 3 | **Constelación de Afinidades** | Especialistas / entrenadores / directores de arte | Nube de nodos-estrella por talento, transversal al colegio |
 | 4 | **Núcleo de Soporte** | Psicoorientación / directivas | Grafo orbital de la familia; tensión del vínculo; alerta de lazos fraternales |
 | 5 | **Velo de Confidencialidad / Auras de Cuidado** | Orientador ──► docente | Doble nivel: el orientador ve el detalle; el docente solo un aura abstracta sobre el pupitre |
+| 6 | **Alertas Tempranas** *(amendment v1.0.0)* | Orientación / directivas | Cola de triage: síntesis de señales de otras lentes (heat, convivencia, lazos fraternales) — nunca un veredicto, un fast-path a conversar con la familia |
 
 ---
 
@@ -144,7 +150,7 @@ por lectura, `analytics_bi` no lo re-posee.
 
 ---
 
-## 4. Modelo de acceso de las 5 lentes
+## 4. Modelo de acceso de las lentes
 
 Toda lente pasa por las **dos compuertas en serie**: (1) entitlement del addon `analytics_bi`
 (`Entitlement::Registry` propio, `config/entitlements/analytics_bi.rb`), y (2) autorización. La
@@ -158,6 +164,7 @@ diferencia por lente es el **tipo** de segunda compuerta:
 | 4 · Núcleo Familiar | **Supervisión** (RBAC) | `hps.family.view` | institución-wide (orientación/directivas) | `Navigation::Registry` |
 | 5 · Auras (lado orientador) | **Supervisión** (RBAC) | `counseling.*` existente | institución-wide clínico | `counseling` |
 | 5 · Auras (lado docente) | **Supervisión** (RBAC) | `hps.aura.view` (solo aura abstracta) | `group_id` | dentro de la Lente 1 |
+| 6 · Alertas Tempranas *(amendment v1.0.0)* | **Supervisión** (RBAC) | `hps.early_warning.view` (permiso-paraguas — NO desbloquea señales, cada una revalida su propio permiso, §5.8) | institución-wide únicamente, sin scope reader más pequeño | `Navigation::Registry` |
 
 Permisos de **escritura** del instrumento de carácter (T2), separados de la lectura:
 `hps.character.author` (docente/orientador crea/publica evaluaciones), `hps.character.moderate`
@@ -491,6 +498,60 @@ care_auras                      (proyección PÚBLICA-al-docente — NO contiene
   model con asociaciones navegables. La lectura del orientador pasa por
   `AnalyticsBi::Aura::CounselorScope` (counseling nunca toca `AnalyticsBi::CareAura` directo).
 
+### 5.8 Alertas tempranas (Lente 6 — amendment MAJOR v1.0.0, capstone de síntesis, `guidelines/CLOSURE_PLAN.md §3.2`)
+
+**No es una tabla nueva — es una lectura.** A diferencia de las Lentes 1–5 (todas dueñas de datos
+net-new propios o proyecciones), la Lente 6 no posee ni escribe nada: `AnalyticsBi::Lens::
+EarlyWarningScope` es un read-model puro que SINTETIZA señales que otras lentes/dominios ya
+construyeron y ya exponen en otro lugar:
+
+- **Riesgo académico/asistencia** — el `heat` ya congelado en `hps_term_snapshots` (Slice 4, §7) para
+  el término activo del estudiante. Umbral `HEAT_RISK_THRESHOLD = 0.6` (**placeholder, ver §13** — sin
+  regla de negocio confirmada).
+- **Incidente de convivencia reciente** — cualquier `disciplinary_logs` en una ventana móvil
+  (`RECENT_DISCIPLINARY_WINDOW_DAYS = 30`, **placeholder**) para el estudiante.
+- **Alerta de lazos fraternales** — el estudiante aparece en `AnalyticsBi::Lens::SiblingBondAlert`
+  (Lente 4, Slice 8), reusada TAL CUAL, nunca reimplementada.
+- **Aura de cuidado activa** — mostrada como contexto informativo únicamente. **Nunca dispara la
+  alerta por sí sola** (una aura activa significa que orientación YA está atendiendo el caso — no es
+  un gap nuevo, es una señal de que el acompañamiento ya existe).
+
+**El disparador (§13, placeholder): CUALQUIERA de los tres primeros signals real es suficiente** —
+`TRIGGER_MIN_SIGNALS = 1`. Un estudiante con CERO señales reales nunca aparece (la lista es una cola
+de triage, nunca un roster completo con ceros).
+
+**Gating por-señal, no solo por-permiso-paraguas (invariante duro, probado a nivel de modelo).**
+`hps.early_warning.view` (institución-wide, sin scope reader más pequeño — una cola de triage cruza
+secciones/grados por definición) solo desbloquea la SUPERFICIE de síntesis. Cada señal individual
+re-valida el permiso que YA la protege en su lente de origen:
+- riesgo académico/asistencia: ningún permiso adicional (ya cubierto por el paraguas, mismo criterio
+  que los KPIs de `InstitutionDashboard`).
+- incidente de convivencia: revalida `disciplinary_logs.manage` por fila.
+- alerta de lazos fraternales: revalida `hps.family.view`.
+- aura activa (contextual): revalida `hps.aura.view` por fila.
+
+Un observador con `hps.early_warning.view` pero SIN, por ejemplo, `disciplinary_logs.manage` nunca ve
+la señal de convivencia de ningún estudiante — la fila simplemente pierde esa señal, nunca se oculta
+todo el estudiante por eso (mismo criterio documentado que
+`StudentSupport::SupportDashboardController`: "holding [el permiso paraguas] alone never leaks a
+section the actor lacks the specific permission for").
+
+**Entrega: nunca automática — un fast-path a un humano decidiendo.** El punto de gobernanza que §3.2
+dejaba abierto ("¿enmienda a este doc o spec propio?") se resolvió a favor de la enmienda (esta
+sección) porque el capstone es, en espíritu, una lente más del HPS (misma metáfora de "gatillar una
+intervención humana", §1). La superficie (`AnalyticsBi::EarlyWarningsController#index`) NUNCA envía un
+mensaje por sí misma — solo enlaza a la superficie de composición YA EXISTENTE de `communication`
+(`conversation.compose`) para que un humano decida qué escribir y a quién, y a la Lente 4 (núcleo
+familiar) para el detalle completo del estudiante. Ningún job, ningún cron, ningún envío
+automatizado — coherente con el no-negociable §1.1.4 (la vista del acudiente es digna) aplicado
+transitivamente: nunca se le escribe a una familia sobre un "riesgo" sin que una persona lo decida.
+
+**Por qué se construyó sin una regla de negocio confirmada (excepción documentada a la propia regla
+anti-especulación de este documento, §3.2):** el owner autorizó explícitamente proceder asumiendo la
+opción recomendada/más conservadora en cada decisión abierta pendiente del `CLOSURE_PLAN.md`. Los
+umbrales de esta sección son defaults honestos y documentados como placeholder, no una política real
+— revisar en cuanto exista una regla de negocio confirmada (ver §13).
+
 ---
 
 ## 6. Guardrails de confidencialidad y desempeño (REQ3)
@@ -600,6 +661,7 @@ app/domains/analytics_bi/
       constellation_builder.rb
       family_graph.rb
       sibling_bond_alert.rb     # read-model de la alerta de lazos fraternales
+      early_warning_scope.rb    # Lente 6 (amendment v1.0.0) — síntesis, cero tabla propia
     character/
       publisher.rb              # publica evaluación + congela snapshot (molde rubric)
       peer_appreciation_recorder.rb  # registra aporte con resguardos + consentimiento
@@ -621,6 +683,7 @@ app/controllers/analytics_bi/
   spatial_classrooms_controller.rb      # Lente 1 (supervisión)
   constellations_controller.rb          # Lente 3 (supervisión)
   family_cores_controller.rb            # Lente 4 (supervisión)
+  early_warnings_controller.rb          # Lente 6 (amendment v1.0.0, supervisión, síntesis)
   character_evaluations_controller.rb   # T2 escritura (supervisión, hps.character.author)
   cross_tenant_reports_controller.rb    # diferido (bi_auditor)
 # Lente 2 (ficha) NO va aquí: cuelga de app/controllers/portals/ (autoservicio)
@@ -728,6 +791,7 @@ con entrada en `HISTORIA.md` + actualización de `OPEN_PROCESS.md`.
 | **6** | Lente 2 — ficha de personaje (portal, autoservicio) | usa slice 5 | alta (digna+NNA) | **✅ HECHO (v1.40.0)** — Slices 4, 5 |
 | **7** | Afinidades + Lente 3 constelación | net-new + lib JS | alta | **✅ HECHO (v1.42.0)** — §5.5, §10.3 |
 | **8** | Núcleo familiar + Lente 4 (grafo orbital, tensión, lazos fraternales) | extiende `guardian_students` | alta | **✅ HECHO (v1.43.0)** — §5.6, §10.3 |
+| **9** *(amendment, fuera del roadmap original de 8)* | Lente 6 — alertas tempranas (capstone de síntesis) | cero tabla nueva, lee de Slices 2/4/5/8 + `student_support` | media (síntesis, no NNA net-new) | **✅ HECHO (v1.0.0/`PROJECT_STATE.md` v1.46.0)** — §5.8, `guidelines/CLOSURE_PLAN.md` Fase C |
 
 **Justificación del orden:**
 
@@ -781,10 +845,87 @@ Antes de dar por cerrado cualquier slice de este dominio:
 | **A5** | Set inicial de `character_frameworks` y `peer_appreciation_tags` | **✅ RESUELTO (v1.39.0): sembrado un set STARTER** (`bin/rails bi:seed_character_starter`) usando el contenido que este mismo §5.4 ya sugiere (dimensiones Lógica/Creatividad/Empatía/Convivencia/Perseverancia; tags Buen compañero/Creativo-a/Ayuda a los demás/Perseverante/Curioso-a) — **NO** es la curación pedagógica real que esta decisión pedía; es el placeholder "aburrido" que reemplaza una UI de autoría de frameworks, deferida hasta una necesidad real de curación. |
 | **A6** | ¿La "tensión del vínculo" y la "alerta de lazos fraternales" (§5.6) se persisten como snapshot o se computan vivas? | **✅ RESUELTO (v1.43.0): vivas**, exactamente el lean propuesto — `AnalyticsBi::Lens::BondTension`/`SiblingBondAlert` computan en memoria en cada request, sin persistir nada; snapshot por término queda como escalón futuro si algún día pesa (§7). |
 | **A7** | Fechado de `character_evaluations`/`care_auras`: ¿se acopla a `academic_terms` o calendario independiente? | **✅ RESUELTO para ambos.** `care_auras` (v1.37.0): acoplado a `academic_terms` (`care_auras.academic_term_id` FK NOT NULL; el `Projector` toma `Core::AcademicTerm.active`). **`character_evaluations` (v1.39.0): también acoplado a `academic_terms`** (mismo criterio — `academic_term_id` FK NOT NULL, parte de la unicidad `(student, term, framework, author)`; el controller resuelve `Core::AcademicTerm.active`). |
+| **A8** *(nueva, amendment v1.0.0)* | Lente 6 (Alertas Tempranas, §5.8): umbrales de disparo, audiencia exacta, frecuencia — `guidelines/CLOSURE_PLAN.md §3.2` decía explícitamente "sin regla de negocio real confirmada... no se modela". | **⚠️ SIGUE SIN una regla de negocio real confirmada por el owner.** Construida de todas formas por autorización explícita del owner de proceder con la opción recomendada/más conservadora en cada decisión abierta pendiente. Lean implementado (documentado como PLACEHOLDER, no política): `HEAT_RISK_THRESHOLD = 0.6`, `RECENT_DISCIPLINARY_WINDOW_DAYS = 30`, `TRIGGER_MIN_SIGNALS = 1` (cualquier señal real basta), cero entrega automatizada (siempre un fast-path a un humano vía `communication`/Lente 4, nunca un mensaje enviado solo). **Revisar estos tres números en cuanto exista una regla de negocio real** — son defaults honestos, no una decisión de producto validada. |
 
 ---
 
 ## 14. Changelog
+
+### v1.0.0 — 2026-07-21 — AMENDMENT MAYOR: Lente 6 "Alertas Tempranas" (capstone de síntesis) — `CLOSURE_PLAN.md` Fase C cerrada, criterio de hecho end-to-end COMPLETO
+
+- **Primer amendment MAJOR de este documento desde su v0.1.0** — cambia la decisión de diseño asentada
+  "son exactamente 5 lentes" (§1.2). Justificado: `guidelines/CLOSURE_PLAN.md §1` fija "alertas
+  tempranas para docentes y acudientes" como parte del criterio de hecho end-to-end de TODA la
+  aplicación (no solo de `analytics_bi`) — con las 8 lentes originales y el seguimiento disciplinario
+  (Fase B, v1.45.0) ya cerrados, esta era la ÚLTIMA pieza pendiente.
+
+- **Cero tabla nueva.** `AnalyticsBi::Lens::EarlyWarningScope` es un read-model puro (§7 default,
+  computado en cada request, nunca persistido) que sintetiza señales YA construidas: `heat` de
+  `hps_term_snapshots` (Slice 4), `disciplinary_logs` recientes (`student_support`, Fase B),
+  `AnalyticsBi::Lens::SiblingBondAlert` reusado TAL CUAL (Lente 4, Slice 8, cero reimplementación), y
+  `care_auras` activas como contexto informativo (NUNCA dispara la alerta por sí sola — una aura
+  activa significa que orientación ya está atendiendo, no un gap nuevo).
+
+- **Disparo: cualquier señal real basta** (`TRIGGER_MIN_SIGNALS = 1`) — un estudiante con cero señales
+  reales nunca aparece; esto es una cola de triage, nunca un roster completo con ceros disfrazados de
+  "sin riesgo".
+
+- **Gating por-señal, no solo por-permiso-paraguas — invariante duro, probado con 7 tests de modelo
+  dedicados.** `hps.early_warning.view` (permiso nuevo, institución-wide ÚNICAMENTE, sin scope reader
+  más pequeño — una cola de triage cruza secciones/grados por definición) solo desbloquea la
+  SUPERFICIE. Cada señal individual revalida el permiso que YA la protege en su lente de origen
+  (`disciplinary_logs.manage` para convivencia, `hps.family.view` para el lazo fraternal,
+  `hps.aura.view` para el aura de contexto) — un observador con el permiso-paraguas pero sin, por
+  ejemplo, `disciplinary_logs.manage` nunca ve esa señal para ningún estudiante, la fila simplemente
+  pierde esa señal, nunca oculta al estudiante entero por eso. Mismo criterio EXACTO que
+  `StudentSupport::SupportDashboardController` ya documentaba desde antes de este slice ("holding
+  [el permiso paraguas] alone never leaks a section the actor lacks the specific permission for") —
+  este slice es la segunda aplicación real de ese principio, no una invención nueva.
+
+- **Entrega: NUNCA automática — un fast-path a un humano decidiendo, nunca un envío.**
+  `AnalyticsBi::EarlyWarningsController#index` no envía nada por sí mismo: enlaza a la superficie de
+  composición YA EXISTENTE de `communication` (`conversation.compose`) para que un humano decida qué
+  escribir y a quién, y a la Lente 4 (núcleo familiar) para el detalle completo. Coherente con
+  no-negociable §1.1.4 (la vista del acudiente es digna) aplicado transitivamente: nunca se contacta a
+  una familia sobre un "riesgo" sin que una persona lo decida activamente.
+
+- **Construido SIN una regla de negocio real confirmada (decisión A8, §13) — excepción documentada y
+  explícita a la propia regla anti-especulación de este documento (§3.2 lo decía sin rodeos: "sin
+  regla de negocio real confirmada... no se modela").** El owner autorizó explícitamente proceder
+  asumiendo la opción recomendada/más conservadora en cada decisión pendiente del `CLOSURE_PLAN.md`.
+  Los tres umbrales (`HEAT_RISK_THRESHOLD = 0.6`, `RECENT_DISCIPLINARY_WINDOW_DAYS = 30`,
+  `TRIGGER_MIN_SIGNALS = 1`) están documentados en el propio código como PLACEHOLDER, no política —
+  el mismo posture honesto que `SiblingBondAlert` (Slice 8) ya había establecido para su propia
+  heurística sin regla confirmada.
+
+- **Punto de gobernanza resuelto (§3.2 lo dejaba abierto): enmienda a `BI_DOCUMENT.md` (esta sección,
+  §5.8), no un mini-spec separado** — el capstone es, en espíritu, una lente más del HPS (misma
+  metáfora de "gatillar una intervención humana", §1), así que mantenerlo en el mismo documento con
+  el resto de las lentes preserva una sola fuente de verdad en vez de fragmentar en dos documentos
+  que podrían desincronizarse.
+
+- **Nueva entrada en `Navigation::Registry`** ("Alertas tempranas") — a diferencia de la Lente 4 (sin
+  nav, reached per-student), esta lente SÍ tiene su propia entrada de nivel superior porque es un
+  dashboard/cola que orientación/directivas revisan regularmente por su cuenta, mismo criterio que
+  `support_dashboard.view` ya establecía en `student_support`.
+
+- **Tests (10 nuevos, suite completa 753→763 runs / 0 fallos / 1 skip preexistente, en serie
+  `PARALLEL_WORKERS=1`):** ningún signal → nunca flagged (lista honesta, nunca vacía-por-defecto
+  disfrazada); heat alto flaggea, heat bajo no; incidente reciente flaggea SOLO con
+  `disciplinary_logs.manage`, invisible sin él (nunca fuga); incidente antiguo (fuera de ventana) no
+  flaggea; alerta de hermanos flaggea SOLO con `hps.family.view`, invisible sin él; aura activa NUNCA
+  dispara por sí sola (`early_warning_scope_test.rb`); caso de aceptación HTTP — 403 sin
+  `hps.early_warning.view`, estado vacío honesto, un estudiante flaggeado aparece con enlace a su
+  núcleo familiar y CERO evidencia de un mensaje enviado automáticamente
+  (`analytics_bi_early_warning_test.rb`).
+
+- **Con este amendment, el criterio de hecho end-to-end completo de `guidelines/CLOSURE_PLAN.md §1`
+  queda cubierto**: matrícula · asignación de grupos · registro de notas · evaluación · seguimiento
+  académico · seguimiento disciplinario · psicoorientación · emisión de boletines · alertas
+  tempranas — los nueve procesos, todos reales. Fase D (tier C: cafetería/transporte/horario/
+  admisiones/biblioteca) sigue explícitamente fuera de este criterio, nice-to-have, driver-based.
+
+- Ver `HISTORIA.md` v1.46.0 para la narrativa completa.
 
 ### v0.9.0 — 2026-07-21 — Slice 8 cerrado: Lente 4 "Núcleo Familiar" — LAS 8 LENTES DEL ROADMAP ORIGINAL, CERRADAS
 

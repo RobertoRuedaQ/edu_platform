@@ -416,3 +416,29 @@ DisciplinaryLogsController#create` era, hasta este slice, un no-op literal: un `
 - 7 tests nuevos (suite completa 747→753 runs). Con esto, Fase A (HPS completo) y Fase B
   (disciplinario) del `CLOSURE_PLAN.md` quedan cerradas — solo Fase C (alertas tempranas) sigue
   pendiente.
+
+### 9.9 Último slice — alertas tempranas y cierre del plan end-to-end (v1.46.0, `CLOSURE_PLAN.md` Fase C)
+
+**Qué:** el proceso "alertas tempranas para docentes y acudientes" del criterio de hecho (§1 de
+`CLOSURE_PLAN.md`) — la última pieza pendiente. Construido SIN una regla de negocio real confirmada
+(el propio doc lo advertía explícitamente), por autorización directa del owner de proceder con la
+opción recomendada/conservadora en cada decisión abierta pendiente.
+
+**Cómo (técnico):**
+- **Cero tabla nueva.** `AnalyticsBi::Lens::EarlyWarningScope` (Sección 9.5) sintetiza señales que ya
+  existían: `heat` de `hps_term_snapshots`, `disciplinary_logs` recientes (Sección 9.8), y la alerta
+  de lazos fraternales de la Lente 4 — REUSADA, no reimplementada.
+- **Gating por-señal, no solo por-permiso-paraguas**: el permiso nuevo `hps.early_warning.view`
+  (institución-wide únicamente) solo abre la superficie; cada señal individual revalida su propio
+  permiso de origen (`disciplinary_logs.manage`, `hps.family.view`, `hps.aura.view`) — mismo criterio
+  que `SupportDashboardController` ya aplicaba, ahora confirmado como patrón general con un segundo
+  caso de uso real.
+- **Entrega nunca automática**: la superficie solo enlaza a la composición de mensajes YA EXISTENTE
+  (`communication`) y a la Lente 4 — cero job/cron/mensaje auto-generado. Un humano siempre decide
+  contactar a la familia.
+- **Primer amendment MAJOR de `BI_DOCUMENT.md`** (v0.9.0→v1.0.0) — agrega una sexta lente al diseño
+  que originalmente fijaba "exactamente 5".
+- 10 tests nuevos (suite completa 753→763 runs). **Con este slice, el plan de cierre end-to-end de
+  `CLOSURE_PLAN.md` queda COMPLETO**: los nueve procesos declarados en su §1 son todos reales. Solo
+  queda la Fase D (tier C: cafetería/transporte/horario/admisiones/biblioteca), explícitamente fuera
+  de ese criterio de hecho, como backlog nice-to-have futuro.

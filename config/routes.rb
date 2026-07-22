@@ -470,6 +470,12 @@ Rails.application.routes.draw do
     # households is console/rake-only this slice (deferred, same posture as
     # character_frameworks authoring in Slice 5).
     resources :family_cores, only: :show
+    # early_warnings (Lens 6, BI_DOCUMENT.md §5.8 amendment, guidelines/
+    # CLOSURE_PLAN.md §3.2/Fase C): the cross-domain risk triage queue, gated
+    # by hps.early_warning.view (institution-wide only). index only — a
+    # read-only synthesis of signals that already exist elsewhere; never sends
+    # anything itself (see EarlyWarningsController).
+    resources :early_warnings, only: :index
   end
 
   # --- identity_access (domain views, Prompt Unificado) ---------------------

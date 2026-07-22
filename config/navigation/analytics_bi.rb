@@ -40,3 +40,16 @@ Navigation::Registry.register(
   permission: "hps.constellation.view",
   position: 75
 )
+
+# HPS Lens 6 — "Alertas Tempranas" (v1.46.0, BI_DOCUMENT.md §5.8 amendment,
+# guidelines/CLOSURE_PLAN.md §3.2/Fase C). Institution-wide triage queue for
+# orientación/directivas, gated by hps.early_warning.view — its own top-level
+# entry (same reasoning as student_support's support_dashboard.view: a
+# regularly-checked dashboard, not a per-student drill-down like Lens 4).
+Navigation::Registry.register(
+  domain: "analytics_bi",
+  label: "Alertas tempranas",
+  path: "/analytics_bi/early_warnings",
+  permission: "hps.early_warning.view",
+  position: 80
+)
