@@ -17,10 +17,10 @@
 
 | Campo | Valor |
 |---|---|
-| **Versión** | `v0.8.0` |
+| **Versión** | `v0.9.0` |
 | **Fecha** | 2026-07-21 |
-| **Estado global de referencia** | `PROJECT_STATE.md v1.42.0` — `analytics_bi` AMBAS mitades reales (`InstitutionDashboard`/`CrossTenantReportRoster`) **+ Lente 1 real + Lente 5 real + temporalidad año-a-año real + instrumento de carácter (T2) real + Lente 2 real + Lente 3 (Constelación de Afinidades) real** — la primera librería JS del codebase (Cytoscape.js, importmap, progressive enhancement). |
-| **Estado del dominio** | Filosofía, tiers de confidencialidad, ERD conceptual, modelo de acceso de las 5 lentes, guardas de RLS/clínicas, estrategia de procesamiento y slicing — **fijados**. **Slice 1 (cross-tenant) cerrado** (primera conexión BYPASSRLS real). **Slice 2 (Lente 1, mapa espacial + heat) cerrado (v1.36.0)** — geometría de aula (`classroom_layouts`/`seat_assignments`) net-new en `group_management` (decisión A2), heat derivado in-memory de T1 (notas/asistencia). **Slice 3 (Lente 5, "Auras de Cuidado") cerrado (v1.37.0)** — proyección `care_auras` net-new en `analytics_bi`, escrita SOLO por `AnalyticsBi::Aura::Projector` invocado desde `counseling` (cero PII clínica, cero acoplamiento inverso), leída por el docente como un ícono abstracto sobre la Lente 1 (`hps.aura.view`); aislamiento clínico probado a nivel de MODELO (SQL tap + estructura de asociaciones). **Slice 4 (temporalidad año-a-año) cerrado (v1.38.0)** — `student_placements` net-new en `group_management` (decisión A1 resuelta) efectivo-fechado/append-only vía `GroupManagement::SectionReassigner`, el ÚNICO seam que mueve un estudiante de sección; `hps_term_snapshots` net-new en `analytics_bi` (§7), congelado por `AnalyticsBi::Hps::Snapshotter` vía el fan-out `HpsTermSnapshotJob`/`HpsTermSnapshotAllJob`. **Slice 5 (instrumento de carácter, T2) cerrado (v1.39.0)** — el instrumento staff-autoría (`character_frameworks`→`evaluations`→`dimension_scores`, molde rúbrica con `framework_snapshot` congelado) y, SEPARADO, el camino de pares/acudientes (`peer_appreciations`, catálogo cerrado `peer_appreciation_tags`, umbral de agregación, moderación append-only) gateado por el **primer consentimiento del codebase** (`character_program_consents`). **Slice 6 (Lente 2, "Ficha de Personaje") cerrado (v1.40.0)** — la primera lente de AUTOSERVICIO: radar/brújula/medallas/crecimiento consumidos en solo-lectura de las tablas del Slice 5 (cero tablas nuevas), la UI de consentimiento del acudiente y la superficie de dar un aporte de par (ambas deferidas del Slice 5), gateadas por identidad (`GuardianScope`/`StudentSelfScope`), nunca RBAC. **Slice 7 (Lente 3, "Constelación de Afinidades") cerrado (v1.42.0)** — `affinity_taxonomy`/`student_affinities` net-new (T2), scope institución-wide o `department_id` (especialista, reusando el `:department` scope reader existente), relajación acotada de §10.3 con Cytoscape.js (importmap, progressive enhancement — fallback accesible siempre real). Slice 8 (núcleo familiar/Lente 4) sin construir aún. |
+| **Estado global de referencia** | `PROJECT_STATE.md v1.43.0` — **LAS 8 LENTES/SLICES DEL ROADMAP ORIGINAL ESTÁN CERRADAS.** `analytics_bi` AMBAS mitades reales (`InstitutionDashboard`/`CrossTenantReportRoster`) + Lentes 1/2/3/5 reales + temporalidad año-a-año real + instrumento de carácter (T2) real + **Lente 4 (Núcleo Familiar) real**. |
+| **Estado del dominio** | Filosofía, tiers de confidencialidad, ERD conceptual, modelo de acceso de las 5 lentes, guardas de RLS/clínicas, estrategia de procesamiento y slicing — **fijados**. **Slice 1 (cross-tenant) cerrado** (primera conexión BYPASSRLS real). **Slice 2 (Lente 1, mapa espacial + heat) cerrado (v1.36.0)** — geometría de aula (`classroom_layouts`/`seat_assignments`) net-new en `group_management` (decisión A2), heat derivado in-memory de T1 (notas/asistencia). **Slice 3 (Lente 5, "Auras de Cuidado") cerrado (v1.37.0)** — proyección `care_auras` net-new en `analytics_bi`, escrita SOLO por `AnalyticsBi::Aura::Projector` invocado desde `counseling` (cero PII clínica, cero acoplamiento inverso), leída por el docente como un ícono abstracto sobre la Lente 1 (`hps.aura.view`); aislamiento clínico probado a nivel de MODELO (SQL tap + estructura de asociaciones). **Slice 4 (temporalidad año-a-año) cerrado (v1.38.0)** — `student_placements` net-new en `group_management` (decisión A1 resuelta) efectivo-fechado/append-only vía `GroupManagement::SectionReassigner`, el ÚNICO seam que mueve un estudiante de sección; `hps_term_snapshots` net-new en `analytics_bi` (§7), congelado por `AnalyticsBi::Hps::Snapshotter` vía el fan-out `HpsTermSnapshotJob`/`HpsTermSnapshotAllJob`. **Slice 5 (instrumento de carácter, T2) cerrado (v1.39.0)** — el instrumento staff-autoría (`character_frameworks`→`evaluations`→`dimension_scores`, molde rúbrica con `framework_snapshot` congelado) y, SEPARADO, el camino de pares/acudientes (`peer_appreciations`, catálogo cerrado `peer_appreciation_tags`, umbral de agregación, moderación append-only) gateado por el **primer consentimiento del codebase** (`character_program_consents`). **Slice 6 (Lente 2, "Ficha de Personaje") cerrado (v1.40.0)** — la primera lente de AUTOSERVICIO: radar/brújula/medallas/crecimiento consumidos en solo-lectura de las tablas del Slice 5 (cero tablas nuevas), la UI de consentimiento del acudiente y la superficie de dar un aporte de par (ambas deferidas del Slice 5), gateadas por identidad (`GuardianScope`/`StudentSelfScope`), nunca RBAC. **Slice 7 (Lente 3, "Constelación de Afinidades") cerrado (v1.42.0)** — `affinity_taxonomy`/`student_affinities` net-new (T2), scope institución-wide o `department_id` (especialista, reusando el `:department` scope reader existente), relajación acotada de §10.3 con Cytoscape.js (importmap, progressive enhancement — fallback accesible siempre real). **Slice 8 (Lente 4, "Núcleo Familiar") cerrado (v1.43.0)** — `households`/`guardian_relationships` net-new (T2, extienden `core.guardian_students` 1:1, nunca lo duplican); grafo orbital con Cytoscape.js REUSADO (segunda librería, cero librerías nuevas); detección de hermanos vía query (cero tabla nueva); "tensión del vínculo" computada en vivo de señales T1 reales; alerta de lazos fraternales (read-model, auditada); `custody_kind` segregado por construcción (nunca en el grafo). **Con esto, las 8 lentes/slices del roadmap original de este documento (§11) están todas cerradas.** Trabajo futuro del dominio (Lente 6 "alertas tempranas" del `guidelines/CLOSURE_PLAN.md`, autoría real de frameworks/taxonomías, portal de afinidades/aportes-de-acudiente) es backlog nuevo, no deuda de este roadmap. |
 
 **Versionado (igual que los demás docs):** MAJOR = cambia una decisión de diseño asentada del dominio
 o su modelo de tiers · MINOR = se cierra un slice o una decisión abierta · PATCH =
@@ -727,7 +727,7 @@ con entrada en `HISTORIA.md` + actualización de `OPEN_PROCESS.md`.
 | **5** | Instrumento de carácter (T2, molde rúbrica) | net-new + sensible | alta (NNA) | **✅ HECHO (v1.39.0)** — §5.4, consentimiento |
 | **6** | Lente 2 — ficha de personaje (portal, autoservicio) | usa slice 5 | alta (digna+NNA) | **✅ HECHO (v1.40.0)** — Slices 4, 5 |
 | **7** | Afinidades + Lente 3 constelación | net-new + lib JS | alta | **✅ HECHO (v1.42.0)** — §5.5, §10.3 |
-| **8** | Núcleo familiar + Lente 4 (grafo orbital, tensión, lazos fraternales) | extiende `guardian_students` | alta | §5.6, §10.3 |
+| **8** | Núcleo familiar + Lente 4 (grafo orbital, tensión, lazos fraternales) | extiende `guardian_students` | alta | **✅ HECHO (v1.43.0)** — §5.6, §10.3 |
 
 **Justificación del orden:**
 
@@ -779,12 +779,112 @@ Antes de dar por cerrado cualquier slice de este dominio:
 | **A3** | Umbral N de agregación para tags de pares (§5.4) | **✅ RESUELTO (v1.39.0): N = 3**, como constante de módulo (`AnalyticsBi::Character::PeerAppreciationRecorder::AGGREGATION_THRESHOLD`), **NO configurable por institución todavía** — no existe ningún mecanismo de settings-por-institución en el codebase, e inventar una tabla genérica para un solo número es especulativo (deferido hasta que una institución real lo pida). |
 | **A4** | ¿`analytics_bi` se vuelve dominio medido (`Usage::Ingest.emit`)? | No por ahora (`metered:false`); sin evento facturable claro. |
 | **A5** | Set inicial de `character_frameworks` y `peer_appreciation_tags` | **✅ RESUELTO (v1.39.0): sembrado un set STARTER** (`bin/rails bi:seed_character_starter`) usando el contenido que este mismo §5.4 ya sugiere (dimensiones Lógica/Creatividad/Empatía/Convivencia/Perseverancia; tags Buen compañero/Creativo-a/Ayuda a los demás/Perseverante/Curioso-a) — **NO** es la curación pedagógica real que esta decisión pedía; es el placeholder "aburrido" que reemplaza una UI de autoría de frameworks, deferida hasta una necesidad real de curación. |
-| **A6** | ¿La "tensión del vínculo" y la "alerta de lazos fraternales" (§5.6) se persisten como snapshot o se computan vivas? | Vivas al inicio; snapshot por término si pesa (§7). |
+| **A6** | ¿La "tensión del vínculo" y la "alerta de lazos fraternales" (§5.6) se persisten como snapshot o se computan vivas? | **✅ RESUELTO (v1.43.0): vivas**, exactamente el lean propuesto — `AnalyticsBi::Lens::BondTension`/`SiblingBondAlert` computan en memoria en cada request, sin persistir nada; snapshot por término queda como escalón futuro si algún día pesa (§7). |
 | **A7** | Fechado de `character_evaluations`/`care_auras`: ¿se acopla a `academic_terms` o calendario independiente? | **✅ RESUELTO para ambos.** `care_auras` (v1.37.0): acoplado a `academic_terms` (`care_auras.academic_term_id` FK NOT NULL; el `Projector` toma `Core::AcademicTerm.active`). **`character_evaluations` (v1.39.0): también acoplado a `academic_terms`** (mismo criterio — `academic_term_id` FK NOT NULL, parte de la unicidad `(student, term, framework, author)`; el controller resuelve `Core::AcademicTerm.active`). |
 
 ---
 
 ## 14. Changelog
+
+### v0.9.0 — 2026-07-21 — Slice 8 cerrado: Lente 4 "Núcleo Familiar" — LAS 8 LENTES DEL ROADMAP ORIGINAL, CERRADAS
+
+- **Último slice del roadmap de 8 que este documento fijó en v0.1.0.** Extiende — nunca duplica — el
+  `guardian_students` ya existente con la metadata que el grafo orbital necesita: quién es el
+  cuidador principal, la dimensión de custodia (sensible, §6.2) y la agrupación por hogar. También
+  reusa (no introduce) la relajación acotada de librería JS del §10.3 por segunda vez.
+
+- **`AnalyticsBi::Household`/`AnalyticsBi::GuardianRelationship`** (§5.6), net-new, tenant-scoped (RLS
+  `ENABLE+FORCE`, `uuidv7()`, índice líder `institution_id`). `guardian_relationships` es una
+  extensión 1:1 de `core.guardian_students` (índice único por `guardian_student_id`) —
+  `student_id`/`guardian_user_id`/`relationship` siguen viviendo SOLO en `core`, nunca duplicados
+  aquí. `relationship_kind`/`custody_kind`/`households.kind` son `string`+CHECK — desviación
+  documentada del `smallint` del boceto, mismo molde que todos los slices anteriores.
+  `custody_kind` es NULLABLE y solo se puebla cuando hay algo real que registrar (§6.2 — nunca
+  especulativo).
+
+- **Segregación de `custody_kind` por CONSTRUCCIÓN, no por convención (§6.2).** Es una columna
+  plana (T2, no necesita la postura de columnas cifradas de `counseling`/T3), pero
+  `AnalyticsBi::Lens::FamilyGraph` — el ÚNICO camino de lectura que un orientador/directivo consulta
+  para ver el grafo — **nunca la incluye en su payload**, ni en los `Data` internos ni en
+  `cytoscape_elements`. Probado con una aserción estructural sobre el JSON serializado del grafo
+  (`assert_no_match(/custody/i, payload)`), no solo revisión de código — mismo rigor que el
+  aislamiento clínico de la Lente 5 y la prueba "sin buscador de personas" de la Lente 3.
+
+- **Detección de hermanos: una QUERY, cero tabla nueva** (§5.6, exactamente como el documento lo
+  anticipaba). `AnalyticsBi::Lens::FamilyCoreScope#siblings_for` matchea el lenguaje del documento
+  al pie de la letra: dos estudiantes comparten hermandad cuando comparten el mismo cuidador
+  marcado como **PRIMARIO** (`is_primary_caregiver: true`) — un cuidador compartido sin ese marcaje
+  todavía produce CERO hermanos detectados (estado vacío honesto, nunca una suposición) hasta que
+  la metadata real se registre.
+
+- **`AnalyticsBi::Lens::BondTension` — decisión A6 resuelta exactamente como el lean propuesto:
+  "tensión del vínculo" computada VIVA, nunca persistida.** Reusa señales T1 REALES ya existentes:
+  último login (`Core::Session.created_at`) + última lectura de mensaje
+  (`Communication::ConversationParticipant.last_read_at`) — bucketeadas en recencia (`<=7 días` =
+  1.0, `<=30` = 0.6, `<=90` = 0.3, más antiguo/nunca = 0.0), nunca una curva de decaimiento continua
+  ("aburrido sobre ingenioso"). `engagement` = media de las señales DISPONIBLES (nil sin ninguna,
+  nunca un cero engañoso — mismo molde `wellbeing`/`heat` de `SpatialHeatmap`/`Hps::Snapshotter`);
+  `tension = 1 - engagement`. **"Apertura del portal" y "acuse de consentimientos"** (también
+  mencionadas en §5.6) se excluyeron honestamente — no existe ninguna tabla de seguimiento de visitas
+  al portal ni de acuses de consentimiento general en el codebase (grep-confirmado), documentado como
+  hueco real, no simulado. La etiqueta visible es SIEMPRE cualitativa
+  ("Comprometido"/"Seguimiento moderado"/"Necesita seguimiento"/"Sin datos suficientes") — el float
+  interno nunca se renderiza, mismo principio ordinal-nunca-visible que `CharacterCard` fijó en
+  v1.40.0.
+
+- **`AnalyticsBi::Lens::SiblingBondAlert` — señal de intervención, nunca un veredicto (§5.6).**
+  Read-model puro, computado en cada request (§7/A6). Heurística documentada como PLACEHOLDER (sin
+  umbral de negocio confirmado por el owner todavía — misma postura de decisión abierta que
+  `alertas tempranas` en `guidelines/CLOSURE_PLAN.md`): un estudiante "declina" cuando AMBAS ventanas
+  (reciente de 14 días vs. base de los 30 días previos) tienen dato Y la reciente es
+  ≥20 puntos porcentuales peor en asistencia O ≥1.0 punto peor en nota promedio (escala 5.0).
+  Una alerta dispara cuando **≥2 hermanos** del mismo cuidador primario declinan a la vez. La
+  ausencia de dato NUNCA cuenta como declive (un estudiante sin registros en alguna ventana
+  simplemente no puede evaluarse, nunca se asume en caída). **Auditada** (`family_core.sibling_alert_viewed`,
+  nuevo en `IdentityAccess::AuditEventIndex::ACTIONS`) — pero SOLO cuando el controller realmente
+  tiene una alerta que mostrar, nunca en cada vista simple del grafo (ruido proporcional a la
+  exposición real de la señal, mismo criterio que `cross_tenant_report_accessed`).
+
+- **Cytoscape.js REUSADO, no una segunda librería.** El grafo orbital usa el MISMO Cytoscape.js
+  pinneado en el Slice 7 — `family_graph_controller.js` replica el molde exacto de progressive
+  enhancement del controlador de la constelación (`import` dinámico envuelto en `try/catch`, fallback
+  server-renderizado siempre real) con su propio estilo de nodos (estudiante-centro/cuidador/hermano).
+  Cero librería nueva, cero vendor nuevo — la relajación de §10.3 se ejerce una vez por
+  slice-que-la-necesita, no una vez por librería-que-se-nos-ocurra.
+
+- **Permiso nuevo: `hps.family.view` — institución-wide SOLAMENTE (§4), sin lector de scope más
+  pequeño** (a diferencia de `hps.constellation.view`, que sí soporta `department_id`) — una familia
+  cruza secciones/grados por definición, así que no existe una forma honesta de acotarla a un scope
+  menor. **Sin entrada nueva en `Navigation::Registry`** — mismo criterio que la autoría de auras en
+  la Lente 5 (v1.37.0): el punto de entrada es un enlace `can?`-gateado desde una superficie
+  per-estudiante YA EXISTENTE (`group_management/students#show`, pestaña "Núcleo familiar"), nunca un
+  ítem de navegación de nivel superior — evita que esta lente se convierta en un índice/directorio de
+  estudiantes (que rozaría el no-negociable §1.1.6).
+
+- **Sin superficie de autoría de `guardian_relationships`/`households` este slice** (deferido,
+  documentado) — alcanzable por consola/rake por ahora, misma postura que la autoría de
+  `character_frameworks` en el Slice 5.
+
+- **Tests (18 nuevos, suite completa 722→740 runs / 0 fallos / 1 skip preexistente, en serie
+  `PARALLEL_WORKERS=1`):** el CHECK de `relationship_kind` a nivel de BD; unicidad 1:1 de
+  `guardian_relationships`; detección de hermanos exigiendo cuidador marcado PRIMARIO (nunca
+  cualquier cuidador compartido) + el estado vacío honesto sin esa metadata; ensamblado del grafo
+  (estudiante-centro + cuidadores + hermanos + aristas) con la prueba estructural de que
+  `custody_kind` nunca aparece en el payload serializado; grafo vacío honesto sin datos
+  (`family_graph_test.rb`). `BondTension`: nil sin señales, bucket de recencia con login reciente
+  vs. antiguo, media de señales disponibles (`bond_tension_test.rb`). `SiblingBondAlert`: dispara
+  con ≥2 hermanos declinando a la vez, NO dispara con solo uno, NO dispara sin datos (ausencia ≠
+  declive), un hijo único nunca aparece en ningún grupo de alerta (`sibling_bond_alert_test.rb`).
+  Caso de aceptación HTTP: 403 sin `hps.family.view`, 200 con el permiso Y `custody_kind` ausente de
+  la respuesta completa, 404 cross-tenant/id desconocido, y CERO evento de auditoría en una vista sin
+  alerta real que mostrar (`analytics_bi_family_core_test.rb`).
+
+- **Nota operativa de esta sesión**: por decisión explícita del owner (tras el corte de gasto que
+  interrumpió al agente del Slice 7), este slice se construyó ENTERAMENTE de forma directa, sin
+  delegar a un agente nuevo — mismo nivel de rigor de recon-first, smoke tests manuales antes de los
+  tests formales, y verificación de suite completa que los slices delegados anteriores.
+
+- Ver `HISTORIA.md` v1.43.0 para la narrativa completa del slice.
 
 ### v0.8.0 — 2026-07-21 — Slice 7 cerrado: Lente 3 "Constelación de Afinidades"
 

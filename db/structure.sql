@@ -864,6 +864,27 @@ ALTER TABLE ONLY public.group_memberships FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: guardian_relationships; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.guardian_relationships (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    guardian_student_id uuid NOT NULL,
+    relationship_kind character varying NOT NULL,
+    is_primary_caregiver boolean DEFAULT false NOT NULL,
+    custody_kind character varying,
+    household_id uuid,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT guardian_relationships_custody_kind_check CHECK (((custody_kind IS NULL) OR ((custody_kind)::text = ANY ((ARRAY['shared'::character varying, 'sole'::character varying, 'supervised'::character varying, 'unspecified'::character varying])::text[])))),
+    CONSTRAINT guardian_relationships_relationship_kind_check CHECK (((relationship_kind)::text = ANY ((ARRAY['mother'::character varying, 'father'::character varying, 'grandparent'::character varying, 'legal_guardian'::character varying, 'sibling'::character varying, 'other'::character varying])::text[])))
+);
+
+ALTER TABLE ONLY public.guardian_relationships FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: guardian_students; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -902,6 +923,22 @@ CREATE TABLE public.guardians (
 );
 
 ALTER TABLE ONLY public.guardians FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: households; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.households (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    kind character varying NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT households_kind_check CHECK (((kind)::text = ANY ((ARRAY['nuclear'::character varying, 'single_parent'::character varying, 'extended'::character varying, 'blended'::character varying, 'other'::character varying])::text[])))
+);
+
+ALTER TABLE ONLY public.households FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -2276,6 +2313,14 @@ ALTER TABLE ONLY public.group_memberships
 
 
 --
+-- Name: guardian_relationships guardian_relationships_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.guardian_relationships
+    ADD CONSTRAINT guardian_relationships_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: guardian_students guardian_students_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2289,6 +2334,14 @@ ALTER TABLE ONLY public.guardian_students
 
 ALTER TABLE ONLY public.guardians
     ADD CONSTRAINT guardians_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: households households_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.households
+    ADD CONSTRAINT households_pkey PRIMARY KEY (id);
 
 
 --
@@ -2914,6 +2967,27 @@ CREATE INDEX idx_group_memberships_on_group ON public.group_memberships USING bt
 --
 
 CREATE UNIQUE INDEX idx_group_memberships_unique_student_per_assignment ON public.group_memberships USING btree (institution_id, assignment_id, student_id);
+
+
+--
+-- Name: idx_guardian_relationships_on_inst_household; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_guardian_relationships_on_inst_household ON public.guardian_relationships USING btree (institution_id, household_id);
+
+
+--
+-- Name: idx_guardian_relationships_unique_link; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_guardian_relationships_unique_link ON public.guardian_relationships USING btree (institution_id, guardian_student_id);
+
+
+--
+-- Name: idx_households_on_institution; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_households_on_institution ON public.households USING btree (institution_id);
 
 
 --
@@ -4519,6 +4593,14 @@ ALTER TABLE ONLY public.charges
 
 
 --
+-- Name: guardian_relationships fk_rails_3fc1896e36; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.guardian_relationships
+    ADD CONSTRAINT fk_rails_3fc1896e36 FOREIGN KEY (household_id) REFERENCES public.households(id) ON DELETE SET NULL;
+
+
+--
 -- Name: role_assignments fk_rails_402eb6a154; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4540,6 +4622,14 @@ ALTER TABLE ONLY public.audit_events
 
 ALTER TABLE ONLY public.activity_enrollments
     ADD CONSTRAINT fk_rails_414ce4a0c6 FOREIGN KEY (enrolled_by_user_id) REFERENCES public.users(id) ON DELETE SET NULL;
+
+
+--
+-- Name: guardian_relationships fk_rails_4298c313af; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.guardian_relationships
+    ADD CONSTRAINT fk_rails_4298c313af FOREIGN KEY (guardian_student_id) REFERENCES public.guardian_students(id) ON DELETE CASCADE;
 
 
 --
@@ -5119,6 +5209,14 @@ ALTER TABLE ONLY public.peer_appreciations
 
 
 --
+-- Name: guardian_relationships fk_rails_8bfbc2799f; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.guardian_relationships
+    ADD CONSTRAINT fk_rails_8bfbc2799f FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: submission_attachments fk_rails_903b1e71cc; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -5380,6 +5478,14 @@ ALTER TABLE ONLY public.roster_import_batches
 
 ALTER TABLE ONLY public.care_auras
     ADD CONSTRAINT fk_rails_b9314c8338 FOREIGN KEY (authored_by_counselor_id) REFERENCES public.institution_users(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: households fk_rails_b9fc41fba6; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.households
+    ADD CONSTRAINT fk_rails_b9fc41fba6 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
 
 
 --
@@ -6330,6 +6436,19 @@ CREATE POLICY group_memberships_tenant_isolation ON public.group_memberships USI
 
 
 --
+-- Name: guardian_relationships; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.guardian_relationships ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: guardian_relationships guardian_relationships_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY guardian_relationships_tenant_isolation ON public.guardian_relationships USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
 -- Name: guardian_students; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -6353,6 +6472,19 @@ ALTER TABLE public.guardians ENABLE ROW LEVEL SECURITY;
 --
 
 CREATE POLICY guardians_tenant_isolation ON public.guardians USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: households; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.households ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: households households_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY households_tenant_isolation ON public.households USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
 
 
 --
@@ -6856,6 +6988,7 @@ CREATE POLICY teaching_assignments_tenant_isolation ON public.teaching_assignmen
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260721140000'),
 ('20260721130000'),
 ('20260721120000'),
 ('20260717220000'),

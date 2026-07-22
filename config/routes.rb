@@ -447,6 +447,14 @@ Rails.application.routes.draw do
     # deferred to a future portal slice, same as Lens 2 was deferred from Slice 5.
     resources :constellations, only: :index
     resources :student_affinities, only: %i[new create]
+    # family_cores (Lens 4, BI_DOCUMENT.md Slice 8): the "Núcleo Familiar" orbital
+    # graph, gated by hps.family.view (institution-wide only — no smaller scope
+    # reader for this lens, §4). show only, keyed by student_id (never a person
+    # search, §1.1.6) — one student's own family graph + siblings + the sibling
+    # decline alert narrowed to that student. Authoring guardian_relationships/
+    # households is console/rake-only this slice (deferred, same posture as
+    # character_frameworks authoring in Slice 5).
+    resources :family_cores, only: :show
   end
 
   # --- identity_access (domain views, Prompt Unificado) ---------------------

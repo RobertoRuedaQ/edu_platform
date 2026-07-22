@@ -68,4 +68,16 @@
   <% end -%>
 <% end -%>
 
+
+<% if can?("hps.family.view") -%>
+  <% panels["Núcleo familiar"] = capture do %>
+    <p class="text-muted">
+      Grafo orbital de cuidadores y hermanos detectados (Lente 4 del HPS) — el estudiante contra sí
+      mismo, nunca una comparación entre familias.
+    </p>
+    <%= ui_button "Ver núcleo familiar", href: analytics_bi_family_core_path(@student.id),
+          variant: :secondary, size: :sm %>
+  <% end -%>
+<% end -%>
+
 <%= render "shared/tabs", panels: panels, id: "student-#{@student.id}", label: "Detalle del estudiante" %>

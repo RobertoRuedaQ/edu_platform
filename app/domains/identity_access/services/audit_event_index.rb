@@ -40,7 +40,14 @@ module IdentityAccess
       # written every time an hps.character.moderate holder withholds a peer/
       # guardian appreciation — see AnalyticsBi::Character::Moderation. Moderation
       # is an append-only status flip, never a destroy.
-      "peer_appreciation.withheld"      => "Aporte de par/acudiente retirado por moderación"
+      "peer_appreciation.withheld"      => "Aporte de par/acudiente retirado por moderación",
+      # analytics_bi (v1.43.0, BI_DOCUMENT.md Slice 8, §5.6): written whenever
+      # AnalyticsBi::FamilyCoresController#show actually surfaces a sibling
+      # decline alert (never on a plain graph view with no alert to show) —
+      # this is a sensitive cross-student signal ("es una señal para
+      # intervención humana, no un veredicto"), so every real exposure of it
+      # is auditable, same posture as cross_tenant_report_accessed.
+      "family_core.sibling_alert_viewed" => "Alerta de lazos fraternales vista"
     }.freeze
 
     Page = Data.define(:events, :page, :total_pages, :total_count)

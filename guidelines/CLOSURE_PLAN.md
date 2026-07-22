@@ -38,9 +38,11 @@ timetable/`admissions`/`library`) es **nice-to-have**, explícitamente fuera de 
 | **Emisión de boletines** | `report_cards` | ✅ | Snapshot congelado al publicar (v1.17.0). |
 | **Alertas tempranas** (docente/acudiente) | — | ❌ **GAP** | No diseñado. Existen señales crudas (heat/auras/carácter), no una capa de síntesis+entrega (§3.2). |
 
-**Conclusión de la validación:** terminar BI 7–8 completa el dominio `analytics_bi`, pero **no**
-entrega por sí solo el criterio de hecho: quedan dos procesos sin construir (disciplinario, alertas), un
-hueco de operabilidad confirmado (matrícula por materia, §4.4), y varios cabos menores (§4).
+**Conclusión de la validación (actualizada 2026-07-21, Slice 8 cerrado):** las 8 lentes/slices de
+`analytics_bi` (Fase A) están TODAS cerradas (v1.35.0→v1.43.0) — ver `HISTORIA.md` v1.43.0. Esto
+**no** entrega por sí solo el criterio de hecho §1: quedan dos procesos sin construir (disciplinario,
+Fase B; alertas tempranas, Fase C — ambas con sus decisiones ya confirmadas por el owner en §6) y
+varios cabos menores (§4).
 
 ---
 
@@ -98,15 +100,19 @@ frecuencia) no se modela — mismo principio anti-especulación del repo.
 > Cada fase: recon-first, checkpoint de diseño para net-new, caso de aceptación (a nivel de modelo para
 > los sensibles), cierre con `HISTORIA.md` + `OPEN_PROCESS.md`.
 
-### FASE A — Terminar `analytics_bi`/HPS (en curso)
+### FASE A — Terminar `analytics_bi`/HPS — ✅ CERRADA (v1.43.0, Slice 8). Las 8 lentes/slices del roadmap original están todas construidas.
 - ~~**Slice 6 — Lente 2 (ficha) + operabilidad de T2**~~ ✅ **CERRADO (v1.40.0).** Cerró el cabo de
   consentimiento (§4.1): UI de otorgar/revocar consentimiento + dar aporte de par/acudiente desde
   portal. Autoría de `character_frameworks` (§4.3) quedó **explícitamente diferida**, no incluida.
-- **Slice 7 — Afinidades + Lente 3 (constelación).** *(siguiente)* Net-new T2 + relajación acotada de
-  lib JS (§10.3 de `BI_DOCUMENT.md`).
-- **Slice 8 — Núcleo familiar + Lente 4** (extiende `guardian_students`; incluye la *alerta de lazos
-  fraternales*, la única alerta ya prevista — insumo parcial de la Fase C).
-- **Cierre de Fase A:** `HpsTermSnapshotJob` gana un disparador real (§4.2) → tendencias operativas.
+- ~~**Slice 7 — Afinidades + Lente 3 (constelación).**~~ ✅ **CERRADO (v1.42.0).** Net-new T2 +
+  primera librería JS real del codebase (Cytoscape.js, §10.3). Ver `HISTORIA.md` v1.42.0.
+- ~~**Slice 8 — Núcleo familiar + Lente 4**~~ ✅ **CERRADO (v1.43.0).** Extiende `guardian_students`
+  1:1 (nunca lo duplica); incluye la *alerta de lazos fraternales* (la única alerta ya prevista —
+  insumo parcial de la Fase C), Cytoscape.js REUSADO (cero librería nueva). Ver `HISTORIA.md` v1.43.0.
+- **Pendiente para cerrar el disparador de fin-de-término (§4.2):** `HpsTermSnapshotJob` sigue
+  invocándose por rake manual — el botón de staff que el owner confirmó (§6.4) todavía no se
+  construyó. Esto es lo único que falta para que "seguimiento año-a-año" sea 100% operativo sin
+  consola; no bloquea nada más de Fase A/B/C.
 
 ### FASE B — Cerrar seguimiento disciplinario (§3.1)
 - **Slice `student_support` mínimo — `disciplinary_logs` (S).** Molde `counseling`: append-only,

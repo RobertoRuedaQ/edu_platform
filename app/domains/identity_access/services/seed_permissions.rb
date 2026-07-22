@@ -153,7 +153,20 @@ module IdentityAccess
       # hps.* is a NORMAL per-institution permission (institution_admin inherits it
       # via bootstrap, like every key EXCEPT cross_tenant_reports.view) — NOT cross-tenant.
       "hps.constellation.view" => "Ver la constelación de afinidades (Lente 3 del HPS)",
-      "hps.affinity.author"    => "Registrar afinidades observadas por el docente (Lente 3 del HPS, T2)"
+      "hps.affinity.author"    => "Registrar afinidades observadas por el docente (Lente 3 del HPS, T2)",
+      # analytics_bi HPS Lens 4 (v1.43.0, BI_DOCUMENT.md Slice 8): "Núcleo
+      # Familiar" — the orbital graph (guardians + siblings), guardian engagement
+      # ("tensión del vínculo"), and the sibling-decline read-model signal. §4
+      # scopes this INSTITUTION-WIDE ONLY (orientación/directivas) — unlike
+      # hps.constellation.view, there is no smaller scope reader for this lens
+      # (a family spans sections/grades by definition). ONE permission covers
+      # view — there is no separate write key this slice (guardian_relationships/
+      # households authoring is console/rake-only for now, same posture as
+      # character_frameworks in Slice 5, deferred until a real curation UI is
+      # needed). hps.* is a NORMAL per-institution permission (institution_admin
+      # inherits it via bootstrap, like every key EXCEPT cross_tenant_reports.view)
+      # — it is NOT cross-tenant.
+      "hps.family.view" => "Ver el núcleo familiar y la alerta de lazos fraternales (Lente 4 del HPS)"
     }.freeze
 
     def self.call
