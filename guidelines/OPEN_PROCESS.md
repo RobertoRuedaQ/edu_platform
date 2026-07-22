@@ -41,11 +41,13 @@
    solo aquí): batch-invite tras el alta de acudientes (hoy un acudiente creado por roster import no
    recibe ninguna invitación — confirmado por `test/integration/roster_imports_guardians_test.rb`);
    full-async de parse+validar de `RosterImport` (hoy corre síncrono en `#create`, capado a
-   `MAX_ROWS`, cambiarlo requiere rediseñar el estado "pendiente" de la vista previa y sus tests);
-   purga de `roster_import_rows` post-commit (las filas crudas con PII cifrada quedan para siempre,
-   sin ningún camino de limpieza — el más mecánico de los tres, sin decisión de negocio real, pero
-   sigue sin señal de necesidad). Webhook real para `Invitations::BounceHandler` — ⛔ **gateado:
-   decisión de negocio** (requiere elegir proveedor de correo antes de construir el receptor).
+   `MAX_ROWS`, cambiarlo requiere rediseñar el estado "pendiente" de la vista previa y sus tests).
+   Webhook real para `Invitations::BounceHandler` — ⛔ **gateado: decisión de negocio** (requiere
+   elegir proveedor de correo antes de construir el receptor).
+   ~~Purga de `roster_import_rows` post-commit~~ ✅ **CERRADO (v1.53.0), confirmado explícitamente
+   por el owner** — `Core::RosterImport::RowPurger`/`PurgeRowsAllJob` (molde `ExpireAllJob`), purga
+   DIFERIDA 30 días (`RETENTION`, PLACEHOLDER), ancla `committed_at` nueva en `roster_import_batches`.
+   Ver `HISTORIA.md` v1.53.0.
 
 3. **Billing — hardening pendiente** — ⛔ **gateado: decisión de negocio real** (ver `HISTORIA.md`
    v1.33.0 para lo ya cerrado): estos tres no son defaults seguros de asumir — prorrateo de
@@ -68,8 +70,8 @@
    (¿qué hacer con `institution_users.role`, columna libre sin lectores?).
 
 **Próximo paso sugerido**: ninguno de los seis es "el siguiente slice obvio" — pedir al owner que
-elija uno (o confirme el default recomendado: purga de `roster_import_rows`, el más mecánico y de
-menor riesgo del ítem 2) antes de construir cualquiera de estos.
+elija uno y confirme explícitamente antes de construir cualquiera de estos (mismo patrón que ya
+cerró la purga de `roster_import_rows`, v1.53.0).
 
 ### No-goals confirmados (fuera de alcance, no backlog)
 

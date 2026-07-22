@@ -17,6 +17,47 @@
 > moviera el changelog fuera del doc magro. Las entradas v1.6.0+ se escribieron directamente aquí,
 > ya con el split vigente.
 
+### v1.53.0 — 2026-07-22 — Onboarding: purga real de `roster_import_rows` post-commit (`OPEN_PROCESS.md` ítem #2)
+
+Gated hasta que el owner confirmó explícitamente este ítem (de los cuatro de "onboarding hardening",
+el más mecánico y de menor riesgo, sin decisión de negocio real detrás). Antes de esto,
+`roster_import_rows` — que carga el CSV crudo parseado en `raw` (jsonb, campos sensibles como
+`national_id` cifrados vía `Cipher`) — no tenía NINGÚN camino de purga: `Core::RosterImportBatch
+has_many :roster_import_rows, dependent: :destroy` solo dispara si el batch mismo se destruye, algo
+que la app nunca hace. La PII quedaba para siempre, sin ningún propósito una vez comiteado el batch.
+
+**Diseño**: purga DIFERIDA (30 días, `Core::RosterImport::RowPurger::RETENTION`), no inmediata al
+comitear — `RosterImportsController#show` es la ÚNICA pantalla de detalle de fila (preview Y
+resultado post-commit comparten la misma acción) y lee `line_number`/`status`/`message` directo de
+las filas; purgar de inmediato le habría quitado a staff la ventana para revisar qué pasó con su
+propio import. `committed_at` (columna nueva en `roster_import_batches`, seteada por `Committer` en
+el mismo `update!` que fija `status: "committed"`) es el ancla explícita del retention — nunca
+`updated_at` como proxy implícito, que cualquier otro touch futuro del batch movería. `RowPurger`
+SOLO purga filas de batches `status: "committed"` — `uploaded`/`validated`/`previewed`/`failed`
+quedan indefinidamente (staff puede necesitar corregir y resubir). `RETENTION = 30.days` es
+PLACEHOLDER explícito, mismo criterio que `HEAT_RISK_THRESHOLD`/`RECENT_DISCIPLINARY_WINDOW_DAYS` —
+sin regla de negocio real confirmada, revisar si surge una necesidad real.
+
+`Core::RosterImport::PurgeRowsAllJob` (fan-out recurrente, `config/recurring.yml` 5am diario) es
+molde EXACTO de `IdentityAccess::Invitations::ExpireAllJob` (v1.32.0): recorre
+`Core::Institution.find_each`, fija su propio GUC por institución dentro de su propia transacción
+(`RowPurger.call` es lo bastante barato para no necesitar su propio job encolado por institución,
+misma razón ya documentada en `ExpireAllJob`) — nunca un job por-batch tipo `CommitJob#enqueue_for`.
+
+**Cero regresión en los tests existentes**: como la purga es diferida (30 días) y no síncrona con el
+commit, las aserciones ya existentes de `roster_imports_test.rb`/`roster_imports_guardians_test.rb`
+que leen `batch.roster_import_rows` justo DESPUÉS de comitear siguen pasando sin ningún cambio — la
+purga solo corre cuando algo la invoca explícitamente (el sweep programado), nunca dentro del propio
+flujo de commit.
+
+**Tests (suite completa 794→800 runs / 0 fallos / 1 skip preexistente, en serie
+`PARALLEL_WORKERS=1`):** `Committer` estampa `committed_at` real (no nil); `RowPurger` borra filas de
+un batch comiteado fuera de la ventana, nunca las de un batch reciente ni las de un batch no
+comiteado por viejo que sea, y nunca toca filas de otra institución; `PurgeRowsAllJob` barre varias
+instituciones bajo su propio GUC cada una, sin fuga del GUC más allá de su propio loop (verificado
+con una query real sin GUC, no una relectura de `current_setting()`) — `test/models/core/
+roster_import/row_purger_test.rb` y `purge_rows_all_job_test.rb`, ambos nuevos.
+
 ### v1.52.0 — 2026-07-22 — M1: metering real para `cafeteria`/`transportation` (`OPEN_PROCESS.md` ítem #5)
 
 Ambos dominios ya tenían un evento de negocio real — `Cafeteria::Purchase` desde v1.51.0,

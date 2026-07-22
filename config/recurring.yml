@@ -29,3 +29,9 @@ production:
   daily_invitation_expiry_sweep:
     class: IdentityAccess::Invitations::ExpireAllJob
     schedule: every day at 4am
+  # OPEN_PROCESS.md item #2 (onboarding hardening, gated closed 2026-07-22):
+  # purges roster_import_rows (raw PII, jsonb) for batches committed more
+  # than RowPurger::RETENTION ago — nothing else in the app ever purges them.
+  daily_roster_import_row_purge:
+    class: Core::RosterImport::PurgeRowsAllJob
+    schedule: every day at 5am

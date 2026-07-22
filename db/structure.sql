@@ -1615,6 +1615,7 @@ CREATE TABLE public.roster_import_batches (
     created_by_id uuid,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
+    committed_at timestamp(6) without time zone,
     CONSTRAINT roster_import_batches_kind_check CHECK (((kind)::text = ANY ((ARRAY['students'::character varying, 'guardians'::character varying])::text[]))),
     CONSTRAINT roster_import_batches_status_check CHECK (((status)::text = ANY ((ARRAY['uploaded'::character varying, 'validated'::character varying, 'previewed'::character varying, 'committed'::character varying, 'failed'::character varying])::text[])))
 );
@@ -7939,6 +7940,7 @@ CREATE POLICY teaching_assignments_tenant_isolation ON public.teaching_assignmen
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260722070000'),
 ('20260722060000'),
 ('20260722050000'),
 ('20260722043000'),

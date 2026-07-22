@@ -91,7 +91,7 @@ class Core::RosterImport::CommitterTest < ActiveSupport::TestCase
     end
   end
 
-  test "sets the batch to committed" do
+  test "sets the batch to committed and stamps committed_at" do
     institution = build_institution
 
     within_tenant(institution) do
@@ -99,7 +99,12 @@ class Core::RosterImport::CommitterTest < ActiveSupport::TestCase
 
       Core::RosterImport::Committer.call(batch: batch)
 
-      assert_equal "committed", batch.reload.status
+      batch.reload
+      assert_equal "committed", batch.status
+      # committed_at (added for the row-purge retention sweep, guidelines/
+      # OPEN_PROCESS.md item #2) must be a real timestamp, not left nil —
+      # RowPurger's cutoff query silently excludes NULL rows forever.
+      assert_in_delta Time.current, batch.committed_at, 5.seconds
     end
   end
 
