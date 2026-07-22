@@ -1,0 +1,37 @@
+<% content_for :title, "Registrar afinidad" %>
+
+<%= render "shared/page_header",
+      title: "Registrar afinidad observada",
+      subtitle: "#{@student.first_name} #{@student.last_name}" %>
+
+<%= render "shared/alert", variant: :info,
+      message: "Elige un talento del catálogo curado del colegio — nunca texto libre (Lente 3 del HPS, §1.1.6)." %>
+
+<% if @error -%>
+  <%= render "shared/alert", variant: :danger, message: @error %>
+<% end -%>
+
+<%= form_with url: analytics_bi_student_affinities_path(student_id: @student.id), method: :post do -%>
+  <input type="hidden" name="student_id" value="<%= @student.id %>">
+
+  <div class="field">
+    <label class="field__label" for="taxonomy_id">Talento</label>
+    <select class="field__input" id="taxonomy_id" name="taxonomy_id" required>
+      <option value="">— Selecciona un talento —</option>
+      <% @taxonomies.each do |taxonomy| -%>
+        <option value="<%= taxonomy.id %>"><%= taxonomy.label_with_kind %></option>
+      <% end -%>
+    </select>
+  </div>
+
+  <div class="field">
+    <label class="field__label" for="context">Dónde se observó</label>
+    <select class="field__input" id="context" name="context">
+      <% AnalyticsBi::StudentAffinity::CONTEXTS.each do |context| -%>
+        <option value="<%= context %>"><%= AnalyticsBi::StudentAffinity::CONTEXT_LABELS.fetch(context) %></option>
+      <% end -%>
+    </select>
+  </div>
+
+  <%= ui_button "Registrar afinidad", type: "submit", variant: :primary %>
+<% end -%>

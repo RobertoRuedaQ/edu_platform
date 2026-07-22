@@ -17,3 +17,39 @@ Navigation::Registry.register(
   permission: "cross_tenant_reports.view",
   position: 95
 )
+
+# HPS Lens 1 — "Mapa de Empatía Espacial" (v1.36.0, BI_DOCUMENT.md Slice 2).
+# Supervision surface, gated by hps.classroom.view (tenant-scoped, never
+# cross-tenant). Sits between the dashboard and the BI audit entry.
+Navigation::Registry.register(
+  domain: "analytics_bi",
+  label: "Mapa del aula",
+  path: "/analytics_bi/spatial_classrooms",
+  permission: "hps.classroom.view",
+  position: 70
+)
+
+# HPS Lens 3 — "Constelación de Afinidades" (v1.42.0, BI_DOCUMENT.md Slice 7).
+# Supervision surface, gated by hps.constellation.view (tenant-scoped: institución-
+# wide OR department-scoped specialist, never cross-tenant). Sits just after the
+# aula map, before the BI audit entry.
+Navigation::Registry.register(
+  domain: "analytics_bi",
+  label: "Constelación de afinidades",
+  path: "/analytics_bi/constellations",
+  permission: "hps.constellation.view",
+  position: 75
+)
+
+# HPS Lens 6 — "Alertas Tempranas" (v1.46.0, BI_DOCUMENT.md §5.8 amendment,
+# guidelines/CLOSURE_PLAN.md §3.2/Fase C). Institution-wide triage queue for
+# orientación/directivas, gated by hps.early_warning.view — its own top-level
+# entry (same reasoning as student_support's support_dashboard.view: a
+# regularly-checked dashboard, not a per-student drill-down like Lens 4).
+Navigation::Registry.register(
+  domain: "analytics_bi",
+  label: "Alertas tempranas",
+  path: "/analytics_bi/early_warnings",
+  permission: "hps.early_warning.view",
+  position: 80
+)

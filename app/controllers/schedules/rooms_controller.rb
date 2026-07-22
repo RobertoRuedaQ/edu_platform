@@ -6,9 +6,11 @@ module Schedules
     end
 
     def show
-      @room = Schedules::RoomRoster.find(params[:id]) or raise ActiveRecord::RecordNotFound
+      @room = Schedules::Room.find_by(institution_id: Current.institution_id, id: params[:id])
+      raise ActiveRecord::RecordNotFound if @room.nil?
+
       authorize!("rooms.view", @room)
-      @events = Schedules::ScheduleEventRoster.all.select { |event| event.room_name == @room.name }
+      @events = Schedules::MeetingPatternPresenter.rows_for(Current.institution).select { |row| row.room_id == @room.id }
     end
   end
 end

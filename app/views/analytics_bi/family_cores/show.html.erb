@@ -1,0 +1,57 @@
+<% content_for :title, "Núcleo familiar" %>
+
+<%= render "shared/page_header", title: "Núcleo familiar",
+      subtitle: "#{@student.first_name} #{@student.last_name} — Lente 4 del HPS" %>
+
+<% if @alerts.any? -%>
+  <%= render "shared/alert", variant: :warning,
+        message: "Alerta de lazos fraternales: varios hermanos muestran una caída de asistencia o notas en la misma ventana reciente. Es una señal para conversar con la familia, nunca un veredicto." %>
+<% end -%>
+
+<% if @graph.any? -%>
+  <div data-controller="family-graph" data-family-graph-graph-value="<%= { elements: @graph.cytoscape_elements }.to_json %>">
+    <div class="constellation__canvas" data-family-graph-target="canvas" hidden></div>
+
+    <div data-family-graph-target="fallback">
+      <section class="stack">
+        <h2>Cuidadores</h2>
+        <% if @graph.guardians.any? -%>
+          <%= render layout: "shared/table", locals: { headers: ["Cuidador", "Relación", "Principal", "Vínculo"] } do -%>
+            <% @graph.guardians.each do |guardian| -%>
+              <tr>
+                <td><%= guardian.name %></td>
+                <td><%= guardian.relationship_label %></td>
+                <td><%= guardian.is_primary_caregiver ? "Sí" : "—" %></td>
+                <td><%= guardian.tension_label %></td>
+              </tr>
+            <% end -%>
+          <% end -%>
+        <% else -%>
+          <%= render "shared/empty_state", title: "Sin cuidadores vinculados todavía" %>
+        <% end -%>
+      </section>
+
+      <section class="stack">
+        <h2>Hermanos detectados</h2>
+        <% if @graph.siblings.any? -%>
+          <ul>
+            <% @graph.siblings.each do |sibling| -%>
+              <li><%= sibling.name %></li>
+            <% end -%>
+          </ul>
+        <% else -%>
+          <p class="text-muted">Sin hermanos detectados (comparten el mismo cuidador principal marcado).</p>
+        <% end -%>
+      </section>
+    </div>
+  </div>
+<% else -%>
+  <%= render "shared/empty_state", title: "Sin datos de núcleo familiar todavía",
+        description: "Este estudiante aún no tiene relaciones de cuidador registradas con metadatos del HPS." %>
+<% end -%>
+
+<p class="text-muted">
+  El "vínculo" mostrado es una etiqueta cualitativa (nunca un número) derivada de señales ya
+  existentes (último acceso, lectura de mensajes) — el estudiante contra sí mismo, nunca una
+  comparación entre familias.
+</p>

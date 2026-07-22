@@ -153,6 +153,12 @@ class ActionDispatch::IntegrationTest
           s.academic_year = Date.current.year
         end
         { scope_group_id: scope_id }
+      when :route
+        Transportation::Route.find_or_create_by!(id: scope_id) do |r|
+          r.institution = institution
+          r.name = "Ruta de prueba"
+        end
+        { scope_route_id: scope_id }
       else raise ArgumentError, "unknown scope_type: #{scope_type}"
       end
 
@@ -174,8 +180,9 @@ class ActionDispatch::IntegrationTest
   # Authorization::Assignment as a real RoleAssignment for @user/@institution
   # (set by sign_in_as_member in the file's setup). Same call shape as
   # before, so a file's own with_grants override can just be deleted.
-  # transportation_test.rb still needs its OWN override (with_raw_grants):
-  # its :route scope has no real column to seed.
+  # :route (transportation, v1.49.0) is a real scope like the other three —
+  # scope_route_id exists on role_assignments and grant_role! seeds it —
+  # transportation_test.rb no longer needs with_raw_grants.
   def with_grants(*assignments, &block)
     revoke_all_role_assignments!(@user, institution: @institution)
     assignments.each do |a|
@@ -199,32 +206,18 @@ class ActionDispatch::IntegrationTest
     end
   end
 
-  # Test-only escape hatch for scope dimensions the REAL schema cannot express
-  # yet (only :route today — transportation's "driver's own route" scope has
-  # no scope_route_id column, and adding one is out of P1's bounds: R7 wires
-  # the real descriptor only for teacher_management, every other domain's
-  # resource/scope layer stays stub until it's adopted for real). Overrides
-  # the controller's authorization context directly with a fixed in-memory
-  # Authorization::StubResolver, the same technique
-  # test/integration/authorization_gate_test.rb's probe controller uses —
-  # NOT a runtime fallback (Authorization::Controller's seam is untouched;
-  # this reaches around it only for the duration of the block).
-  def with_raw_grants(*assignments, &block)
-    ApplicationController.send(:define_method, :build_authorization_context) do
-      Authorization::StubResolver.new(assignments)
-    end
-    yield
-  ensure
-    ApplicationController.send(:remove_method, :build_authorization_context)
-  end
-
   def grant_full_entitlements(institution)
     Entitlement::Registry.domains.each do |key|
       addon = ControlPlane::Addon.find_or_create_by!(key: key) do |a|
         a.name = key.humanize
         a.currency = "COP"
       end
-      ControlPlane::Entitlement.create!(institution: institution, addon: addon, valid_from: Date.current)
+      # valid_from in the past (never today): Entitlement#revoke! (v1.33.0)
+      # closes valid_until at Date.current, which the model rejects when
+      # equal to valid_from (mirrors Subscription#end!'s same-day
+      # restriction) — many "entitlement gate #1" tests revoke this SAME
+      # default grant within the same test, same day it was seeded here.
+      ControlPlane::Entitlement.create!(institution: institution, addon: addon, valid_from: 1.day.ago.to_date)
     end
   end
 end

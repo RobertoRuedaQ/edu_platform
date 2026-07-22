@@ -1,0 +1,27 @@
+<% content_for :title, "Catálogo" %>
+
+<%= render "shared/page_header", title: "Catálogo de biblioteca",
+      subtitle: "Títulos y ejemplares físicos.",
+      actions: ui_button("Nuevo título", href: new_library_resource_path, variant: :primary) %>
+
+<% if @resources.any? -%>
+  <%= render layout: "shared/table", locals: { headers: ["Título", "Autor", "ISBN", "Categoría", ""] } do -%>
+    <% @resources.each do |resource| -%>
+      <tr>
+        <td><%= resource.title %></td>
+        <td><%= resource.author %></td>
+        <td><%= resource.isbn %></td>
+        <td><%= resource.dewey_category %></td>
+        <td>
+          <%= safe_join([
+                ui_button("Ejemplares", href: library_resource_copies_path(resource), variant: :secondary, size: :sm),
+                ui_button("Editar", href: edit_library_resource_path(resource), variant: :secondary, size: :sm)
+              ], " ") %>
+        </td>
+      </tr>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state", title: "Sin títulos todavía",
+        description: "Crea el primer título para empezar a registrar ejemplares." %>
+<% end -%>

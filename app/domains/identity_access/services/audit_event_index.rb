@@ -31,7 +31,30 @@ module IdentityAccess
       # communication (v1.20.0): written ONLY when a conversation.audit
       # holder reads a conversation they are NOT a participant of — a
       # participant reading their own conversation never writes this.
-      "conversation_audited"            => "Conversación auditada (lectura por no-participante)"
+      "conversation_audited"            => "Conversación auditada (lectura por no-participante)",
+      # analytics_bi (v1.35.0): written every time a bi_auditor reads the
+      # cross-tenant report (edu_bi_reader/BYPASSRLS) — see
+      # AnalyticsBi::CrossTenantReportsController.
+      "cross_tenant_report_accessed"    => "Reporte cross-tenant accedido",
+      # analytics_bi (v1.39.0, BI_DOCUMENT.md Slice 5, §5.4 resguardo #6):
+      # written every time an hps.character.moderate holder withholds a peer/
+      # guardian appreciation — see AnalyticsBi::Character::Moderation. Moderation
+      # is an append-only status flip, never a destroy.
+      "peer_appreciation.withheld"      => "Aporte de par/acudiente retirado por moderación",
+      # analytics_bi (v1.43.0, BI_DOCUMENT.md Slice 8, §5.6): written whenever
+      # AnalyticsBi::FamilyCoresController#show actually surfaces a sibling
+      # decline alert (never on a plain graph view with no alert to show) —
+      # this is a sensitive cross-student signal ("es una señal para
+      # intervención humana, no un veredicto"), so every real exposure of it
+      # is auditable, same posture as cross_tenant_report_accessed.
+      "family_core.sibling_alert_viewed" => "Alerta de lazos fraternales vista",
+      # student_support (v1.45.0, guidelines/CLOSURE_PLAN.md §3.1/Fase B):
+      # written every time a disciplinary_logs.manage holder records a new
+      # convivencia/disciplinary incident — see StudentSupport::
+      # DisciplinaryLogsController#create. Sensitive (Class S), append-only:
+      # every write is traceable both by the record's own
+      # reported_by_institution_user_id AND this audit trail.
+      "disciplinary_log.recorded" => "Registro de convivencia/disciplina creado"
     }.freeze
 
     Page = Data.define(:events, :page, :total_pages, :total_count)

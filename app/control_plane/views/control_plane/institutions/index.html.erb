@@ -9,7 +9,7 @@
 <%= render "shared/page_header",
       title: "Instituciones",
       subtitle: "#{@institutions.size} instituciones",
-      actions: ui_button("Nueva institución", href: new_control_plane_institution_path, variant: :primary) %>
+      actions: (ui_button("Nueva institución", href: new_control_plane_institution_path, variant: :primary) if can_platform?("institutions.manage")) %>
 
 <%= render layout: "shared/table",
       locals: { headers: [ "Institución", "Código", "Plan", "Suscripción", "" ] } do %>

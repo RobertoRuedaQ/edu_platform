@@ -5,7 +5,7 @@ module Cafeteria
   class MenuController < ApplicationController
     def index
       authorize!("menu.view")
-      @items = Cafeteria::MenuRoster.all
+      @items = Cafeteria::MenuItem.where(institution_id: Current.institution_id).available.order(:category, :name)
     end
   end
 end

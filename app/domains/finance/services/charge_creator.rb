@@ -33,6 +33,7 @@ module Finance
           invoice_number: generate_invoice_number, description: description, amount: amount,
           currency: account.currency, due_on: due_on, status: "pending", idempotency_key: idempotency_key)
         account.update!(balance: account.balance + amount)
+        emit_usage(charge)
         charge
       end
     end
@@ -49,6 +50,16 @@ module Finance
 
     def generate_invoice_number
       "INV-#{Time.current.strftime('%Y%m')}-#{SecureRandom.hex(4).upcase}"
+    end
+
+    # S3b (v1.30.0): one "transacciones" unit per real Charge — this method is
+    # only reached past the `find_existing` guard above (both pre-lock and
+    # post-lock), so a double-submit of the SAME idempotency_key never
+    # re-emits. The charge's own id (not the caller's idempotency_key, which
+    # is optional/nil-able) is the anchor for Usage::Ingest.
+    def emit_usage(charge)
+      ControlPlane::Usage::Ingest.emit(institution: institution, addon_key: "finance",
+        unit: "transacciones", occurred_at: charge.created_at, idempotency_key: "charge:#{charge.id}")
     end
   end
 end

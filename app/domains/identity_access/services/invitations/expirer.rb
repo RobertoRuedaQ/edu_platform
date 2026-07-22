@@ -4,8 +4,10 @@ module IdentityAccess
     # Purely a bookkeeping pass for admin-facing status columns — the actual
     # security check (an expired invitation can never complete signup) is
     # Invitation#usable?, which reads expires_at directly and doesn't depend
-    # on this having run. Called opportunistically from the people index;
-    # # TODO: also schedule as a recurring Solid Queue job once one exists.
+    # on this having run. Called opportunistically from the people index, AND
+    # (v1.32.0) swept daily for every institution by
+    # IdentityAccess::Invitations::ExpireAllJob (config/recurring.yml) — both
+    # call this same method, neither duplicates its logic.
     class Expirer
       def self.call(institution:)
         Invitation.where(institution_id: institution.id, status: "sent")

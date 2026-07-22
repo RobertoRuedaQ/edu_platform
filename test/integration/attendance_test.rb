@@ -257,4 +257,30 @@ class AttendanceTest < ActionDispatch::IntegrationTest
       assert_equal 3, snapshot.headcount
     end
   end
+
+  # S3b (v1.30.0): taking attendance emits one "registros" usage event PER
+  # roster student saved, and re-taking the SAME (group, date) never
+  # double-counts (the record's own id is the idempotency anchor, and
+  # re-taking reuses that same row).
+  test "S3b: taking attendance emits one usage event per roster student, and re-taking never duplicates" do
+    ControlPlane::Addon.find_by!(key: "attendance").update!( # sign_in_as_member already seeded this, unmetered
+      metered: true, unit: "registros", included_quota: 100, overage_unit_price_cents: 5
+    )
+
+    as_homeroom_a do
+      post "/attendance/groups/#{@section_a.id}/records",
+        params: { date: "2026-03-10", statuses: { @student_in_term.id => "absent" } }
+    end
+
+    events = ControlPlane::UsageEvent.where(institution_id: @institution.id)
+    assert_equal 1, events.count # only @student_in_term is on the roster (roster tomable excludes @student_not_enrolled)
+    assert_equal "registros", events.sole.unit
+
+    as_homeroom_a do
+      post "/attendance/groups/#{@section_a.id}/records",
+        params: { date: "2026-03-10", statuses: { @student_in_term.id => "late" } }
+    end
+
+    assert_equal 1, ControlPlane::UsageEvent.where(institution_id: @institution.id).count
+  end
 end

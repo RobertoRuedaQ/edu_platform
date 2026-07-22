@@ -3,21 +3,27 @@
 <%= render "shared/page_header", title: @route.name, subtitle: "Vehículo #{@route.vehicle_plate}" %>
 
 <%= render "shared/detail_list", items: {
-      "Conductor"  => @route.driver_name,
+      "Conductor"  => @route.driver_name || "Sin asignar",
       "Vehículo"   => @route.vehicle_plate,
       "Capacidad"  => @route.capacity
     } %>
 
 <h3>Paradas</h3>
-<%= render "shared/timeline", items: @route.stops.map { |stop| { title: stop.name, meta: stop.time } } %>
+<% if @route.route_stops.any? -%>
+  <%= render "shared/timeline", items: @route.route_stops.map { |stop|
+        { title: stop.name, meta: stop.scheduled_time&.strftime("%H:%M") } } %>
+<% else -%>
+  <%= render "shared/empty_state", title: "Sin paradas registradas" %>
+<% end -%>
 
 <h3>Estudiantes en esta ruta</h3>
 <% if @riders.any? -%>
-  <%= render layout: "shared/table", locals: { headers: ["Estudiante", "Parada"] } do -%>
+  <%= render layout: "shared/table", locals: { headers: ["Estudiante", "Turno", "Parada"] } do -%>
     <% @riders.each do |rider| -%>
       <tr>
         <td><%= rider.student_name %></td>
-        <td><%= rider.stop_name %></td>
+        <td><%= rider.shift_label %></td>
+        <td><%= rider.stop_name || "—" %></td>
       </tr>
     <% end -%>
   <% end -%>

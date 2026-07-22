@@ -1,0 +1,23 @@
+<% content_for :title, "Ficha de #{@student.first_name}" %>
+
+<%= render "shared/page_header",
+      title: "Ficha de carácter de #{@student.first_name} #{@student.last_name}",
+      subtitle: "Fortalezas observadas, crecimiento y reconocimientos.",
+      actions: ui_button("← Volver", href: portal_guardian_student_path(@student), variant: :secondary) %>
+
+<%= render "portals/character_card", card: @card %>
+
+<section class="stack">
+  <h2>Reconocimientos de compañeros</h2>
+  <% if @consent -%>
+    <p>Autorización <strong>activa</strong> para que <%= @student.first_name %> participe en los reconocimientos de compañeros.</p>
+    <%= button_to "Activo — Revocar",
+          portal_guardian_student_character_consent_path(@student),
+          method: :delete, class: "btn btn--danger" %>
+  <% else -%>
+    <p>Aún no autorizas la participación de <%= @student.first_name %> en los reconocimientos de compañeros.</p>
+    <%= button_to "Autorizar participación en reconocimientos de compañeros",
+          portal_guardian_student_character_consent_path(@student),
+          method: :post, class: "btn btn--primary" %>
+  <% end -%>
+</section>

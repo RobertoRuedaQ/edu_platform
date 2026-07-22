@@ -9,7 +9,8 @@
         (ui_button("Mis boletines", href: portal_student_report_cards_path, variant: :secondary) if @student),
         (ui_button("Asistencia", href: portal_student_attendance_path, variant: :secondary) if @student),
         (ui_button("Calendario", href: portal_student_calendar_path, variant: :secondary) if @student),
-        (ui_button("Actividades", href: portal_student_activities_path, variant: :secondary) if @student)
+        (ui_button("Actividades", href: portal_student_activities_path, variant: :secondary) if @student),
+        (ui_button("Mi ficha de carácter", href: portal_student_character_card_path, variant: :secondary) if @student)
       ].compact, " ") %>
 
 <% if @student -%>

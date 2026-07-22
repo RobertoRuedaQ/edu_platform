@@ -1,10 +1,10 @@
-<% content_for :title, "Convivencia · #{@student.name}" %>
+<% content_for :title, "Convivencia · #{@student.first_name} #{@student.last_name}" %>
 
-<%= render "shared/page_header", title: "Convivencia", subtitle: @student.name %>
+<%= render "shared/page_header", title: "Convivencia", subtitle: "#{@student.first_name} #{@student.last_name}" %>
 
 <% if @logs.any? -%>
   <%= render "shared/timeline", items: @logs.map { |log|
-        { title: log.category.humanize, meta: "#{datetime(log.occurred_at, format: :date)} · #{log.reported_by}",
+        { title: log.category_label, meta: "#{datetime(log.occurred_at, format: :date)} · #{log.reported_by_name}",
           body: log.description }
       } %>
 <% else -%>
@@ -12,9 +12,20 @@
 <% end -%>
 
 <h3>Nuevo registro</h3>
+<% if @log&.errors&.any? -%>
+  <%= render "shared/alert", variant: :danger, message: @log.errors.full_messages.join(", ") %>
+<% end -%>
 <%= form_with url: student_support_student_disciplinary_logs_path(@student.id), method: :post do %>
-  <%= render "shared/field", label: "Categoría", name: "category",
-        placeholder: "Ej. ausentismo, convivencia", required: true %>
+  <div class="field">
+    <label class="field__label" for="disciplinary_log_category">Categoría</label>
+    <select class="field__input" id="disciplinary_log_category" name="category" required>
+      <% StudentSupport::DisciplinaryLog::CATEGORIES.each do |category| -%>
+        <option value="<%= category %>"><%= StudentSupport::DisciplinaryLog::CATEGORY_LABELS.fetch(category) %></option>
+      <% end -%>
+    </select>
+  </div>
+
+  <%= render "shared/field", label: "Fecha", name: "occurred_at", type: "date", value: Date.current, required: true %>
   <%= render "shared/field", label: "Descripción", name: "description", required: true %>
 
   <%= ui_button "Guardar registro", type: "submit", variant: :primary %>

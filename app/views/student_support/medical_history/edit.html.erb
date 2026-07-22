@@ -1,0 +1,23 @@
+<% content_for :title, "Editar historia médica" %>
+
+<%= render "shared/page_header", title: "Editar historia médica", subtitle: "#{@student.first_name} #{@student.last_name}" %>
+
+<% if @history.errors.any? -%>
+  <%= render "shared/alert", variant: :danger, message: @history.errors.full_messages.join(", ") %>
+<% end -%>
+
+<%= form_with url: student_support_student_medical_history_path(@student.id), method: :patch do %>
+  <%= render "shared/field", label: "Tipo de sangre", name: "medical_history[blood_type]", value: @history.blood_type %>
+
+  <div class="field">
+    <label class="field__label" for="medical_history_conditions">Condiciones (una por línea)</label>
+    <textarea class="field__input" id="medical_history_conditions" name="medical_history[conditions]" rows="4"><%= Array(@history.conditions).join("\n") %></textarea>
+  </div>
+
+  <div class="field">
+    <label class="field__label" for="medical_history_medications">Medicamentos (uno por línea)</label>
+    <textarea class="field__input" id="medical_history_medications" name="medical_history[medications]" rows="4"><%= Array(@history.medications).join("\n") %></textarea>
+  </div>
+
+  <%= ui_button "Guardar historia", type: "submit", variant: :primary %>
+<% end %>

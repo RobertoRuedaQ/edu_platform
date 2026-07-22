@@ -1,12 +1,14 @@
-<% content_for :title, "Acomodaciones · #{@student.name}" %>
+<% student_name = "#{@student.first_name} #{@student.last_name}" -%>
+<% content_for :title, "Acomodaciones · #{student_name}" %>
 
-<%= render "shared/page_header", title: "Acomodaciones", subtitle: @student.name %>
+<%= render "shared/page_header", title: "Acomodaciones", subtitle: student_name,
+      actions: (can?("accommodations.manage", @student) ? ui_button("Nueva acomodación", href: new_student_support_student_accommodation_path(@student.id), variant: :primary) : nil) %>
 
 <% if @accommodations.any? -%>
   <% @accommodations.each do |accommodation| -%>
     <%= render layout: "shared/card" do %>
       <div class="accommodation-item__head">
-        <span class="accommodation-item__kind"><%= accommodation.kind.humanize %></span>
+        <span class="accommodation-item__kind"><%= accommodation.kind_label %></span>
         <%= ui_badge(accommodation.status == "active" ? "Vigente" : "Vencida",
               variant: accommodation.status == "active" ? :success : :neutral) %>
       </div>

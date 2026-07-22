@@ -4,11 +4,12 @@
 <%= render "shared/page_header", title: student_name, subtitle: @student.section&.name %>
 
 <%#
-  Perfil y Matrícula son datos reales (#4 barrido, v1.14.0). Convivencia/
-  Acomodaciones se quedan cross-domain en stub (student_support, Clase C —
-  sin tabla real, ver HISTORIA.md) — gateadas por su propio permiso,
-  ausentes (no deshabilitadas) si el actor no lo tiene, igual que el resto
-  de la nav.
+  Perfil y Matrícula son datos reales (#4 barrido, v1.14.0). Convivencia y
+  Acomodaciones son reales desde guidelines/CLOSURE_PLAN.md Fase B/D
+  (StudentSupport::DisciplinaryLog/Accommodation) — gateadas por su propio
+  permiso, ausentes (no deshabilitadas) si el actor no lo tiene, igual que el
+  resto de la nav. `medical_history` no tiene panel aquí (vive en su propia
+  ruta de dos niveles, no en esta vista resumen).
 -%>
 <% panels = {} -%>
 
@@ -40,10 +41,11 @@
 
 <% if can?("disciplinary_logs.manage", @student) -%>
   <% panels["Convivencia"] = capture do %>
-    <% logs = StudentSupport::DisciplinaryLogRoster.for_student(@student.id) -%>
+    <% logs = StudentSupport::DisciplinaryLog.where(institution_id: Current.institution_id, student_id: @student.id)
+                .order(occurred_at: :desc) -%>
     <% if logs.any? -%>
       <%= render "shared/timeline", items: logs.map { |log|
-            { title: log.category.humanize, meta: datetime(log.occurred_at, format: :date), body: log.description }
+            { title: log.category_label, meta: datetime(log.occurred_at, format: :date), body: log.description }
           } %>
     <% else -%>
       <%= render "shared/empty_state", title: "Sin registros de convivencia" %>
@@ -55,15 +57,28 @@
 
 <% if can?("accommodations.view", @student) -%>
   <% panels["Acomodaciones"] = capture do %>
-    <% accommodations = StudentSupport::AccommodationRoster.for_student(@student.id).select { |a| a.status == "active" } -%>
+    <% accommodations = StudentSupport::Accommodation.where(institution_id: Current.institution_id,
+         student_id: @student.id, status: "active") -%>
     <% if accommodations.any? -%>
       <% accommodations.each do |accommodation| -%>
-        <p><strong><%= accommodation.kind.humanize %>:</strong> <%= accommodation.description %></p>
+        <p><strong><%= accommodation.kind_label %>:</strong> <%= accommodation.description %></p>
       <% end -%>
     <% else -%>
       <%= render "shared/empty_state", title: "Sin acomodaciones vigentes" %>
     <% end -%>
     <%= ui_button "Ver acomodaciones", href: student_support_student_accommodations_path(@student.id),
+          variant: :secondary, size: :sm %>
+  <% end -%>
+<% end -%>
+
+
+<% if can?("hps.family.view") -%>
+  <% panels["Núcleo familiar"] = capture do %>
+    <p class="text-muted">
+      Grafo orbital de cuidadores y hermanos detectados (Lente 4 del HPS) — el estudiante contra sí
+      mismo, nunca una comparación entre familias.
+    </p>
+    <%= ui_button "Ver núcleo familiar", href: analytics_bi_family_core_path(@student.id),
           variant: :secondary, size: :sm %>
   <% end -%>
 <% end -%>

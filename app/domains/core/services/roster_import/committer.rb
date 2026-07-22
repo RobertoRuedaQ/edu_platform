@@ -29,7 +29,7 @@ module Core
         rows = @batch.roster_import_rows.where(status: COMMITTABLE_STATUSES).order(:line_number)
         rows.each { |row| commit_row(row) }
 
-        @batch.update!(status: "committed")
+        @batch.update!(status: "committed", committed_at: Time.current)
       end
 
       private

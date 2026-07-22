@@ -40,11 +40,21 @@ module Assignments
       submission.submitted_by_user = submitted_by
       submission.submitted_at = Time.current
       submission.save!
+      emit_usage(submission)
       submission
     end
 
     private
 
     attr_reader :assignment, :student, :body, :submitted_by
+
+    # S3b (v1.30.0): one "entregas" unit per Submission saved — the row is
+    # upserted (find_or_initialize_by above), so a re-submit/edit reuses the
+    # SAME id and never re-emits. One unit per GROUP on a group assignment
+    # (the shared row), never per member.
+    def emit_usage(submission)
+      ControlPlane::Usage::Ingest.emit(institution: assignment.institution, addon_key: "assignments",
+        unit: "entregas", occurred_at: submission.submitted_at, idempotency_key: "submission:#{submission.id}")
+    end
   end
 end

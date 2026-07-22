@@ -92,12 +92,13 @@ module IdentityAccess
       return :institution if ra.institution_wide?
       return :department  if ra.scope_department_id
       return :grade_level  if ra.scope_grade_level_id
+      return :route        if ra.scope_route_id
 
       :group
     end
 
     def scope_id_for(ra)
-      ra.scope_department_id || ra.scope_grade_level_id || ra.scope_group_id
+      ra.scope_department_id || ra.scope_grade_level_id || ra.scope_group_id || ra.scope_route_id
     end
   end
 end

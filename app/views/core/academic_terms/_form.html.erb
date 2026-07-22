@@ -1,0 +1,16 @@
+<%# locals: (term:, url:, method:) -%>
+<%= form_with url: url, method: method do -%>
+  <% if term.errors.any? -%>
+    <%= render "shared/alert", variant: :danger, message: term.errors.full_messages.join(", ") %>
+  <% end -%>
+
+  <%= render "shared/field", label: "Código", name: "academic_term[code]", type: "text", value: term.code,
+        hint: "Identificador corto, único por institución (ej. 2026-1).", required: true %>
+  <%= render "shared/field", label: "Nombre", name: "academic_term[name]", type: "text", value: term.name, required: true %>
+  <%= render "shared/field", label: "Fecha de inicio", name: "academic_term[starts_on]", type: "date",
+        value: term.starts_on, required: true %>
+  <%= render "shared/field", label: "Fecha de fin", name: "academic_term[ends_on]", type: "date",
+        value: term.ends_on, required: true %>
+
+  <%= ui_button "Guardar", type: "submit", variant: :primary %>
+<% end -%>

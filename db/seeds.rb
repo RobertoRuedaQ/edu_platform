@@ -33,6 +33,23 @@ RESTRICTIONS = %w[vegetariano vegano celiaco alergia_mani alergia_lactosa intole
 SEVERITIES   = %w[leve moderada severa].freeze
 STREETS      = ["Calle", "Carrera", "Avenida", "Transversal", "Diagonal"].freeze
 
+# guidelines/CLOSURE_PLAN.md Fase D — cafeteria resto: no menu-authoring UI in
+# this increment (same posture already applied to character_frameworks
+# authorship), so the catalog is seeded like Cafeteria::DietaryRestriction
+# already was. Same 5 items the retired MenuRoster stub carried, allergens
+# now real Cafeteria::DietaryRestriction::ALLERGEN_NAMES display values.
+MENU_ITEMS = [
+  { name: "Arroz con pollo", category: "Almuerzo", price_cents: 950_000, allergens: [], dietary_tags: [] },
+  { name: "Sándwich de mantequilla de maní", category: "Snack", price_cents: 450_000,
+    allergens: [ "Maní" ], dietary_tags: [] },
+  { name: "Yogurt con granola", category: "Snack", price_cents: 380_000,
+    allergens: [ "Lactosa" ], dietary_tags: [ "Vegetariano" ] },
+  { name: "Ensalada vegana", category: "Almuerzo", price_cents: 800_000,
+    allergens: [], dietary_tags: %w[Vegano Vegetariano] },
+  { name: "Pasta integral", category: "Almuerzo", price_cents: 880_000,
+    allergens: [ "Gluten" ], dietary_tags: [] }
+].freeze
+
 # Evaluaciones de mitad de semestre (suman peso 1.0).
 ASSESSMENTS = [
   { kind: "quiz",     title: "Quiz 1",    weight: 0.15, on: Date.new(2026, 2, 20) },
@@ -181,6 +198,10 @@ def build_dietary_restrictions(iid, student_ids, rate: 0.05)
   chosen.size
 end
 
+def build_menu_items(iid)
+  MENU_ITEMS.each { |attrs| Cafeteria::MenuItem.create!(attrs.merge(institution_id: iid)) }
+end
+
 def reset_institution!(slug)
   inst = Core::Institution.find_by(slug: slug)
   return unless inst
@@ -188,6 +209,7 @@ def reset_institution!(slug)
   ActiveRecord::Base.transaction do
     Tenant::Guc.set_local(inst.id)
     [Schedules::Assessment, TeacherManagement::TeachingAssignment, Cafeteria::DietaryRestriction,
+     Cafeteria::PurchaseLine, Cafeteria::Purchase, Cafeteria::MenuItem,
      StudentSupport::StudentGuardian, Schedules::Enrollment, Core::AcademicTerm, StudentSupport::Guardian,
      TeacherManagement::Teacher, Schedules::Subject, GroupManagement::Student,
      GroupManagement::Section, GroupManagement::Program, GroupManagement::GradeLevel,
@@ -287,8 +309,9 @@ def build_school(inst)
     teacher_ids = build_teachers(iid, count: 40, code_prefix: "CSJ")
     assign_teaching(iid, teacher_ids, subj_ids)
 
-    # Cafetería: 5% con restricción.
+    # Cafetería: 5% con restricción, catálogo de menú real.
     build_dietary_restrictions(iid, all_student_ids, rate: 0.05)
+    build_menu_items(iid)
   end
 end
 
@@ -360,8 +383,9 @@ def build_university(inst)
     teacher_ids = build_teachers(iid, count: 60, code_prefix: "UAND", faculty_ids: fac_ids)
     assign_teaching(iid, teacher_ids, all_subject_ids)
 
-    # Cafetería: 5% con restricción.
+    # Cafetería: 5% con restricción, catálogo de menú real.
     build_dietary_restrictions(iid, all_student_ids, rate: 0.05)
+    build_menu_items(iid)
   end
 end
 

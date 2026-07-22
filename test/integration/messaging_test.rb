@@ -377,4 +377,31 @@ class MessagingTest < ActionDispatch::IntegrationTest
       assert_empty Communication::Conversation.where(institution_id: other_institution.id)
     end
   end
+
+  # S3b (v1.30.0): Communication::MessageSender emits real usage — one
+  # "mensajes" unit per Message actually sent. NOTE: the conversation's FIRST
+  # message is created directly by ConversationComposer, NOT MessageSender —
+  # so start_conversation! itself never emits; only the reply below does.
+  test "S3b: sending a message emits one usage_events row, never duplicated on a resend attempt" do
+    ControlPlane::Addon.find_by!(key: "communication").update!( # sign_in_as_member already seeded this addon, unmetered
+      metered: true, unit: "mensajes", included_quota: 10, overage_unit_price_cents: 20
+    )
+    conversation = start_conversation!(staff_ids: [ @other_staff_iu.user_id ], guardian_ids: [ @guardian_in_scope.id ])
+
+    as_composer { post "/communication/inbox/#{conversation.id}/messages", params: { body: "Segundo mensaje" } }
+
+    events = ControlPlane::UsageEvent.where(institution_id: @institution.id)
+    assert_equal 1, events.count
+    assert_equal "mensajes", events.sole.unit
+    assert_equal 1, events.sole.quantity
+  end
+
+  test "S3b: with the communication addon unmetered (the sign_in_as_member default), sending a message still succeeds — Usage::Ingest.emit never breaks it" do
+    conversation = start_conversation!(staff_ids: [ @other_staff_iu.user_id ], guardian_ids: [ @guardian_in_scope.id ])
+    assert_empty ControlPlane::UsageEvent.where(institution_id: @institution.id)
+
+    as_composer { post "/communication/inbox/#{conversation.id}/messages", params: { body: "Sigue funcionando" } }
+    assert_match "Sigue funcionando", Communication::Message.last.body
+    assert_empty ControlPlane::UsageEvent.where(institution_id: @institution.id)
+  end
 end

@@ -13,7 +13,10 @@ class ControlPlane::EntitlementTest < ActiveSupport::TestCase
   test "grant!/revoke!/reactivate! never destroy the row" do
     institution = build_institution
     addon = build_addon
-    entitlement = ControlPlane::Entitlement.create!(institution: institution, addon: addon, valid_from: Date.current)
+    # valid_from in the past: revoke! closes valid_until at Date.current,
+    # which is invalid when equal to valid_from (same restriction as
+    # Subscription#end!) — see the dedicated same-day test below.
+    entitlement = ControlPlane::Entitlement.create!(institution: institution, addon: addon, valid_from: 1.day.ago.to_date)
 
     entitlement.revoke!
     assert_equal "revoked", entitlement.reload.status
@@ -36,11 +39,46 @@ class ControlPlane::EntitlementTest < ActiveSupport::TestCase
   test "revoking one entitlement allows granting a fresh one for the same addon" do
     institution = build_institution
     addon = build_addon
-    first = ControlPlane::Entitlement.create!(institution: institution, addon: addon, valid_from: Date.current)
+    # valid_from in the past: revoke! closes valid_until at Date.current (same
+    # restriction as Subscription#end! — same-day revoke is invalid, see the
+    # dedicated test below), so the grant can't have started today too.
+    first = ControlPlane::Entitlement.create!(institution: institution, addon: addon, valid_from: 1.day.ago.to_date)
     first.revoke!
+    assert_equal Date.current, first.reload.valid_until
 
     second = ControlPlane::Entitlement.create!(institution: institution, addon: addon, valid_from: Date.current)
     assert second.active?
+  end
+
+  test "revoke! closes valid_until (never leaves it open-ended), and reactivate! reopens it" do
+    institution = build_institution
+    addon = build_addon
+    entitlement = ControlPlane::Entitlement.create!(institution: institution, addon: addon, valid_from: 1.day.ago.to_date)
+
+    entitlement.revoke!
+    assert_equal Date.current, entitlement.reload.valid_until
+
+    entitlement.reactivate!
+    assert_nil entitlement.reload.valid_until
+  end
+
+  test "revoking the same day it was granted is invalid (mirrors Subscription#end!'s same-day restriction)" do
+    institution = build_institution
+    addon = build_addon
+    entitlement = ControlPlane::Entitlement.create!(institution: institution, addon: addon, valid_from: Date.current)
+
+    assert_raises(ActiveRecord::RecordInvalid) { entitlement.revoke! }
+  end
+
+  test "a new grant's range can never overlap a past (revoked) one for the same institution+addon — DB-enforced" do
+    institution = build_institution
+    addon = build_addon
+    first = ControlPlane::Entitlement.create!(institution: institution, addon: addon, valid_from: 10.days.ago.to_date)
+    first.revoke!(valid_until: 5.days.ago.to_date)
+
+    assert_raises(ActiveRecord::StatementInvalid) do
+      ControlPlane::Entitlement.create!(institution: institution, addon: addon, valid_from: 7.days.ago.to_date)
+    end
   end
 
   test "valid_until must be after valid_from" do

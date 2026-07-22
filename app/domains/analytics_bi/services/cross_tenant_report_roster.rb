@@ -1,23 +1,33 @@
 module AnalyticsBi
-  # STUB cross-tenant rollup — SOLO bi_auditor reads this. Real cross-tenant
-  # querying needs the audited edu_bi_reader Postgres role (BYPASSRLS; see
-  # lib/tasks/roles.rake), which control_plane's own BaseController already
-  # defers ("no DB access this phase") — this follows that same precedent
-  # rather than being the first real BYPASSRLS wiring in the app.
+  # Real cross-tenant rollup (v1.35.0, BI_DOCUMENT.md §6.1/§9 Slice 1) — SOLO
+  # bi_auditor reads this (CrossTenantReportsController). Runs through
+  # AnalyticsBi::BiReader::* (edu_bi_reader, BYPASSRLS) — the first real
+  # BYPASSRLS wiring in this app.
   #
-  # TODO: reemplazar por una consulta real vía edu_bi_reader, auditada.
+  # The "doble filtro a nivel de aplicación" guardrail (BI_DOCUMENT.md §6.1.2):
+  # once RLS is bypassed, the app-level GROUP BY institution_id is the ONLY
+  # thing standing between "one row per institution" and "one blended number
+  # across every tenant" — every aggregate below groups by institution_id
+  # explicitly, never a bare .average/.count with no grouping.
+  #
+  # Only aggregates per institution ever leave this method — no student-level
+  # row, name, or PII crosses back to the caller (BI_DOCUMENT.md §6.1.3).
   module CrossTenantReportRoster
     Row = Data.define(:id, :institution_name, :institution_kind, :student_count, :avg_grade)
 
     def self.all
-      [
-        Row.new(id: "inst-1", institution_name: "Colegio San José", institution_kind: "school",
-                student_count: 187, avg_grade: 3.8),
-        Row.new(id: "inst-2", institution_name: "Universidad Andina", institution_kind: "university",
-                student_count: 412, avg_grade: 3.6),
-        Row.new(id: "inst-3", institution_name: "Instituto Los Andes", institution_kind: "school",
-                student_count: 96, avg_grade: 4.0)
-      ]
+      institutions = BiReader::Institution.order(:name).to_a
+
+      student_counts = BiReader::Student.where(status: "active").group(:institution_id).count
+      avg_grades = BiReader::Assessment.where.not(score: nil).group(:institution_id).average(:score)
+
+      institutions.map do |institution|
+        Row.new(
+          id: institution.id, institution_name: institution.name, institution_kind: institution.kind,
+          student_count: student_counts[institution.id] || 0,
+          avg_grade: (avg = avg_grades[institution.id]) ? avg.round(1) : nil
+        )
+      end
     end
   end
 end

@@ -1,0 +1,22 @@
+<% content_for :title, "Nueva acomodación" %>
+
+<%= render "shared/page_header", title: "Nueva acomodación", subtitle: "#{@student.first_name} #{@student.last_name}" %>
+
+<% if @accommodation.errors.any? -%>
+  <%= render "shared/alert", variant: :danger, message: @accommodation.errors.full_messages.join(", ") %>
+<% end -%>
+
+<%= form_with url: student_support_student_accommodations_path(@student.id), method: :post do %>
+  <div class="field">
+    <label class="field__label" for="accommodation_kind">Tipo</label>
+    <select class="field__input" id="accommodation_kind" name="accommodation[kind]" required>
+      <% StudentSupport::Accommodation::KINDS.each do |kind| -%>
+        <option value="<%= kind %>"><%= StudentSupport::Accommodation::KIND_LABELS.fetch(kind) %></option>
+      <% end -%>
+    </select>
+  </div>
+
+  <%= render "shared/field", label: "Descripción", name: "accommodation[description]", required: true %>
+
+  <%= ui_button "Crear acomodación", type: "submit", variant: :primary %>
+<% end %>

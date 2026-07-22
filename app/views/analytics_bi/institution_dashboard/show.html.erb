@@ -4,8 +4,9 @@
 
 <div class="tile-grid">
   <%= render "shared/stat", value: @kpis[:total_students].to_s, label: "Estudiantes" %>
-  <%= render "shared/stat", value: @kpis[:avg_grade].to_s, label: "Nota promedio" %>
-  <%= render "shared/stat", value: "#{@kpis[:attendance_rate]}%", label: "Asistencia" %>
+  <%# nil = sin notas registradas todavía / sin asistencia en los últimos 30 días — un empty state normal, nunca un error o un "0%" engañoso. %>
+  <%= render "shared/stat", value: @kpis[:avg_grade] ? @kpis[:avg_grade].to_s : "—", label: "Nota promedio" %>
+  <%= render "shared/stat", value: @kpis[:attendance_rate] ? "#{@kpis[:attendance_rate]}%" : "—", label: "Asistencia (30 días)" %>
 </div>
 
 <%= render "shared/line_chart", title: "Matrícula (últimos 6 meses)", points: @kpis[:enrollment_trend] %>

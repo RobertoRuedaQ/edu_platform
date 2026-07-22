@@ -1,0 +1,17 @@
+<% content_for :title, "Acceso denegado" %>
+
+<%# Friendly 403 for the control plane's own RBAC (v1.31.0) — same molde as
+    app/views/errors/forbidden.html.erb (tenant side), but the wording fits
+    the platform-admin plane instead of an institution's staff. %>
+<section class="forbidden">
+  <%= render "shared/alert",
+        variant: :warning,
+        title: "No tienes acceso a esta sección",
+        message: "Tu rol (#{current_platform_admin.role}) no incluye el permiso necesario para " \
+                 "esta acción. Si crees que deberías tener acceso, contacta a un super_admin de la plataforma.",
+        role: "alert" %>
+
+  <p class="forbidden__actions">
+    <%= render "shared/button", label: "Volver al inicio", href: control_plane_root_path, variant: :primary %>
+  </p>
+</section>

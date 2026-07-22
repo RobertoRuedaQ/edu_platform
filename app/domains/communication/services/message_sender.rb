@@ -25,6 +25,7 @@ module Communication
 
       message = Message.create!(institution: institution, conversation: conversation,
         institution_user: institution_user, guardian_user: guardian_user, body: body)
+      emit_usage(message)
       Result.new(message: message, error: nil)
     end
 
@@ -35,6 +36,14 @@ module Communication
     def participant
       scope = ConversationParticipant.where(institution_id: institution.id, conversation_id: conversation.id)
       institution_user ? scope.find_by(institution_user_id: institution_user.id) : scope.find_by(guardian_user_id: guardian_user.id)
+    end
+
+    # S3b (v1.30.0): one "mensajes" unit per Message actually created — each
+    # send is inherently a new row (no resend/regeneration concept here), so
+    # the message's own id is a stable idempotency anchor.
+    def emit_usage(message)
+      ControlPlane::Usage::Ingest.emit(institution: institution, addon_key: "communication",
+        unit: "mensajes", occurred_at: message.created_at, idempotency_key: "message:#{message.id}")
     end
   end
 end

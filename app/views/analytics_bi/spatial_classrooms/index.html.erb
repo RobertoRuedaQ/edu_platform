@@ -1,0 +1,20 @@
+<% content_for :title, "Mapa del aula" %>
+
+<%= render "shared/page_header", title: "Mapa del aula",
+      subtitle: "Distribución del salón con capa de calor sobre notas y asistencia (Lente 1 del HPS)." %>
+
+<% if @layouts.any? -%>
+  <%= render layout: "shared/table", locals: { headers: ["Grupo", "Grado", "Versión", ""] } do -%>
+    <% @layouts.each do |layout| -%>
+      <tr>
+        <td><%= link_to layout.section.name, analytics_bi_spatial_classroom_path(layout.section) %></td>
+        <td><%= layout.section.grade_level&.name || "—" %></td>
+        <td>v<%= layout.version %></td>
+        <td><%= link_to "Ver plano", analytics_bi_spatial_classroom_path(layout.section) %></td>
+      </tr>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state", title: "Sin distribuciones de aula todavía",
+        description: "Un coordinador configura la distribución del salón desde Grupos › (un grupo) › Distribución del aula." %>
+<% end -%>

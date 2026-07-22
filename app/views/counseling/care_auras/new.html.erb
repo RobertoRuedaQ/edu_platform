@@ -1,0 +1,29 @@
+<% content_for :title, "Publicar aura de cuidado" %>
+
+<%= render "shared/page_header",
+      title: "Publicar aura de cuidado",
+      subtitle: "Para #{@case.student_name} · caso #{@case.category.humanize}",
+      actions: ui_button("← Volver", href: counseling_case_path(@case), variant: :secondary) %>
+
+<%= render "shared/alert", variant: :warning,
+      message: "El docente verá SOLO la indicación de trato y tu guía — nunca el diagnóstico ni las notas de este caso. Escribe la guía sin ningún dato clínico." %>
+
+<%= form_with url: counseling_case_care_auras_path(@case), method: :post do -%>
+  <div class="field">
+    <label class="field__label" for="aura_kind">Indicación de trato</label>
+    <select class="field__input" id="aura_kind" name="aura_kind" required>
+      <% @aura_kinds.each do |kind| -%>
+        <option value="<%= kind %>"><%= AnalyticsBi::CareAura.kind_label(kind) %></option>
+      <% end -%>
+    </select>
+  </div>
+
+  <div class="field">
+    <label class="field__label" for="guidance_text">Guía para el docente</label>
+    <textarea class="field__input" id="guidance_text" name="guidance_text" rows="4" required
+      placeholder="Ej.: Permítele presentar las evaluaciones de forma oral cuando lo necesite."></textarea>
+    <p class="field__hint" id="guidance_text-hint">Redáctala apta para el docente, sin ningún dato clínico.</p>
+  </div>
+
+  <%= ui_button "Publicar aura", type: "submit", variant: :primary %>
+<% end -%>

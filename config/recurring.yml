@@ -13,3 +13,25 @@ production:
   clear_solid_queue_finished_jobs:
     command: "SolidQueue::Job.clear_finished_in_batches(sleep_between_batches: 0.3)"
     schedule: every hour at minute 12
+  # v1.32.0 — previously all invocable manual/rake only (see OPEN_PROCESS.md
+  # §1.5.6). Each *AllJob is a fan-out wrapper (per-institution jobs need
+  # their own institution_id set before ApplicationJob's GUC machinery runs,
+  # so ONE recurring entry can't call the per-institution job directly).
+  nightly_headcount_snapshot:
+    class: Core::Headcount::SnapshotAllJob
+    schedule: every day at 2am
+  nightly_usage_rollup:
+    class: ControlPlane::Usage::RollupJob
+    schedule: every day at 1am
+  monthly_period_cut:
+    class: ControlPlane::Billing::PeriodCutAllJob
+    schedule: at 3am on the 1st of every month
+  daily_invitation_expiry_sweep:
+    class: IdentityAccess::Invitations::ExpireAllJob
+    schedule: every day at 4am
+  # OPEN_PROCESS.md item #2 (onboarding hardening, gated closed 2026-07-22):
+  # purges roster_import_rows (raw PII, jsonb) for batches committed more
+  # than RowPurger::RETENTION ago — nothing else in the app ever purges them.
+  daily_roster_import_row_purge:
+    class: Core::RosterImport::PurgeRowsAllJob
+    schedule: every day at 5am

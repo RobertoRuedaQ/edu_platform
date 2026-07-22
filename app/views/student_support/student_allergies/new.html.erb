@@ -1,0 +1,25 @@
+<% content_for :title, "Registrar alergia" %>
+
+<%= render "shared/page_header", title: "Registrar alergia", subtitle: "#{@student.first_name} #{@student.last_name}" %>
+
+<% if @allergy.errors.any? -%>
+  <%= render "shared/alert", variant: :danger, message: @allergy.errors.full_messages.join(", ") %>
+<% end -%>
+
+<%= form_with url: student_support_student_student_allergies_path(@student.id), method: :post do %>
+  <%= render "shared/field", label: "Alérgeno", name: "student_allergy[allergen_name]",
+        value: @allergy.allergen_name, placeholder: "Ej. Maní", required: true %>
+
+  <div class="field">
+    <label class="field__label" for="student_allergy_severity">Severidad</label>
+    <select class="field__input" id="student_allergy_severity" name="student_allergy[severity]" required>
+      <% StudentSupport::StudentAllergy::SEVERITIES.each do |severity| -%>
+        <option value="<%= severity %>"><%= severity.humanize %></option>
+      <% end -%>
+    </select>
+  </div>
+
+  <%= render "shared/field", label: "Reacción (opcional)", name: "student_allergy[reaction]", value: @allergy.reaction %>
+
+  <%= ui_button "Registrar alergia", type: "submit", variant: :primary %>
+<% end %>

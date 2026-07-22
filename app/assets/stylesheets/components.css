@@ -704,4 +704,53 @@
     font-size: var(--text-sm);
     margin-bottom: var(--space-3);
   }
+
+  /* --- Spatial classroom map (HPS Lens 1, v1.36.0) ------------------------ */
+  /* Heat is a per-seat CSS variable set server-side (--heat: hsl(...)); the
+     view never recomputes color in JS. --heat-unknown is the muted neutral for
+     a student with no grade/attendance data yet. */
+  .seat-grid { --heat-unknown: var(--color-border); display: block; }
+  .seat-grid__filter { display: inline-flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3); font-size: var(--text-sm); }
+  .seat-grid__svg { width: 100%; height: auto; max-width: 40rem; overflow: visible; }
+  .seat-grid__board { fill: var(--color-surface-2, var(--color-border)); stroke: var(--color-border); }
+  .seat-grid__board-label { fill: var(--color-text-muted); font-size: 12px; font-weight: var(--weight-medium); }
+  .seat { transition: opacity var(--transition-fast); }
+  .seat__pad { fill: var(--heat); stroke: var(--color-surface); stroke-width: 1.5; }
+  .seat--empty { fill: none; stroke: var(--color-border); stroke-dasharray: 3 3; }
+  .seat__initials { fill: #fff; font-size: 15px; font-weight: var(--weight-semibold); }
+  .seat__flag { fill: #fff; font-size: 15px; font-weight: var(--weight-bold); }
+  /* Lens 5 aura badge (v1.37.0): a discrete abstract marker over a seat when
+     the observer holds hps.aura.view. Never color-alone — it carries a glyph +
+     accessible label; the projection detail lives in the SVG <title> and the
+     hidden table. */
+  .seat__aura { cursor: help; }
+  .seat__aura-dot { fill: var(--color-surface); stroke: var(--color-primary); stroke-width: 1.5; }
+  .seat__aura-glyph { fill: var(--color-primary); font-size: 11px; font-weight: var(--weight-bold); }
+  /* Dimming: applied by spatial_map_controller.js to stable seats when the
+     filter is on — attenuate opacity/saturation, never remove (AA: meaning is
+     also carried by the "!" marker + label, never color alone). */
+  .seat--dimmed { opacity: 0.28; }
+  .seat-grid__legend { display: flex; flex-wrap: wrap; gap: var(--space-4); margin: var(--space-3) 0; font-size: var(--text-sm); color: var(--color-text-muted); }
+  .seat-grid__legend p { display: inline-flex; align-items: center; gap: var(--space-2); margin: 0; }
+  .seat-grid__swatch { width: 0.9rem; height: 0.9rem; border-radius: var(--radius-sm); display: inline-block; }
+  .seat-grid__swatch--calm { background: hsl(130, 72%, 52%); }
+  .seat-grid__swatch--hot { background: hsl(0, 72%, 52%); }
+  .seat-grid__swatch--unknown { background: var(--color-border); }
+
+  /* --- Character radar (HPS Lens 2, v1.40.0) ------------------------------ */
+  /* Server-rendered SVG (AnalyticsBi::Svg::RadarChart). The ordinal drives the
+     polygon geometry only; every readable label is qualitative (never a score).
+     Meaning is never color-alone (AA): axis labels are real text + a
+     visually-hidden table mirrors every axis. */
+  .radar-chart { display: block; margin: var(--space-3) 0; }
+  .radar-chart__svg { width: 100%; height: auto; max-width: 32rem; overflow: visible; }
+  .radar-chart__ring { fill: none; stroke: var(--color-border); }
+  .radar-chart__spoke { stroke: var(--color-border); }
+  .radar-chart__area { fill: color-mix(in srgb, var(--color-primary, #2563eb) 22%, transparent); stroke: var(--color-primary, #2563eb); stroke-width: 2; }
+  .radar-chart__vertex { fill: var(--color-primary, #2563eb); }
+  .radar-chart__label { fill: var(--color-text, #111); font-size: 12px; font-weight: var(--weight-medium); }
+
+  /* Lens 3 constellation (Slice 7) — the Cytoscape canvas only; the accessible
+     fallback list needs no bespoke styling beyond the shared stack/table rules. */
+  .constellation__canvas { width: 100%; height: 28rem; border: 1px solid var(--color-border); border-radius: var(--radius-md, 0.5rem); }
 }

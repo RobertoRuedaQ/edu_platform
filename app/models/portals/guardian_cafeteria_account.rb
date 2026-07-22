@@ -1,17 +1,21 @@
 module Portals
-  # STUB cafeteria accounts for the guardian's portal — one per child, same
-  # balances GuardianDashboard's shortcuts already show ($24.500/$10.200), so
-  # the two pages agree with each other.
-  #
-  # TODO: reemplazar por Cafeteria::StudentAccount real vía guardian_students.
+  # Per-child cafeteria balance for the guardian's portal (guidelines/
+  # CLOSURE_PLAN.md Fase D — cafeteria resto). Reads the ONE shared
+  # Finance::StudentAccount wallet (never a cafeteria-owned ledger — see
+  # db/migrate/20260722060000's comment) through the SAME resolved children
+  # list GuardianDashboard's shortcuts already use, so the two pages can
+  # never disagree.
   module GuardianCafeteriaAccount
     Account = Data.define(:child_id, :child_name, :balance, :currency)
 
-    def self.for_children
-      [
-        Account.new(child_id: "stub-child-1", child_name: "Ana Martínez", balance: 24_500, currency: "COP"),
-        Account.new(child_id: "stub-child-2", child_name: "Luis Martínez", balance: 10_200, currency: "COP")
-      ]
+    def self.for_children(user)
+      Core::Access::GuardianScope.for(user).map do |child|
+        account = Finance::StudentAccount.find_by(institution_id: Current.institution_id, student_id: child.id)
+        Account.new(
+          child_id: child.id, child_name: "#{child.first_name} #{child.last_name}",
+          balance: account&.balance || 0, currency: account&.currency || "COP"
+        )
+      end
     end
   end
 end

@@ -1,10 +1,17 @@
 <% content_for :title, "Transporte" %>
 
-<% @infos.each do |info| -%>
-  <h3><%= info.child_name %></h3>
-  <%= render "shared/detail_list", items: {
-        "Ruta"     => info.route_name,
-        "Parada"   => info.stop_name,
-        "Hora de recogida" => info.pickup_time
-      } %>
+<% @children.each do |child| -%>
+  <h3><%= child.first_name %> <%= child.last_name %></h3>
+  <% riders = @riders_by_child[child] -%>
+  <% if riders.any? -%>
+    <% riders.each do |rider| -%>
+      <%= render "shared/detail_list", items: {
+            "Turno"  => rider.shift_label,
+            "Ruta"   => rider.route.name,
+            "Parada" => rider.stop_name || "—"
+          } %>
+    <% end -%>
+  <% else -%>
+    <%= render "shared/empty_state", title: "Sin ruta asignada" %>
+  <% end -%>
 <% end -%>

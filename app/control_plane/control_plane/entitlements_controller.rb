@@ -23,6 +23,7 @@ module ControlPlane
     end
 
     def new
+      authorize_platform!("billing.manage")
       @entitlement = Entitlement.new(institution_id: @institution.id, valid_from: Date.current)
       @grantable_addons = Addon.active.where.not(
         id: Entitlement.where(institution_id: @institution.id).select(:addon_id)
@@ -30,6 +31,7 @@ module ControlPlane
     end
 
     def create
+      authorize_platform!("billing.manage")
       @entitlement = Entitlement.new(entitlement_params.merge(institution_id: @institution.id))
       if @entitlement.save
         ControlPlane::Audit.log(action: "entitlement.granted", platform_admin: current_platform_admin,
@@ -45,9 +47,11 @@ module ControlPlane
     end
 
     def edit
+      authorize_platform!("billing.manage")
     end
 
     def update
+      authorize_platform!("billing.manage")
       before = @entitlement.attributes.slice(*entitlement_params.keys)
       if @entitlement.update(entitlement_params)
         ControlPlane::Audit.log(action: "entitlement.updated", platform_admin: current_platform_admin,
@@ -61,14 +65,19 @@ module ControlPlane
     end
 
     def revoke
+      authorize_platform!("billing.manage")
       @entitlement.revoke!
       ControlPlane::Audit.log(action: "entitlement.revoked", platform_admin: current_platform_admin,
         target: @entitlement, ip_address: request.remote_ip)
       redirect_to control_plane_entitlements_path(institution_id: @entitlement.institution_id),
         notice: "Entitlement revocado."
+    rescue ActiveRecord::RecordInvalid
+      redirect_to control_plane_entitlements_path(institution_id: @entitlement.institution_id),
+        alert: "No se puede revocar un entitlement el mismo día en que se otorgó — espera al día siguiente."
     end
 
     def reactivate
+      authorize_platform!("billing.manage")
       conflicting = Entitlement.active.where(institution_id: @entitlement.institution_id, addon_id: @entitlement.addon_id)
         .where.not(id: @entitlement.id)
       if conflicting.exists?

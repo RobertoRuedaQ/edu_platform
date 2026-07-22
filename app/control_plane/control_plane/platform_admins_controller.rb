@@ -13,6 +13,7 @@ module ControlPlane
     end
 
     def suspend
+      authorize_platform!("platform_admins.manage")
       if @platform_admin == current_platform_admin
         return redirect_to control_plane_platform_admins_path, alert: "No puedes suspenderte a ti mismo."
       end
@@ -29,6 +30,7 @@ module ControlPlane
     end
 
     def reactivate
+      authorize_platform!("platform_admins.manage")
       @platform_admin.reactivate!
       ControlPlane::Audit.log(action: "platform_admin.reactivated", platform_admin: current_platform_admin,
         target: @platform_admin, ip_address: request.remote_ip)

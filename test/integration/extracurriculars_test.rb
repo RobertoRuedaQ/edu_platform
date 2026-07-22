@@ -244,4 +244,22 @@ class ExtracurricularsTest < ActionDispatch::IntegrationTest
       assert_empty Extracurriculars::Activity.where(institution_id: other.id, name: "Actividad Ajena")
     end
   end
+
+  # S3b (v1.30.0): one "inscripciones" usage event per NEW active enrollment —
+  # re-enrolling the SAME (activity, student) while already active is a no-op
+  # (EnrollmentCreator's own idempotency guard), so it never re-emits either.
+  test "S3b: enrolling emits one usage event, and re-enrolling while already active never duplicates it" do
+    ControlPlane::Addon.find_by!(key: "extracurriculars").update!( # sign_in_as_member already seeded this, unmetered
+      metered: true, unit: "inscripciones", included_quota: 5, overage_unit_price_cents: 200
+    )
+
+    as_coordinator do
+      post "/extracurriculars/activities/#{@activity_a.id}/enrollments", params: { student_id: @student.id }
+      post "/extracurriculars/activities/#{@activity_a.id}/enrollments", params: { student_id: @student.id }
+    end
+
+    events = ControlPlane::UsageEvent.where(institution_id: @institution.id)
+    assert_equal 1, events.count
+    assert_equal "inscripciones", events.sole.unit
+  end
 end

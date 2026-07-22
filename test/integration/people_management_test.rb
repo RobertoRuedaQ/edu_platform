@@ -133,6 +133,36 @@ class PeopleManagementTest < ActionDispatch::IntegrationTest
     assert_equal "expired", within_tenant(@institution) { issued.invitation.reload.status }
   end
 
+  # Recurring fan-out (v1.32.0, config/recurring.yml) — previously Expirer
+  # only ran opportunistically from the people index; this is the first
+  # scheduled sweep, one institution's GUC at a time (Invitation is tenant-
+  # scoped/RLS, unlike ControlPlane::Usage::RollupJob's global tables).
+  test "IdentityAccess::Invitations::ExpireAllJob sweeps every institution under its own GUC" do
+    other_institution = Core::Institution.create!(name: "Colegio Otro", slug: "expire-other-#{SecureRandom.hex(4)}",
+      code: "C-#{SecureRandom.hex(3)}", kind: "school")
+    other_user = Core::User.create!(email: "otro-exp-#{SecureRandom.hex(4)}@member.test", name: "Otro",
+      password: "password-123456")
+    within_tenant(other_institution) { other_institution.memberships.create!(user: other_user) }
+
+    issued_a = within_tenant(@institution) { IdentityAccess::Invitations::Issuer.call(user: @user, institution: @institution) }
+    within_tenant(@institution) { issued_a.invitation.update!(expires_at: 1.day.ago) }
+
+    issued_b = within_tenant(other_institution) { IdentityAccess::Invitations::Issuer.call(user: other_user, institution: other_institution) }
+    within_tenant(other_institution) { issued_b.invitation.update!(expires_at: 1.day.ago) }
+
+    IdentityAccess::Invitations::ExpireAllJob.perform_now
+
+    # The GUC never leaks past the job — checked BEFORE the within_tenant
+    # calls below, which (like every other within_tenant in this suite)
+    # legitimately leave the GUC set afterward; that's a property of the
+    # test helper, not something the job's own reset needs to survive.
+    visible = ActiveRecord::Base.uncached { IdentityAccess::Invitation.count }
+    assert_equal 0, visible, "the job's GUC leaked past its own loop"
+
+    assert_equal "expired", within_tenant(@institution) { issued_a.invitation.reload.status }
+    assert_equal "expired", within_tenant(other_institution) { issued_b.invitation.reload.status }
+  end
+
   test "Invitations::BounceHandler marks the live invitation bounced and audits it" do
     within_tenant(@institution) { IdentityAccess::Invitations::Issuer.call(user: @user, institution: @institution) }
 

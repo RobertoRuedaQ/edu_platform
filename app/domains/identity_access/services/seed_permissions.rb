@@ -100,7 +100,110 @@ module IdentityAccess
       # grado/institución-wide), que decide el resource pasado a authorize! —
       # ver Calendar::EventsController. Leer desde el portal NO usa permiso:
       # es relación (Calendar::VisibleScope/Timeline), ver Guardrails.
-      "calendar.manage" => "Crear y gestionar eventos del calendario (con alcance)"
+      "calendar.manage" => "Crear y gestionar eventos del calendario (con alcance)",
+      # analytics_bi HPS Lens 1 (v1.36.0, BI_DOCUMENT.md Slice 2): "Mapa de
+      # Empatía Espacial". SUPERVISION (RBAC + scope: section via :group /
+      # :grade_level reader), same molde as attendance.record — one permission
+      # to view the spatial map + heat overlay. hps.* is a NORMAL per-institution
+      # permission (institution_admin inherits it via bootstrap, like every
+      # other key EXCEPT cross_tenant_reports.view) — it is NOT cross-tenant.
+      # Reconfiguring the layout itself is a WRITE gated by groups.manage
+      # (group_management owns the tables, decision A2), not by this key.
+      "hps.classroom.view" => "Ver el mapa espacial del aula (Lente 1 del HPS)",
+      # analytics_bi HPS Lens 5 (v1.37.0, BI_DOCUMENT.md Slice 3): "Auras de
+      # Cuidado", the TEACHER side of the two-sided permission split (§4). The
+      # counselor side authoring the projection reuses the EXISTING
+      # counseling.write ("Registrar notas de orientación") — no new write key.
+      # This grants a teacher the ABSTRACT aura badge overlaid on the Lens 1
+      # seat grid (aura_kind + guidance_text + dates ONLY) — never anything from
+      # counseling's tables. SUPERVISION, scope group_id (same as
+      # hps.classroom.view). hps.* is a NORMAL per-institution permission
+      # (institution_admin inherits it via bootstrap, like every key EXCEPT
+      # cross_tenant_reports.view) — it is NOT cross-tenant.
+      "hps.aura.view" => "Ver auras de cuidado sobre el mapa del aula (Lente 5 del HPS, proyección abstracta)",
+      # analytics_bi HPS T2 formativo (v1.39.0, BI_DOCUMENT.md Slice 5): the
+      # character-evaluation instrument (§5.4). Two WRITE keys, split by ACTION
+      # (author vs moderate), not by confidentiality:
+      #   hps.character.author  — a docente/orientador creates/publishes character
+      #     evaluations against a framework (AnalyticsBi::CharacterEvaluationsController,
+      #     molde #4 supervision, scope group_id via the student's section).
+      #   hps.character.moderate — moderates peer/guardian appreciations (flip to
+      #     withheld_by_moderation, append-only + audited). This is ALSO the only
+      #     key that may ever see giver attribution (§5.4 resguardo #3).
+      # The ACT of a peer/guardian GIVING an appreciation is NOT gated by RBAC —
+      # it's an identity action (co-membership + guardian consent, §4), handled by
+      # AnalyticsBi::Character::PeerAppreciationRecorder, never an authorize!.
+      # hps.* is a NORMAL per-institution permission (institution_admin inherits
+      # it via bootstrap, like every key EXCEPT cross_tenant_reports.view) — it is
+      # NOT cross-tenant.
+      "hps.character.author"   => "Crear y publicar evaluaciones de carácter (Lente 2 del HPS, T2)",
+      "hps.character.moderate" => "Moderar aportes de pares/acudientes (retirar y ver trazabilidad, auditado)",
+      # analytics_bi HPS Lens 3 (v1.42.0, BI_DOCUMENT.md Slice 7): "Constelación de
+      # Afinidades". Two keys, split by ACTION (view vs author), not by
+      # confidentiality — the same read/write discipline the Lens-1 tests rely on
+      # (hps.classroom.view never implies a write):
+      #   hps.constellation.view — SUPERVISION (RBAC + scope): institución-wide
+      #     (orientación/directivas) OR department_id (a specialist), resolved in
+      #     AnalyticsBi::Lens::ConstellationScope via the EXISTING :department scope
+      #     reader (no new scope_type). Views the transversal talent graph.
+      #   hps.affinity.author — the MINIMAL teacher_observed tagging write
+      #     (AnalyticsBi::StudentAffinitiesController, molde #4, scope group_id via
+      #     the student's section). guardian_reported/self_reported authoring is a
+      #     deferred portal slice. Mirrors hps.character.author exactly.
+      # hps.* is a NORMAL per-institution permission (institution_admin inherits it
+      # via bootstrap, like every key EXCEPT cross_tenant_reports.view) — NOT cross-tenant.
+      "hps.constellation.view" => "Ver la constelación de afinidades (Lente 3 del HPS)",
+      "hps.affinity.author"    => "Registrar afinidades observadas por el docente (Lente 3 del HPS, T2)",
+      # analytics_bi HPS Lens 4 (v1.43.0, BI_DOCUMENT.md Slice 8): "Núcleo
+      # Familiar" — the orbital graph (guardians + siblings), guardian engagement
+      # ("tensión del vínculo"), and the sibling-decline read-model signal. §4
+      # scopes this INSTITUTION-WIDE ONLY (orientación/directivas) — unlike
+      # hps.constellation.view, there is no smaller scope reader for this lens
+      # (a family spans sections/grades by definition). ONE permission covers
+      # view — there is no separate write key this slice (guardian_relationships/
+      # households authoring is console/rake-only for now, same posture as
+      # character_frameworks in Slice 5, deferred until a real curation UI is
+      # needed). hps.* is a NORMAL per-institution permission (institution_admin
+      # inherits it via bootstrap, like every key EXCEPT cross_tenant_reports.view)
+      # — it is NOT cross-tenant.
+      "hps.family.view" => "Ver el núcleo familiar y la alerta de lazos fraternales (Lente 4 del HPS)",
+      # core (v1.44.0, guidelines/CLOSURE_PLAN.md §4.2): the first staff-facing
+      # surface for Core::AcademicTerm — until now terms only ever existed via
+      # db/seeds.rb/console, with zero UI to create one or to close an active
+      # one. ONE unified permission (create/edit/activate/close), same
+      # criterion as attendance.record/assignment.manage — there is no
+      # confidentiality split here that would justify a read/write divide.
+      # "Cerrar término" is also the manual trigger for AnalyticsBi::
+      # HpsTermSnapshotJob (BI_DOCUMENT.md §7/Slice 4) — the owner's confirmed
+      # choice (a staff button, molde report_card.publish) over a scheduled/
+      # cron trigger, since end-of-term is data-dependent, not clock-driven.
+      "academic_terms.manage" => "Crear, editar, activar y cerrar términos académicos (dispara el snapshot del HPS al cerrar)",
+      # analytics_bi HPS Lens 6 (v1.46.0, BI_DOCUMENT.md §5.8 amendment,
+      # guidelines/CLOSURE_PLAN.md §3.2, Fase C): "Alertas Tempranas", the
+      # cross-domain synthesis capstone. INSTITUTION-WIDE ONLY (orientación/
+      # directivas), no smaller scope reader — same criterion as
+      # hps.family.view (a triage queue spans sections/grades by definition).
+      # This permission ONLY grants access to the SYNTHESIS SURFACE — it does
+      # NOT itself unlock any underlying signal. AnalyticsBi::Lens::
+      # EarlyWarningScope re-checks hps.aura.view/disciplinary_logs.manage/
+      # hps.family.view per signal before including it, same "each section its
+      # own permission" discipline as StudentSupport::SupportDashboardController.
+      # NO business rule (thresholds/audience/frequency) was ever confirmed —
+      # BI_DOCUMENT.md §3.2 says explicitly not to model this without one; it
+      # ships anyway on the owner's explicit instruction to assume a
+      # documented, conservative default (see EarlyWarningScope's own
+      # comment) — revisit the moment a real policy is defined.
+      "hps.early_warning.view" => "Ver la síntesis de alertas tempranas (Lente 6 del HPS)",
+      # library (guidelines/library_prompt.md, Fase D greenfield increment 1,
+      # OPEN_PROCESS.md #1 — confirmed explicitly by the owner). Split by
+      # action, molde assignment.manage/calendar.manage: catalog curation vs.
+      # circulation reporting vs. desk operation are three distinct actors in
+      # a real school library (cataloguer, coordinator, front-desk staff) —
+      # no existing key (checkout.manage is cafeteria-purchase-specific) was
+      # reusable.
+      "library.catalog.manage" => "Crear, editar y catalogar títulos y ejemplares físicos",
+      "library.loans.manage" => "Consultar el historial global de préstamos y la cartera en mora",
+      "library.checkout" => "Operar el mostrador de préstamo y devolución"
     }.freeze
 
     def self.call

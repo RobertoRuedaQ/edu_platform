@@ -7,7 +7,7 @@
 <%= render "shared/page_header",
       title: "Planes y precios",
       subtitle: "Base por alumno en brackets de volumen",
-      actions: ui_button("Nuevo plan", href: new_control_plane_plan_path, variant: :primary) %>
+      actions: (ui_button("Nuevo plan", href: new_control_plane_plan_path, variant: :primary) if can_platform?("catalog.manage")) %>
 
 <% if @plans.none? -%>
   <%= render "shared/empty_state", title: "Sin planes todavía",

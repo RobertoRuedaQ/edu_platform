@@ -16,6 +16,10 @@ class SchedulesTest < ActionDispatch::IntegrationTest
     Schedules::Subject.create!(institution: institution, name: name, code: code, term: term, grade_level: grade_level)
   end
 
+  def build_section!(institution, name:)
+    GroupManagement::Section.create!(institution: institution, name: name, academic_year: 2026)
+  end
+
   setup do
     @user, @institution = sign_in_as_member
 
@@ -26,16 +30,40 @@ class SchedulesTest < ActionDispatch::IntegrationTest
     @historia = within_tenant(@institution) { build_subject!(@institution, name: "Historia", code: "SOC-901", grade_level: @grado_9) }
     @calculo = within_tenant(@institution) { build_subject!(@institution, name: "Cálculo", code: "MAT-1001", grade_level: @grado_10) }
     @sociologia = within_tenant(@institution) { build_subject!(@institution, name: "Sociología", code: "SOC-1101", grade_level: @grado_10) }
+
+    within_tenant(@institution) do
+      @section_9a = build_section!(@institution, name: "9A")
+      @section_10a = build_section!(@institution, name: "10A")
+      @section_10b = build_section!(@institution, name: "10B")
+
+      @room101 = Schedules::Room.create!(institution: @institution, name: "Aula 101", kind: "classroom",
+        capacity: 30, building: "Bloque A")
+      @room102 = Schedules::Room.create!(institution: @institution, name: "Aula 102", kind: "classroom",
+        capacity: 28, building: "Bloque B")
+
+      # Sequential, same room, same section — never conflict.
+      @mp_algebra = Schedules::MeetingPattern.create!(institution: @institution, subject: @algebra,
+        section: @section_9a, room: @room101, day_of_week: "mon", starts_at: "07:00", ends_at: "08:00")
+      @mp_historia = Schedules::MeetingPattern.create!(institution: @institution, subject: @historia,
+        section: @section_9a, room: @room101, day_of_week: "mon", starts_at: "08:00", ends_at: "09:00")
+
+      # Two DIFFERENT sections sharing the same room at the same day/time —
+      # a real room conflict, computed for real (never a baked-in flag).
+      @mp_calculo = Schedules::MeetingPattern.create!(institution: @institution, subject: @calculo,
+        section: @section_10a, room: @room102, day_of_week: "tue", starts_at: "07:00", ends_at: "08:00")
+      @mp_sociologia = Schedules::MeetingPattern.create!(institution: @institution, subject: @sociologia,
+        section: @section_10b, room: @room102, day_of_week: "tue", starts_at: "07:00", ends_at: "08:00")
+    end
   end
 
-  # Teaches/leads only Grado 9: can read+write grades for that grade level,
-  # and (separately, real Subject has no group/section link, only
-  # grade_level/program — #4 barrido) view their own group's schedule, via
-  # the still-stub :group scope dimension schedule.view uses.
+  # Teaches/leads only 9A: can read+write grades for Grado 9, and (separately
+  # — real Subject has no group/section link, only grade_level/program, #4
+  # barrido) view their own SECTION's schedule via the real :group scope
+  # schedule.view uses.
   def as_teacher_9a(&block)
     with_grants(
       Authorization::Assignment.new(role_key: "teacher", permission_keys: %w[schedule.view],
-                                     scope_type: :group, scope_id: GroupManagement::GroupRoster::SECTION_9A_ID),
+                                     scope_type: :group, scope_id: @section_9a.id),
       Authorization::Assignment.new(role_key: "teacher", permission_keys: %w[grades.read grades.write],
                                      scope_type: :grade_level, scope_id: @grado_9.id),
       &block
@@ -168,6 +196,65 @@ class SchedulesTest < ActionDispatch::IntegrationTest
     end
   end
 
+  # CLOSURE_PLAN §4.4: matricular ya no depende de calificar. Antes de esta
+  # acción, Schedules::Enrollment SOLO nacía como efecto secundario de
+  # GradeEntriesController#create — este test cubre exactamente el hueco que
+  # cierra: un Enrollment sin ningún Assessment.
+  test "staff with grades.write can enroll a student with no prior grade or enrollment" do
+    student = within_tenant(@institution) do
+      GroupManagement::Student.create!(institution: @institution, first_name: "Mariana", last_name: "Ortiz",
+        gender: "female", birthdate: Date.new(2012, 4, 1), student_code: "COL-E-301", entry_year: 2023,
+        grade_level: @grado_9)
+    end
+
+    as_teacher_9a do
+      post "/schedules/grades/#{@algebra.id}/enrollment", params: { student_id: "COL-E-301" }
+      assert_redirected_to schedules_subject_path(@algebra)
+      follow_redirect!
+      assert_match(/Estudiante matriculado/, flash[:notice].to_s)
+
+      enrollment = Schedules::Enrollment.find_by(institution_id: @institution.id, student_id: student.id, subject_id: @algebra.id)
+      assert_not_nil enrollment
+      assert_equal 0, enrollment.assessments.count
+    end
+  end
+
+  test "enrolling an already-enrolled student is a friendly idempotent no-op" do
+    student = within_tenant(@institution) do
+      GroupManagement::Student.create!(institution: @institution, first_name: "Laura", last_name: "Pérez",
+        gender: "female", birthdate: Date.new(2012, 4, 1), student_code: "COL-E-302", entry_year: 2023,
+        grade_level: @grado_9)
+    end
+
+    as_teacher_9a do
+      post "/schedules/grades/#{@algebra.id}/enrollment", params: { student_id: "COL-E-302" }
+      assert_equal 1,
+        Schedules::Enrollment.where(institution_id: @institution.id, student_id: student.id, subject_id: @algebra.id).count
+
+      post "/schedules/grades/#{@algebra.id}/enrollment", params: { student_id: "COL-E-302" }
+      assert_redirected_to schedules_subject_path(@algebra)
+      follow_redirect!
+      assert_match(/Ya estaba matriculado/, flash[:notice].to_s)
+
+      assert_equal 1,
+        Schedules::Enrollment.where(institution_id: @institution.id, student_id: student.id, subject_id: @algebra.id).count
+    end
+  end
+
+  test "enrolling an unknown student code shows an error, not a 500" do
+    as_teacher_9a do
+      post "/schedules/grades/#{@algebra.id}/enrollment", params: { student_id: "NOPE" }
+      assert_response :unprocessable_entity
+    end
+  end
+
+  test "a role without grades.write is denied the matriculation action (403)" do
+    as_grades_reader do
+      post "/schedules/grades/#{@algebra.id}/enrollment", params: { student_id: "COL-E-303" }
+      assert_response :forbidden
+    end
+  end
+
   test "cross-tenant: a subject seeded in a different institution never leaks into this one's index" do
     other_institution = Core::Institution.create!(name: "Colegio Otro", slug: "sched-other-#{SecureRandom.hex(4)}",
       code: "C-#{SecureRandom.hex(3)}", kind: "school")
@@ -184,11 +271,12 @@ class SchedulesTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "mi horario filters events to the actor's own group" do
+  test "mi horario filters events to the actor's own section, real Schedules::MeetingPattern" do
     as_teacher_9a do
       get "/schedules/my_schedule"
       assert_response :success
       assert_select "td", text: "Álgebra"
+      assert_select "td", text: "Historia"
       assert_select "td", text: "Cálculo", count: 0
     end
   end
@@ -201,14 +289,17 @@ class SchedulesTest < ActionDispatch::IntegrationTest
     as_teacher_9a { get "/schedules/timetable"; assert_response :forbidden }
   end
 
-  test "registrar sees the institutional timetable with every event, conflicts marked as text" do
+  test "registrar sees the institutional timetable with every event; room conflict is COMPUTED, never a baked-in flag" do
     as_registrar do
       get "/schedules/timetable"
       assert_response :success
       assert_select "td", text: "Cálculo"
       assert_select "td", text: "Sociología"
       # Conflict is never color-only: the word itself must be in the markup.
-      assert_select ".badge", text: "Conflicto"
+      # Exactly two conflicting rows (Cálculo/Sociología, same room+day/time,
+      # different sections) — Álgebra/Historia are sequential, never flagged.
+      assert_select ".badge", text: "Conflicto", count: 2
+      assert_select ".badge", text: "Aula 101", count: 2
     end
   end
 
@@ -220,8 +311,21 @@ class SchedulesTest < ActionDispatch::IntegrationTest
       assert_response :success
       assert_select "a", text: "Aula 101"
 
-      get "/schedules/rooms/room-101"
+      get "/schedules/rooms/#{@room101.id}"
       assert_response :success
+      assert_select "td", text: "Álgebra"
+      assert_select "td", text: "Historia"
+      # A DIFFERENT room's events never leak onto this room's page — the
+      # real replacement filters by room_id, not the stub's fragile
+      # room_name string comparison.
+      assert_select "td", text: "Cálculo", count: 0
+    end
+  end
+
+  test "an unknown room 404s, never raises" do
+    as_registrar do
+      get "/schedules/rooms/#{SecureRandom.uuid}"
+      assert_response :not_found
     end
   end
 end

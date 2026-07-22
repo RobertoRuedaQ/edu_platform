@@ -19,7 +19,7 @@
       <td><%= report.institution_name %></td>
       <td><%= report.institution_kind.humanize %></td>
       <td><%= report.student_count %></td>
-      <td><%= report.avg_grade %></td>
+      <td><%= report.avg_grade || "—" %></td>
     </tr>
   <% end -%>
 <% end -%>

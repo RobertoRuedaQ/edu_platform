@@ -1,0 +1,32 @@
+<% content_for :title, "Términos académicos" %>
+
+<%= render "shared/page_header", title: "Términos académicos",
+      subtitle: "Crear, activar y cerrar el calendario académico. Cerrar un término congela el HPS (Lente de tendencias año-a-año).",
+      actions: ui_button("Nuevo término", href: new_core_academic_term_path, variant: :primary) %>
+
+<% if @terms.any? -%>
+  <%= render layout: "shared/table", locals: { headers: ["Código", "Nombre", "Vigencia", "Estado", ""] } do -%>
+    <% @terms.each do |term| -%>
+      <tr>
+        <td><%= term.code %></td>
+        <td><%= term.name %></td>
+        <td><%= term.starts_on.strftime("%d/%m/%Y") %> — <%= term.ends_on.strftime("%d/%m/%Y") %></td>
+        <td><%= ui_badge term.status.humanize,
+              variant: { "active" => :success, "closed" => :neutral, "upcoming" => :warning }.fetch(term.status, :neutral) %></td>
+        <td>
+          <%= safe_join([
+                ui_button("Editar", href: edit_core_academic_term_path(term), variant: :secondary, size: :sm),
+                (button_to "Activar", activate_core_academic_term_path(term), method: :post,
+                   class: "btn btn--secondary btn--sm" if term.status == "upcoming"),
+                (button_to "Cerrar término y congelar HPS", close_core_academic_term_path(term), method: :post,
+                   class: "btn btn--danger btn--sm",
+                   data: { turbo_confirm: "¿Cerrar #{term.name}? Esto encola el snapshot del HPS para este término." } if term.status == "active")
+              ], " ") %>
+        </td>
+      </tr>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state", title: "Sin términos académicos todavía",
+        description: "Crea el primero para empezar a matricular estudiantes por término." %>
+<% end -%>

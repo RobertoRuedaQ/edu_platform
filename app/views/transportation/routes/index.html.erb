@@ -8,7 +8,7 @@
     <% @routes.each do |route| -%>
       <tr>
         <td><%= link_to route.name, transportation_route_path(route.id) %></td>
-        <td><%= route.driver_name %></td>
+        <td><%= route.driver_name || "Sin asignar" %></td>
         <td><%= route.vehicle_plate %></td>
         <td><%= route.capacity %></td>
       </tr>

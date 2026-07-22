@@ -46,6 +46,9 @@ Rails.application.routes.draw do
     resource :student, only: :show, controller: "student_portal" do
       resource :cafeteria, only: :show, controller: "student_cafeteria"
       resource :transport, only: :show, controller: "student_transport"
+      # library (guidelines/library_prompt.md, Fase D greenfield increment 1):
+      # own loans + catalog browse, same molde as cafeteria/transport above.
+      resource :library, only: :show, controller: "student_library"
       # report_cards (v1.17.0): published-only, by self-scope — no
       # authorize!, outside Navigation::Registry (§7). Plural: many terms.
       resources :report_cards, only: :index, controller: "student_report_cards"
@@ -88,6 +91,16 @@ Rails.application.routes.draw do
       # escritura es del acudiente, no del estudiante. Sin authorize!, fuera
       # de Navigation::Registry (§7).
       resources :activities, only: %i[index show], controller: "student_activities"
+      # analytics_bi Lens 2 (v1.40.0, Slice 6): the student's OWN "Ficha de
+      # Personaje" — radar/brújula/medallas/crecimiento. Self-service by
+      # identity (StudentSelfScope), no authorize!, outside Navigation::Registry.
+      # Singular (one card per student), like calendar/attendance.
+      resource :character_card, only: :show, controller: "student_character_card"
+      # Peer-appreciation GIVING (v1.40.0, Slice 6, deferred from Slice 5): the
+      # student recognizes a current section co-member from a CLOSED roster + a
+      # CLOSED tag catalog (§1.1.6). Identity action gated by the Recorder's own
+      # consent check, not RBAC. Singular resource, new/create only.
+      resource :peer_appreciation, only: %i[new create], controller: "student_peer_appreciations"
     end
     resource :guardian, only: :show, controller: "guardian_portal" do
       # Per-child read-only summary (v1.9.0) — resolved through
@@ -139,6 +152,15 @@ Rails.application.routes.draw do
         resources :activities, only: %i[index show], controller: "guardian_activities" do
           resource :enrollment, only: %i[create destroy], controller: "guardian_activity_enrollments"
         end
+        # analytics_bi Lens 2 (v1.40.0, Slice 6): this child's "Ficha de
+        # Personaje" — per-child (like report_cards/calendar), resolved through
+        # GuardianScope (a child outside the caller's active links 404s). No
+        # authorize!, outside Navigation::Registry.
+        resource :character_card, only: :show, controller: "guardian_character_card"
+        # Guardian consent grant/revoke for the peer path (§5.4 point 5,
+        # deferred from Slice 5). Identity action for the guardian's OWN child
+        # (same class as :enrollment), never RBAC. Singular, create/destroy.
+        resource :character_consent, only: %i[create destroy], controller: "guardian_character_consents"
       end
       # communication (v1.19.0): org-wide, NOT per-child — a sibling of
       # :students, not nested under it.
@@ -150,6 +172,26 @@ Rails.application.routes.draw do
       end
       resource :cafeteria, only: :show, controller: "guardian_cafeteria"
       resource :transport, only: :show, controller: "guardian_transport"
+      # library (guidelines/library_prompt.md, Fase D greenfield increment 1):
+      # same molde as cafeteria/transport above — summarizes ALL children on
+      # one page, never per-child nesting (a few current loans per child is
+      # light content, unlike finance/report_cards).
+      resource :library, only: :show, controller: "guardian_library"
+    end
+  end
+
+  # --- core (domain views) --------------------------------------------------
+  # Core::AcademicTerm's first staff-facing surface (guidelines/CLOSURE_PLAN.md
+  # §4.2) — gated by the single unified academic_terms.manage permission.
+  # activate/close are member actions (POST), not a generic update — each is
+  # its own explicit state transition (upcoming->active, active->closed), and
+  # close is ALSO the manual trigger for AnalyticsBi::HpsTermSnapshotJob.
+  namespace :core do
+    resources :academic_terms, only: %i[index new create edit update] do
+      member do
+        post :activate
+        post :close
+      end
     end
   end
 
@@ -174,6 +216,12 @@ Rails.application.routes.draw do
     resources :students, only: %i[index show]
     resources :groups, only: %i[index show] do
       resource :membership, only: %i[edit update], controller: "memberships"
+      # Physical classroom geometry (v1.36.0, BI_DOCUMENT.md Slice 2). Owned by
+      # group_management (decision A2), gated by groups.manage. classroom_layout
+      # is singular (one current version per group); reconfiguring opens the
+      # next version. seat_assignments key on student_id for destroy (unassign).
+      resource :classroom_layout, only: %i[show create], controller: "classroom_layouts"
+      resources :seat_assignments, only: %i[create destroy], controller: "seat_assignments"
     end
   end
 
@@ -186,6 +234,14 @@ Rails.application.routes.draw do
   namespace :schedules do
     resources :subjects, only: %i[index show], path: "grades" do
       resources :grade_entries, only: %i[new create]
+      # Deliberate matriculation, decoupled from grading (CLOSURE_PLAN §4.4).
+      # Singular resource, create-only: an honest, scoped MVP. A "withdraw"
+      # counterpart is deliberately NOT added here — unlike activity_enrollments'
+      # partial unique index (scoped by status: 'active'), this table's unique
+      # index is a plain (institution_id, student_id, subject_id), not scoped
+      # by status, so a real withdraw/re-enroll flow needs its own migration
+      # decision, not a same-PR add-on.
+      resource :enrollment, only: :create, controller: "enrollments"
     end
     resource :my_schedule, only: :show, controller: "my_schedule"
     resource :timetable, only: :show, controller: "timetables"
@@ -199,7 +255,15 @@ Rails.application.routes.draw do
   # bullet — the real Case/SessionNote/Referral models live in this separate,
   # more-sensitive domain (see app/domains/counseling/README.md).
   namespace :counseling do
-    resources :cases, only: %i[index show], path: ""
+    # care_auras (Lente 5, BI_DOCUMENT.md Slice 3) is authored FROM counseling
+    # (where the counselor sees the Case that motivates it, §5.7), nested under
+    # the case. Write is gated by counseling.write (the existing authorship
+    # key); the projection itself is an analytics_bi table written via
+    # AnalyticsBi::Aura::Projector. No index route — the case show lists the
+    # student's active auras. new/create publish; destroy retires (append-only).
+    resources :cases, only: %i[index show], path: "" do
+      resources :care_auras, only: %i[new create destroy]
+    end
   end
 
   # --- student_support (domain views, Prompt Unificado) ---------------------
@@ -211,23 +275,42 @@ Rails.application.routes.draw do
     get "dashboard", to: "support_dashboard#show", as: "support_dashboard"
 
     resources :students, only: [] do
-      resource :medical_history, only: :show, controller: "medical_history"
-      resources :accommodations, only: %i[index edit update]
+      resource :medical_history, only: %i[show edit update], controller: "medical_history"
+      resources :student_allergies, only: %i[new create]
+      resources :accommodations, only: %i[index new create edit update]
       resources :disciplinary_logs, only: %i[index create]
     end
   end
 
   # --- cafeteria (domain views, Prompt Unificado) ---------------------------
-  # Only DietaryRestriction is real (seeded); Menu/Purchase/StudentAccount
-  # don't exist as models. The checkout block is genuine logic (cross-
-  # referencing the student's allergies against the menu item), not cosmetic —
-  # _checkout_line only ever REFLECTS the flag this controller computes.
-  # balance.view reuses the existing finance.read (treasury already owns
-  # "cartera y pagos"); menu has no group/department dimension to scope by.
+  # DietaryRestriction, MenuItem, and Purchase are all real (guidelines/
+  # CLOSURE_PLAN.md Fase D — cafeteria resto closes the last stub half:
+  # a purchase is a Finance::Charge against the ONE shared student_accounts
+  # wallet, account.lock! transactional, molde Finance::ChargeCreator/
+  # Extracurriculars::EnrollmentCreator). The checkout block is genuine logic
+  # (cross-referencing the student's allergies against the menu item), not
+  # cosmetic — _checkout_line only ever REFLECTS the flag this controller
+  # computes. balance.view reuses the existing finance.read (treasury already
+  # owns "cartera y pagos"); menu has no group/department dimension to scope by.
   namespace :cafeteria do
     get "menu", to: "menu#index", as: "menu"
     resources :checkouts, only: %i[new create]
     resources :balances, only: :index
+  end
+
+  # --- library (guidelines/library_prompt.md, Fase D greenfield increment 1,
+  # OPEN_PROCESS.md #1 — confirmed explicitly by the owner) ------------------
+  # library.catalog.manage gates the catalog/copies (cataloguer); library.
+  # checkout gates the front-desk lend/return flow; library.loans.manage
+  # gates the read-only history/reports index — three distinct actors, molde
+  # assignment.manage/calendar.manage's action-split discipline.
+  namespace :library do
+    resources :resources, only: %i[index new create edit update] do
+      resources :copies, only: %i[index new create update], controller: "resource_copies"
+    end
+    resources :checkouts, only: %i[new create]
+    resources :returns, only: :create
+    resources :loans, only: :index
   end
 
   # --- attendance (net-new domain, v1.16.0, MVP critical path item #2) ------
@@ -382,11 +465,44 @@ Rails.application.routes.draw do
   # --- analytics_bi (domain views, Prompt Unificado) ------------------------
   # SENSIBLE. cross_tenant_reports is the ONE sanctioned cross-tenant path
   # (edu_bi_reader, BYPASSRLS, audited — see lib/tasks/roles.rake); the normal
-  # app connection (edu_app_runtime) NEVER gets that. Still fully stub in this
-  # views-only phase, same deferral control_plane already documents.
+  # app connection (edu_app_runtime) NEVER gets that. InstitutionDashboard
+  # (v1.34.0) and CrossTenantReportRoster (v1.35.0) are real; spatial_classrooms
+  # is HPS Lens 1 (v1.36.0, BI_DOCUMENT.md Slice 2) — a tenant-scoped
+  # supervision surface (hps.classroom.view) that only reads the
+  # group_management-owned classroom geometry.
   namespace :analytics_bi do
     get "dashboard", to: "institution_dashboard#show", as: "institution_dashboard"
     resources :cross_tenant_reports, only: :index
+    resources :spatial_classrooms, only: %i[index show]
+    # character_evaluations (T2, BI_DOCUMENT.md Slice 5): the docente/orientador
+    # write surface for the character instrument, gated by hps.character.author.
+    # new/create only — framework-authoring CRUD is seeded (bi:seed_character_starter),
+    # and the portal ficha (Lens 2) that reads it is Slice 6. The entry point is
+    # a supervised student (student_id param), never a person search (§1.1.6).
+    resources :character_evaluations, only: %i[new create]
+    # constellations (Lens 3, BI_DOCUMENT.md Slice 7): the "Constelación de
+    # Afinidades" supervision surface, gated by hps.constellation.view. index only
+    # — the graph ships the whole authorized scope once and the client dims/filters
+    # (§10.4), so there is no per-node show. student_affinities is the MINIMAL
+    # teacher_observed authoring path (gated by hps.affinity.author, student_id in
+    # params, never a person search §1.1.6); guardian/self-reported authoring is
+    # deferred to a future portal slice, same as Lens 2 was deferred from Slice 5.
+    resources :constellations, only: :index
+    resources :student_affinities, only: %i[new create]
+    # family_cores (Lens 4, BI_DOCUMENT.md Slice 8): the "Núcleo Familiar" orbital
+    # graph, gated by hps.family.view (institution-wide only — no smaller scope
+    # reader for this lens, §4). show only, keyed by student_id (never a person
+    # search, §1.1.6) — one student's own family graph + siblings + the sibling
+    # decline alert narrowed to that student. Authoring guardian_relationships/
+    # households is console/rake-only this slice (deferred, same posture as
+    # character_frameworks authoring in Slice 5).
+    resources :family_cores, only: :show
+    # early_warnings (Lens 6, BI_DOCUMENT.md §5.8 amendment, guidelines/
+    # CLOSURE_PLAN.md §3.2/Fase C): the cross-domain risk triage queue, gated
+    # by hps.early_warning.view (institution-wide only). index only — a
+    # read-only synthesis of signals that already exist elsewhere; never sends
+    # anything itself (see EarlyWarningsController).
+    resources :early_warnings, only: :index
   end
 
   # --- identity_access (domain views, Prompt Unificado) ---------------------

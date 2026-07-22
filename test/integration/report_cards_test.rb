@@ -163,6 +163,24 @@ class ReportCardsTest < ActionDispatch::IntegrationTest
     end
   end
 
+  # S3b (v1.30.0): one "boletines" usage event per (student, academic_term)
+  # PUBLISHED — keyed on that pair (not the ReportCard row's own id, which
+  # changes on every regeneration above), so re-publishing never re-emits.
+  test "S3b: publishing emits one usage event, and re-publishing the SAME (student, term) never duplicates it despite a fresh row id" do
+    ControlPlane::Addon.find_by!(key: "report_cards").update!( # sign_in_as_member already seeded this, unmetered
+      metered: true, unit: "boletines", included_quota: 20, overage_unit_price_cents: 100
+    )
+
+    as_homeroom_a do
+      post "/report_cards/groups/#{@section_a.id}/publications", params: { student_ids: [ @student_in_term.id ] }
+      post "/report_cards/groups/#{@section_a.id}/publications", params: { student_ids: [ @student_in_term.id ] }
+    end
+
+    events = ControlPlane::UsageEvent.where(institution_id: @institution.id)
+    assert_equal 1, events.count
+    assert_equal "boletines", events.sole.unit
+  end
+
   test "STAR: a published report card never re-reads a live grade edited afterwards" do
     as_homeroom_a do
       post "/report_cards/groups/#{@section_a.id}/publications", params: { student_ids: [ @student_in_term.id ] }

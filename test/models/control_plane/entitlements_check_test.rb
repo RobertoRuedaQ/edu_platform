@@ -38,7 +38,7 @@ class ControlPlane::EntitlementsCheckTest < ActiveSupport::TestCase
   test "false once revoked" do
     institution = build_institution
     addon = build_addon
-    entitlement = ControlPlane::Entitlement.create!(institution: institution, addon: addon, valid_from: Date.current)
+    entitlement = ControlPlane::Entitlement.create!(institution: institution, addon: addon, valid_from: 1.day.ago.to_date)
     entitlement.revoke!
 
     assert_not ControlPlane::Entitlements::Check.entitled?(institution: institution, addon_key: addon.key)

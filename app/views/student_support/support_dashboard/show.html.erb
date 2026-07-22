@@ -28,7 +28,7 @@
 <h3>Convivencia reciente</h3>
 <% if @recent_logs.any? -%>
   <%= render "shared/timeline", items: @recent_logs.map { |log|
-        { title: log.category.humanize, meta: datetime(log.occurred_at, format: :date), body: log.description }
+        { title: log.category_label, meta: datetime(log.occurred_at, format: :date), body: log.description }
       } %>
 <% else -%>
   <%= render "shared/empty_state", title: "Sin registros de convivencia recientes" %>

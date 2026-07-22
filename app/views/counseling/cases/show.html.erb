@@ -20,6 +20,37 @@
   <%= render "shared/empty_state", title: "Sin notas de seguimiento" %>
 <% end -%>
 
+<h3>Auras de cuidado (proyección al docente)</h3>
+<p class="text-muted">
+  Indicaciones abstractas de trato que el docente ve sobre el pupitre en el mapa del aula —
+  <strong>nunca</strong> el diagnóstico ni las notas de este caso.
+</p>
+
+<% if @care_auras.any? -%>
+  <%= render layout: "shared/table", locals: { headers: [ "Indicación", "Guía para el docente", "Vigente desde", "" ] } do -%>
+    <% @care_auras.each do |aura| -%>
+      <tr>
+        <td><%= AnalyticsBi::CareAura.kind_label(aura.aura_kind) %></td>
+        <td><%= aura.guidance_text %></td>
+        <td><%= datetime(aura.effective_from, format: :date) %></td>
+        <td>
+          <% if can?("counseling.write", @case) -%>
+            <%= button_to "Retirar", counseling_case_care_aura_path(@case, aura.id),
+                  method: :delete, class: "btn btn--sm btn--secondary",
+                  form: { data: { turbo_confirm: "¿Retirar esta aura? El docente dejará de verla." } } %>
+          <% end -%>
+        </td>
+      </tr>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state", title: "Sin auras de cuidado publicadas" %>
+<% end -%>
+
+<% if can?("counseling.write", @case) -%>
+  <p><%= link_to "Publicar aura de cuidado", new_counseling_case_care_aura_path(@case), class: "btn btn--primary" %></p>
+<% end -%>
+
 <h3>Remisiones</h3>
 <% if @referrals.any? -%>
   <%= render layout: "shared/table", locals: { headers: [ "Remitido a", "Motivo", "Estado" ] } do -%>

@@ -11,6 +11,20 @@ SET client_min_messages = warning;
 SET row_security = off;
 
 --
+-- Name: btree_gist; Type: EXTENSION; Schema: -; Owner: -
+--
+
+CREATE EXTENSION IF NOT EXISTS btree_gist WITH SCHEMA public;
+
+
+--
+-- Name: EXTENSION btree_gist; Type: COMMENT; Schema: -; Owner: -
+--
+
+COMMENT ON EXTENSION btree_gist IS 'support for indexing common datatypes in GiST';
+
+
+--
 -- Name: citext; Type: EXTENSION; Schema: -; Owner: -
 --
 
@@ -42,10 +56,32 @@ CREATE TABLE public.academic_terms (
     status character varying DEFAULT 'upcoming'::character varying NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT academic_terms_date_range_check CHECK ((ends_on >= starts_on)),
     CONSTRAINT academic_terms_status_check CHECK (((status)::text = ANY ((ARRAY['upcoming'::character varying, 'active'::character varying, 'closed'::character varying])::text[])))
 );
 
 ALTER TABLE ONLY public.academic_terms FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: accommodations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.accommodations (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    student_id uuid NOT NULL,
+    authorized_by_institution_user_id uuid NOT NULL,
+    kind character varying NOT NULL,
+    description text NOT NULL,
+    status character varying DEFAULT 'active'::character varying NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT accommodations_kind_check CHECK (((kind)::text = ANY ((ARRAY['extra_time'::character varying, 'adapted_material'::character varying, 'preferential_seating'::character varying, 'other'::character varying])::text[]))),
+    CONSTRAINT accommodations_status_check CHECK (((status)::text = ANY ((ARRAY['active'::character varying, 'expired'::character varying])::text[])))
+);
+
+ALTER TABLE ONLY public.accommodations FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -225,6 +261,27 @@ CREATE TABLE public.addons (
 
 
 --
+-- Name: affinity_taxonomy; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.affinity_taxonomy (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    parent_id uuid,
+    department_id uuid,
+    name character varying NOT NULL,
+    kind character varying NOT NULL,
+    active boolean DEFAULT true NOT NULL,
+    search_tsv tsvector GENERATED ALWAYS AS (to_tsvector('spanish'::regconfig, (COALESCE(name, ''::character varying))::text)) STORED,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT affinity_taxonomy_kind_check CHECK (((kind)::text = ANY ((ARRAY['sport'::character varying, 'art'::character varying, 'hobby'::character varying, 'academic'::character varying])::text[])))
+);
+
+ALTER TABLE ONLY public.affinity_taxonomy FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: announcements; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -365,6 +422,87 @@ ALTER TABLE ONLY public.audit_events FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: boarding_events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.boarding_events (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    route_id uuid NOT NULL,
+    student_id uuid NOT NULL,
+    recorded_by_institution_user_id uuid NOT NULL,
+    event_type character varying NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT boarding_events_event_type_check CHECK (((event_type)::text = ANY ((ARRAY['boarded'::character varying, 'alighted'::character varying])::text[])))
+);
+
+ALTER TABLE ONLY public.boarding_events FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: cafeteria_menu_items; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.cafeteria_menu_items (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    name character varying NOT NULL,
+    category character varying NOT NULL,
+    price_cents bigint NOT NULL,
+    allergens character varying[] DEFAULT '{}'::character varying[] NOT NULL,
+    dietary_tags character varying[] DEFAULT '{}'::character varying[] NOT NULL,
+    available boolean DEFAULT true NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT cafeteria_menu_items_category_check CHECK (((category)::text = ANY ((ARRAY['Almuerzo'::character varying, 'Snack'::character varying])::text[]))),
+    CONSTRAINT cafeteria_menu_items_price_check CHECK ((price_cents > 0))
+);
+
+ALTER TABLE ONLY public.cafeteria_menu_items FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: cafeteria_purchase_lines; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.cafeteria_purchase_lines (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    purchase_id uuid NOT NULL,
+    menu_item_id uuid NOT NULL,
+    item_name character varying NOT NULL,
+    unit_price_cents bigint NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT cafeteria_purchase_lines_price_check CHECK ((unit_price_cents > 0))
+);
+
+ALTER TABLE ONLY public.cafeteria_purchase_lines FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: cafeteria_purchases; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.cafeteria_purchases (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    student_id uuid NOT NULL,
+    recorded_by_institution_user_id uuid NOT NULL,
+    charge_id uuid NOT NULL,
+    total_price_cents bigint NOT NULL,
+    idempotency_key character varying,
+    purchased_at timestamp(6) without time zone NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT cafeteria_purchases_total_check CHECK ((total_price_cents > 0))
+);
+
+ALTER TABLE ONLY public.cafeteria_purchases FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: calendar_events; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -388,6 +526,143 @@ ALTER TABLE ONLY public.calendar_events FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: care_auras; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.care_auras (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    student_id uuid NOT NULL,
+    academic_term_id uuid NOT NULL,
+    authored_by_counselor_id uuid NOT NULL,
+    aura_kind character varying NOT NULL,
+    guidance_text text NOT NULL,
+    effective_from date NOT NULL,
+    effective_until date,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT care_auras_aura_kind_check CHECK (((aura_kind)::text = ANY ((ARRAY['private_or_oral_evaluation'::character varying, 'positive_reinforcement_public'::character varying, 'extra_time'::character varying, 'quiet_space'::character varying])::text[]))),
+    CONSTRAINT care_auras_effective_range_check CHECK (((effective_until IS NULL) OR (effective_until >= effective_from)))
+);
+
+ALTER TABLE ONLY public.care_auras FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: character_dimension_scores; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.character_dimension_scores (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    evaluation_id uuid NOT NULL,
+    dimension_key text NOT NULL,
+    level_label text NOT NULL,
+    note text,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+ALTER TABLE ONLY public.character_dimension_scores FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: character_dimensions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.character_dimensions (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    framework_id uuid NOT NULL,
+    name character varying NOT NULL,
+    "position" integer DEFAULT 0 NOT NULL,
+    weight numeric(6,2) DEFAULT 1.0 NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+ALTER TABLE ONLY public.character_dimensions FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: character_evaluations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.character_evaluations (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    student_id uuid NOT NULL,
+    academic_term_id uuid NOT NULL,
+    framework_id uuid NOT NULL,
+    framework_snapshot jsonb DEFAULT '{}'::jsonb NOT NULL,
+    author_kind character varying NOT NULL,
+    author_institution_user_id uuid NOT NULL,
+    status character varying DEFAULT 'draft'::character varying NOT NULL,
+    published_at timestamp(6) without time zone,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT character_evaluations_author_kind_check CHECK (((author_kind)::text = ANY ((ARRAY['teacher'::character varying, 'counselor'::character varying])::text[]))),
+    CONSTRAINT character_evaluations_status_check CHECK (((status)::text = ANY ((ARRAY['draft'::character varying, 'published'::character varying])::text[])))
+);
+
+ALTER TABLE ONLY public.character_evaluations FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: character_frameworks; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.character_frameworks (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    name character varying NOT NULL,
+    description text,
+    status character varying DEFAULT 'draft'::character varying NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT character_frameworks_status_check CHECK (((status)::text = ANY ((ARRAY['draft'::character varying, 'published'::character varying, 'archived'::character varying])::text[])))
+);
+
+ALTER TABLE ONLY public.character_frameworks FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: character_levels; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.character_levels (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    dimension_id uuid NOT NULL,
+    label character varying NOT NULL,
+    descriptor text,
+    "position" integer DEFAULT 0 NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+ALTER TABLE ONLY public.character_levels FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: character_program_consents; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.character_program_consents (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    student_id uuid NOT NULL,
+    granted_by_guardian_user_id uuid NOT NULL,
+    granted_at timestamp(6) without time zone NOT NULL,
+    revoked_at timestamp(6) without time zone,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+ALTER TABLE ONLY public.character_program_consents FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: charges; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -408,6 +683,33 @@ CREATE TABLE public.charges (
 );
 
 ALTER TABLE ONLY public.charges FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: classroom_layouts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.classroom_layouts (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    section_id uuid NOT NULL,
+    academic_term_id uuid NOT NULL,
+    rows smallint NOT NULL,
+    cols smallint NOT NULL,
+    board_orientation smallint DEFAULT 0 NOT NULL,
+    aisles jsonb DEFAULT '[]'::jsonb NOT NULL,
+    version integer DEFAULT 1 NOT NULL,
+    effective_from date NOT NULL,
+    effective_until date,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT classroom_layouts_board_orientation_check CHECK ((board_orientation = ANY (ARRAY[0, 90, 180, 270]))),
+    CONSTRAINT classroom_layouts_cols_positive_check CHECK ((cols > 0)),
+    CONSTRAINT classroom_layouts_effective_range_check CHECK (((effective_until IS NULL) OR (effective_until >= effective_from))),
+    CONSTRAINT classroom_layouts_rows_positive_check CHECK ((rows > 0))
+);
+
+ALTER TABLE ONLY public.classroom_layouts FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -555,6 +857,26 @@ ALTER TABLE ONLY public.dietary_restrictions FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: disciplinary_logs; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.disciplinary_logs (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    student_id uuid NOT NULL,
+    reported_by_institution_user_id uuid NOT NULL,
+    category character varying NOT NULL,
+    description text NOT NULL,
+    occurred_at date NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT disciplinary_logs_category_check CHECK (((category)::text = ANY ((ARRAY['attendance'::character varying, 'conduct'::character varying, 'academic_integrity'::character varying, 'other'::character varying])::text[])))
+);
+
+ALTER TABLE ONLY public.disciplinary_logs FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: email_otps; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -665,6 +987,27 @@ ALTER TABLE ONLY public.group_memberships FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: guardian_relationships; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.guardian_relationships (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    guardian_student_id uuid NOT NULL,
+    relationship_kind character varying NOT NULL,
+    is_primary_caregiver boolean DEFAULT false NOT NULL,
+    custody_kind character varying,
+    household_id uuid,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT guardian_relationships_custody_kind_check CHECK (((custody_kind IS NULL) OR ((custody_kind)::text = ANY ((ARRAY['shared'::character varying, 'sole'::character varying, 'supervised'::character varying, 'unspecified'::character varying])::text[])))),
+    CONSTRAINT guardian_relationships_relationship_kind_check CHECK (((relationship_kind)::text = ANY ((ARRAY['mother'::character varying, 'father'::character varying, 'grandparent'::character varying, 'legal_guardian'::character varying, 'sibling'::character varying, 'other'::character varying])::text[])))
+);
+
+ALTER TABLE ONLY public.guardian_relationships FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: guardian_students; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -703,6 +1046,40 @@ CREATE TABLE public.guardians (
 );
 
 ALTER TABLE ONLY public.guardians FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: households; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.households (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    kind character varying NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT households_kind_check CHECK (((kind)::text = ANY ((ARRAY['nuclear'::character varying, 'single_parent'::character varying, 'extended'::character varying, 'blended'::character varying, 'other'::character varying])::text[])))
+);
+
+ALTER TABLE ONLY public.households FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: hps_term_snapshots; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.hps_term_snapshots (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    student_id uuid NOT NULL,
+    academic_term_id uuid NOT NULL,
+    captured_on date NOT NULL,
+    payload jsonb DEFAULT '{}'::jsonb NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+ALTER TABLE ONLY public.hps_term_snapshots FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -874,6 +1251,108 @@ CREATE TABLE public.invoices (
 
 
 --
+-- Name: library_loans; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.library_loans (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    copy_id uuid NOT NULL,
+    borrower_institution_user_id uuid,
+    borrower_student_id uuid,
+    issued_by_institution_user_id uuid NOT NULL,
+    borrowed_at timestamp(6) without time zone NOT NULL,
+    due_at timestamp(6) without time zone NOT NULL,
+    returned_at timestamp(6) without time zone,
+    status character varying DEFAULT 'active'::character varying NOT NULL,
+    idempotency_key character varying,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT library_loans_borrower_identity_check CHECK ((num_nonnulls(borrower_institution_user_id, borrower_student_id) = 1)),
+    CONSTRAINT library_loans_status_check CHECK (((status)::text = ANY ((ARRAY['active'::character varying, 'returned'::character varying, 'overdue'::character varying, 'lost'::character varying])::text[])))
+);
+
+ALTER TABLE ONLY public.library_loans FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: library_resource_copies; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.library_resource_copies (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    resource_id uuid NOT NULL,
+    barcode character varying NOT NULL,
+    status character varying DEFAULT 'available'::character varying NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT library_resource_copies_status_check CHECK (((status)::text = ANY ((ARRAY['available'::character varying, 'loaned'::character varying, 'maintenance'::character varying, 'lost'::character varying])::text[])))
+);
+
+ALTER TABLE ONLY public.library_resource_copies FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: library_resources; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.library_resources (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    title character varying NOT NULL,
+    author character varying,
+    publisher character varying,
+    isbn character varying,
+    dewey_category character varying,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+ALTER TABLE ONLY public.library_resources FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: medical_histories; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.medical_histories (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    student_id uuid NOT NULL,
+    blood_type character varying,
+    conditions jsonb DEFAULT '[]'::jsonb NOT NULL,
+    medications jsonb DEFAULT '[]'::jsonb NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+ALTER TABLE ONLY public.medical_histories FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: meeting_patterns; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.meeting_patterns (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    subject_id uuid NOT NULL,
+    section_id uuid NOT NULL,
+    room_id uuid NOT NULL,
+    day_of_week character varying NOT NULL,
+    starts_at time without time zone NOT NULL,
+    ends_at time without time zone NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT meeting_patterns_day_check CHECK (((day_of_week)::text = ANY ((ARRAY['mon'::character varying, 'tue'::character varying, 'wed'::character varying, 'thu'::character varying, 'fri'::character varying])::text[]))),
+    CONSTRAINT meeting_patterns_time_range_check CHECK ((ends_at > starts_at))
+);
+
+ALTER TABLE ONLY public.meeting_patterns FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: messages; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -935,6 +1414,47 @@ CREATE TABLE public.payments (
 );
 
 ALTER TABLE ONLY public.payments FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: peer_appreciation_tags; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.peer_appreciation_tags (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    label character varying NOT NULL,
+    category character varying NOT NULL,
+    active boolean DEFAULT true NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+ALTER TABLE ONLY public.peer_appreciation_tags FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: peer_appreciations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.peer_appreciations (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    student_id uuid NOT NULL,
+    tag_id uuid NOT NULL,
+    giver_kind character varying NOT NULL,
+    giver_student_id uuid,
+    giver_guardian_user_id uuid,
+    academic_term_id uuid NOT NULL,
+    status character varying DEFAULT 'active'::character varying NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT peer_appreciations_giver_identity_check CHECK ((num_nonnulls(giver_student_id, giver_guardian_user_id) = 1)),
+    CONSTRAINT peer_appreciations_giver_kind_check CHECK (((giver_kind)::text = ANY ((ARRAY['peer_student'::character varying, 'guardian'::character varying])::text[]))),
+    CONSTRAINT peer_appreciations_status_check CHECK (((status)::text = ANY ((ARRAY['active'::character varying, 'withheld_by_moderation'::character varying])::text[])))
+);
+
+ALTER TABLE ONLY public.peer_appreciations FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -1001,6 +1521,8 @@ CREATE TABLE public.platform_admins (
     last_sign_in_at timestamp(6) without time zone,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
+    role character varying DEFAULT 'super_admin'::character varying NOT NULL,
+    CONSTRAINT platform_admins_role_check CHECK (((role)::text = ANY ((ARRAY['super_admin'::character varying, 'billing_ops'::character varying, 'viewer'::character varying])::text[]))),
     CONSTRAINT platform_admins_status_check CHECK (((status)::text = ANY ((ARRAY['active'::character varying, 'suspended'::character varying])::text[])))
 );
 
@@ -1081,6 +1603,7 @@ CREATE TABLE public.role_assignments (
     updated_at timestamp(6) without time zone NOT NULL,
     valid_from date DEFAULT CURRENT_DATE NOT NULL,
     valid_until date,
+    scope_route_id uuid,
     CONSTRAINT role_assignments_valid_until_after_valid_from CHECK (((valid_until IS NULL) OR (valid_until >= valid_from)))
 );
 
@@ -1122,6 +1645,25 @@ ALTER TABLE ONLY public.roles FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: rooms; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.rooms (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    name character varying NOT NULL,
+    kind character varying DEFAULT 'classroom'::character varying NOT NULL,
+    capacity integer,
+    building character varying,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT rooms_kind_check CHECK (((kind)::text = ANY ((ARRAY['classroom'::character varying, 'lab'::character varying, 'other'::character varying])::text[])))
+);
+
+ALTER TABLE ONLY public.rooms FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: roster_import_batches; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1135,6 +1677,7 @@ CREATE TABLE public.roster_import_batches (
     created_by_id uuid,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
+    committed_at timestamp(6) without time zone,
     CONSTRAINT roster_import_batches_kind_check CHECK (((kind)::text = ANY ((ARRAY['students'::character varying, 'guardians'::character varying])::text[]))),
     CONSTRAINT roster_import_batches_status_check CHECK (((status)::text = ANY ((ARRAY['uploaded'::character varying, 'validated'::character varying, 'previewed'::character varying, 'committed'::character varying, 'failed'::character varying])::text[])))
 );
@@ -1161,6 +1704,61 @@ CREATE TABLE public.roster_import_rows (
 );
 
 ALTER TABLE ONLY public.roster_import_rows FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: route_riders; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.route_riders (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    route_id uuid NOT NULL,
+    student_id uuid NOT NULL,
+    route_stop_id uuid,
+    shift character varying NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT route_riders_shift_check CHECK (((shift)::text = ANY ((ARRAY['am'::character varying, 'pm'::character varying])::text[])))
+);
+
+ALTER TABLE ONLY public.route_riders FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: route_stops; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.route_stops (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    route_id uuid NOT NULL,
+    name character varying NOT NULL,
+    scheduled_time time without time zone,
+    "position" integer NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+ALTER TABLE ONLY public.route_stops FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: routes; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.routes (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    driver_staff_member_id uuid,
+    name character varying NOT NULL,
+    vehicle_plate character varying,
+    capacity integer,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+ALTER TABLE ONLY public.routes FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -1262,6 +1860,29 @@ CREATE TABLE public.schema_migrations (
 
 
 --
+-- Name: seat_assignments; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.seat_assignments (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    classroom_layout_id uuid NOT NULL,
+    student_id uuid NOT NULL,
+    "row" smallint NOT NULL,
+    col smallint NOT NULL,
+    effective_from date NOT NULL,
+    effective_until date,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT seat_assignments_col_nonneg_check CHECK ((col >= 0)),
+    CONSTRAINT seat_assignments_effective_range_check CHECK (((effective_until IS NULL) OR (effective_until >= effective_from))),
+    CONSTRAINT seat_assignments_row_nonneg_check CHECK (("row" >= 0))
+);
+
+ALTER TABLE ONLY public.seat_assignments FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: sections; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1355,6 +1976,46 @@ ALTER TABLE ONLY public.student_accounts FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: student_affinities; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.student_affinities (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    student_id uuid NOT NULL,
+    taxonomy_id uuid NOT NULL,
+    academic_term_id uuid NOT NULL,
+    source character varying NOT NULL,
+    context character varying NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT student_affinities_context_check CHECK (((context)::text = ANY ((ARRAY['in_school'::character varying, 'out_of_school'::character varying])::text[]))),
+    CONSTRAINT student_affinities_source_check CHECK (((source)::text = ANY ((ARRAY['teacher_observed'::character varying, 'guardian_reported'::character varying, 'self_reported'::character varying])::text[])))
+);
+
+ALTER TABLE ONLY public.student_affinities FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: student_allergies; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.student_allergies (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    student_id uuid NOT NULL,
+    allergen_name character varying NOT NULL,
+    severity character varying NOT NULL,
+    reaction text,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT student_allergies_severity_check CHECK (((severity)::text = ANY ((ARRAY['mild'::character varying, 'moderate'::character varying, 'severe'::character varying, 'anaphylaxis'::character varying])::text[])))
+);
+
+ALTER TABLE ONLY public.student_allergies FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: student_guardians; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1387,6 +2048,27 @@ CREATE TABLE public.student_headcount_snapshots (
     updated_at timestamp(6) without time zone NOT NULL,
     CONSTRAINT student_headcount_snapshots_headcount_check CHECK ((headcount >= 0))
 );
+
+
+--
+-- Name: student_placements; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.student_placements (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    student_id uuid NOT NULL,
+    section_id uuid NOT NULL,
+    grade_level_id uuid NOT NULL,
+    academic_term_id uuid NOT NULL,
+    valid_from date NOT NULL,
+    valid_until date,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT student_placements_valid_range_check CHECK (((valid_until IS NULL) OR (valid_until >= valid_from)))
+);
+
+ALTER TABLE ONLY public.student_placements FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -1639,6 +2321,14 @@ ALTER TABLE ONLY public.academic_terms
 
 
 --
+-- Name: accommodations accommodations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.accommodations
+    ADD CONSTRAINT accommodations_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: active_storage_attachments active_storage_attachments_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1684,6 +2374,14 @@ ALTER TABLE ONLY public.activity_enrollments
 
 ALTER TABLE ONLY public.addons
     ADD CONSTRAINT addons_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: affinity_taxonomy affinity_taxonomy_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.affinity_taxonomy
+    ADD CONSTRAINT affinity_taxonomy_pkey PRIMARY KEY (id);
 
 
 --
@@ -1743,6 +2441,38 @@ ALTER TABLE ONLY public.audit_events
 
 
 --
+-- Name: boarding_events boarding_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.boarding_events
+    ADD CONSTRAINT boarding_events_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: cafeteria_menu_items cafeteria_menu_items_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cafeteria_menu_items
+    ADD CONSTRAINT cafeteria_menu_items_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: cafeteria_purchase_lines cafeteria_purchase_lines_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cafeteria_purchase_lines
+    ADD CONSTRAINT cafeteria_purchase_lines_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: cafeteria_purchases cafeteria_purchases_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cafeteria_purchases
+    ADD CONSTRAINT cafeteria_purchases_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: calendar_events calendar_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1751,11 +2481,83 @@ ALTER TABLE ONLY public.calendar_events
 
 
 --
+-- Name: care_auras care_auras_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.care_auras
+    ADD CONSTRAINT care_auras_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: character_dimension_scores character_dimension_scores_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.character_dimension_scores
+    ADD CONSTRAINT character_dimension_scores_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: character_dimensions character_dimensions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.character_dimensions
+    ADD CONSTRAINT character_dimensions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: character_evaluations character_evaluations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.character_evaluations
+    ADD CONSTRAINT character_evaluations_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: character_frameworks character_frameworks_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.character_frameworks
+    ADD CONSTRAINT character_frameworks_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: character_levels character_levels_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.character_levels
+    ADD CONSTRAINT character_levels_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: character_program_consents character_program_consents_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.character_program_consents
+    ADD CONSTRAINT character_program_consents_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: charges charges_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.charges
     ADD CONSTRAINT charges_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: classroom_layouts classroom_layouts_no_overlapping_versions; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.classroom_layouts
+    ADD CONSTRAINT classroom_layouts_no_overlapping_versions EXCLUDE USING gist (institution_id WITH =, section_id WITH =, academic_term_id WITH =, daterange(effective_from, COALESCE(effective_until, 'infinity'::date), '[)'::text) WITH &&);
+
+
+--
+-- Name: classroom_layouts classroom_layouts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.classroom_layouts
+    ADD CONSTRAINT classroom_layouts_pkey PRIMARY KEY (id);
 
 
 --
@@ -1823,6 +2625,14 @@ ALTER TABLE ONLY public.dietary_restrictions
 
 
 --
+-- Name: disciplinary_logs disciplinary_logs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.disciplinary_logs
+    ADD CONSTRAINT disciplinary_logs_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: email_otps email_otps_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1871,6 +2681,14 @@ ALTER TABLE ONLY public.group_memberships
 
 
 --
+-- Name: guardian_relationships guardian_relationships_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.guardian_relationships
+    ADD CONSTRAINT guardian_relationships_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: guardian_students guardian_students_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1887,11 +2705,35 @@ ALTER TABLE ONLY public.guardians
 
 
 --
+-- Name: households households_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.households
+    ADD CONSTRAINT households_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: hps_term_snapshots hps_term_snapshots_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.hps_term_snapshots
+    ADD CONSTRAINT hps_term_snapshots_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: installments installments_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.installments
     ADD CONSTRAINT installments_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: institution_entitlements institution_entitlements_no_overlapping_periods; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.institution_entitlements
+    ADD CONSTRAINT institution_entitlements_no_overlapping_periods EXCLUDE USING gist (institution_id WITH =, addon_id WITH =, daterange(valid_from, COALESCE(valid_until, 'infinity'::date), '[)'::text) WITH &&);
 
 
 --
@@ -1951,6 +2793,46 @@ ALTER TABLE ONLY public.invoices
 
 
 --
+-- Name: library_loans library_loans_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.library_loans
+    ADD CONSTRAINT library_loans_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: library_resource_copies library_resource_copies_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.library_resource_copies
+    ADD CONSTRAINT library_resource_copies_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: library_resources library_resources_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.library_resources
+    ADD CONSTRAINT library_resources_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: medical_histories medical_histories_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.medical_histories
+    ADD CONSTRAINT medical_histories_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: meeting_patterns meeting_patterns_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.meeting_patterns
+    ADD CONSTRAINT meeting_patterns_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: messages messages_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1972,6 +2854,22 @@ ALTER TABLE ONLY public.payment_plans
 
 ALTER TABLE ONLY public.payments
     ADD CONSTRAINT payments_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: peer_appreciation_tags peer_appreciation_tags_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.peer_appreciation_tags
+    ADD CONSTRAINT peer_appreciation_tags_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: peer_appreciations peer_appreciations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.peer_appreciations
+    ADD CONSTRAINT peer_appreciations_pkey PRIMARY KEY (id);
 
 
 --
@@ -2055,6 +2953,14 @@ ALTER TABLE ONLY public.roles
 
 
 --
+-- Name: rooms rooms_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.rooms
+    ADD CONSTRAINT rooms_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: roster_import_batches roster_import_batches_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2068,6 +2974,30 @@ ALTER TABLE ONLY public.roster_import_batches
 
 ALTER TABLE ONLY public.roster_import_rows
     ADD CONSTRAINT roster_import_rows_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: route_riders route_riders_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.route_riders
+    ADD CONSTRAINT route_riders_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: route_stops route_stops_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.route_stops
+    ADD CONSTRAINT route_stops_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: routes routes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.routes
+    ADD CONSTRAINT routes_pkey PRIMARY KEY (id);
 
 
 --
@@ -2119,6 +3049,30 @@ ALTER TABLE ONLY public.schema_migrations
 
 
 --
+-- Name: seat_assignments seat_assignments_no_double_booked_seat; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.seat_assignments
+    ADD CONSTRAINT seat_assignments_no_double_booked_seat EXCLUDE USING gist (institution_id WITH =, classroom_layout_id WITH =, "row" WITH =, col WITH =, daterange(effective_from, COALESCE(effective_until, 'infinity'::date), '[)'::text) WITH &&);
+
+
+--
+-- Name: seat_assignments seat_assignments_no_two_seats_per_student; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.seat_assignments
+    ADD CONSTRAINT seat_assignments_no_two_seats_per_student EXCLUDE USING gist (institution_id WITH =, classroom_layout_id WITH =, student_id WITH =, daterange(effective_from, COALESCE(effective_until, 'infinity'::date), '[)'::text) WITH &&);
+
+
+--
+-- Name: seat_assignments seat_assignments_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.seat_assignments
+    ADD CONSTRAINT seat_assignments_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: sections sections_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2159,6 +3113,22 @@ ALTER TABLE ONLY public.student_accounts
 
 
 --
+-- Name: student_affinities student_affinities_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.student_affinities
+    ADD CONSTRAINT student_affinities_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: student_allergies student_allergies_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.student_allergies
+    ADD CONSTRAINT student_allergies_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: student_guardians student_guardians_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2172,6 +3142,22 @@ ALTER TABLE ONLY public.student_guardians
 
 ALTER TABLE ONLY public.student_headcount_snapshots
     ADD CONSTRAINT student_headcount_snapshots_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: student_placements student_placements_no_overlapping_periods; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.student_placements
+    ADD CONSTRAINT student_placements_no_overlapping_periods EXCLUDE USING gist (institution_id WITH =, student_id WITH =, daterange(valid_from, COALESCE(valid_until, 'infinity'::date), '[)'::text) WITH &&);
+
+
+--
+-- Name: student_placements student_placements_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.student_placements
+    ADD CONSTRAINT student_placements_pkey PRIMARY KEY (id);
 
 
 --
@@ -2212,6 +3198,14 @@ ALTER TABLE ONLY public.submission_groups
 
 ALTER TABLE ONLY public.submissions
     ADD CONSTRAINT submissions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: subscriptions subscriptions_no_overlapping_periods; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.subscriptions
+    ADD CONSTRAINT subscriptions_no_overlapping_periods EXCLUDE USING gist (institution_id WITH =, daterange(starts_on, COALESCE(ends_on, 'infinity'::date), '[)'::text) WITH &&);
 
 
 --
@@ -2263,6 +3257,13 @@ ALTER TABLE ONLY public.users
 
 
 --
+-- Name: idx_accommodations_on_inst_student; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_accommodations_on_inst_student ON public.accommodations USING btree (institution_id, student_id);
+
+
+--
 -- Name: idx_activities_on_institution_instructor; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2298,6 +3299,34 @@ CREATE INDEX idx_activity_enrollments_on_institution_student ON public.activity_
 
 
 --
+-- Name: idx_affinity_taxonomy_on_inst_active; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_affinity_taxonomy_on_inst_active ON public.affinity_taxonomy USING btree (institution_id, active);
+
+
+--
+-- Name: idx_affinity_taxonomy_on_inst_department; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_affinity_taxonomy_on_inst_department ON public.affinity_taxonomy USING btree (institution_id, department_id);
+
+
+--
+-- Name: idx_affinity_taxonomy_on_inst_parent; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_affinity_taxonomy_on_inst_parent ON public.affinity_taxonomy USING btree (institution_id, parent_id);
+
+
+--
+-- Name: idx_affinity_taxonomy_on_search_tsv; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_affinity_taxonomy_on_search_tsv ON public.affinity_taxonomy USING gin (search_tsv);
+
+
+--
 -- Name: idx_assignment_materials_on_institution_assignment; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2312,10 +3341,94 @@ CREATE INDEX idx_assignments_on_institution_subject_status ON public.assignments
 
 
 --
+-- Name: idx_boarding_events_on_inst_route; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_boarding_events_on_inst_route ON public.boarding_events USING btree (institution_id, route_id);
+
+
+--
+-- Name: idx_cafeteria_purchases_idempotency; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_cafeteria_purchases_idempotency ON public.cafeteria_purchases USING btree (institution_id, idempotency_key);
+
+
+--
+-- Name: idx_care_auras_on_inst_student_from; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_care_auras_on_inst_student_from ON public.care_auras USING btree (institution_id, student_id, effective_from);
+
+
+--
+-- Name: idx_care_auras_one_active_per_student_kind; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_care_auras_one_active_per_student_kind ON public.care_auras USING btree (institution_id, student_id, aura_kind) WHERE (effective_until IS NULL);
+
+
+--
+-- Name: idx_character_dimension_scores_on_inst_eval; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_character_dimension_scores_on_inst_eval ON public.character_dimension_scores USING btree (institution_id, evaluation_id);
+
+
+--
+-- Name: idx_character_dimensions_on_inst_framework_pos; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_character_dimensions_on_inst_framework_pos ON public.character_dimensions USING btree (institution_id, framework_id, "position");
+
+
+--
+-- Name: idx_character_evaluations_unique_author; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_character_evaluations_unique_author ON public.character_evaluations USING btree (institution_id, student_id, academic_term_id, framework_id, author_institution_user_id);
+
+
+--
+-- Name: idx_character_frameworks_on_inst_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_character_frameworks_on_inst_status ON public.character_frameworks USING btree (institution_id, status);
+
+
+--
+-- Name: idx_character_levels_on_inst_dimension_pos; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_character_levels_on_inst_dimension_pos ON public.character_levels USING btree (institution_id, dimension_id, "position");
+
+
+--
+-- Name: idx_character_program_consents_active_per_student; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_character_program_consents_active_per_student ON public.character_program_consents USING btree (institution_id, student_id) WHERE (revoked_at IS NULL);
+
+
+--
 -- Name: idx_charges_idempotency; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_charges_idempotency ON public.charges USING btree (institution_id, idempotency_key);
+
+
+--
+-- Name: idx_classroom_layouts_on_inst_section_term_from; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_classroom_layouts_on_inst_section_term_from ON public.classroom_layouts USING btree (institution_id, section_id, academic_term_id, effective_from);
+
+
+--
+-- Name: idx_disciplinary_logs_on_inst_student_occurred; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_disciplinary_logs_on_inst_student_occurred ON public.disciplinary_logs USING btree (institution_id, student_id, occurred_at);
 
 
 --
@@ -2333,6 +3446,34 @@ CREATE UNIQUE INDEX idx_group_memberships_unique_student_per_assignment ON publi
 
 
 --
+-- Name: idx_guardian_relationships_on_inst_household; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_guardian_relationships_on_inst_household ON public.guardian_relationships USING btree (institution_id, household_id);
+
+
+--
+-- Name: idx_guardian_relationships_unique_link; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_guardian_relationships_unique_link ON public.guardian_relationships USING btree (institution_id, guardian_student_id);
+
+
+--
+-- Name: idx_households_on_institution; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_households_on_institution ON public.households USING btree (institution_id);
+
+
+--
+-- Name: idx_hps_term_snapshots_one_per_student_term; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_hps_term_snapshots_one_per_student_term ON public.hps_term_snapshots USING btree (institution_id, student_id, academic_term_id);
+
+
+--
 -- Name: idx_installments_seq; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2340,10 +3481,87 @@ CREATE UNIQUE INDEX idx_installments_seq ON public.installments USING btree (ins
 
 
 --
+-- Name: idx_library_copies_barcode_unique; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_library_copies_barcode_unique ON public.library_resource_copies USING btree (institution_id, barcode);
+
+
+--
+-- Name: idx_library_loans_active_unique; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_library_loans_active_unique ON public.library_loans USING btree (institution_id, copy_id) WHERE ((status)::text = 'active'::text);
+
+
+--
+-- Name: idx_library_loans_idempotency; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_library_loans_idempotency ON public.library_loans USING btree (institution_id, idempotency_key);
+
+
+--
+-- Name: idx_library_loans_on_institution_copy; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_library_loans_on_institution_copy ON public.library_loans USING btree (institution_id, copy_id);
+
+
+--
+-- Name: idx_library_resources_isbn_unique; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_library_resources_isbn_unique ON public.library_resources USING btree (institution_id, isbn) WHERE (isbn IS NOT NULL);
+
+
+--
+-- Name: idx_medical_histories_unique_student; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_medical_histories_unique_student ON public.medical_histories USING btree (institution_id, student_id);
+
+
+--
+-- Name: idx_meeting_patterns_on_inst_room; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_meeting_patterns_on_inst_room ON public.meeting_patterns USING btree (institution_id, room_id);
+
+
+--
+-- Name: idx_meeting_patterns_on_inst_section; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_meeting_patterns_on_inst_section ON public.meeting_patterns USING btree (institution_id, section_id);
+
+
+--
 -- Name: idx_messages_on_conversation_and_time; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_messages_on_conversation_and_time ON public.messages USING btree (institution_id, conversation_id, created_at);
+
+
+--
+-- Name: idx_on_institution_id_borrower_institution_user_id_e162896789; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_on_institution_id_borrower_institution_user_id_e162896789 ON public.library_loans USING btree (institution_id, borrower_institution_user_id);
+
+
+--
+-- Name: idx_on_institution_id_purchase_id_21da670fc8; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_on_institution_id_purchase_id_21da670fc8 ON public.cafeteria_purchase_lines USING btree (institution_id, purchase_id);
+
+
+--
+-- Name: idx_on_institution_id_resource_id_df9ac07f1a; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_on_institution_id_resource_id_df9ac07f1a ON public.library_resource_copies USING btree (institution_id, resource_id);
 
 
 --
@@ -2403,6 +3621,27 @@ CREATE UNIQUE INDEX idx_payments_idempotency ON public.payments USING btree (ins
 
 
 --
+-- Name: idx_peer_appreciation_tags_on_inst_active; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_peer_appreciation_tags_on_inst_active ON public.peer_appreciation_tags USING btree (institution_id, active);
+
+
+--
+-- Name: idx_peer_appreciations_active_guardian_giver; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_peer_appreciations_active_guardian_giver ON public.peer_appreciations USING btree (institution_id, student_id, tag_id, giver_guardian_user_id, academic_term_id) WHERE ((status)::text = 'active'::text);
+
+
+--
+-- Name: idx_peer_appreciations_active_peer_giver; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_peer_appreciations_active_peer_giver ON public.peer_appreciations USING btree (institution_id, student_id, tag_id, giver_student_id, academic_term_id) WHERE ((status)::text = 'active'::text);
+
+
+--
 -- Name: idx_ra_idempotency; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2427,7 +3666,49 @@ CREATE INDEX idx_ra_inst_user ON public.role_assignments USING btree (institutio
 -- Name: idx_ra_unique_scope; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE UNIQUE INDEX idx_ra_unique_scope ON public.role_assignments USING btree (institution_id, institution_user_id, role_id, scope_department_id, scope_grade_level_id, scope_group_id) NULLS NOT DISTINCT;
+CREATE UNIQUE INDEX idx_ra_unique_scope ON public.role_assignments USING btree (institution_id, institution_user_id, role_id, scope_department_id, scope_grade_level_id, scope_group_id, scope_route_id) NULLS NOT DISTINCT;
+
+
+--
+-- Name: idx_rooms_unique_name_per_institution; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_rooms_unique_name_per_institution ON public.rooms USING btree (institution_id, name);
+
+
+--
+-- Name: idx_route_riders_on_inst_route; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_route_riders_on_inst_route ON public.route_riders USING btree (institution_id, route_id);
+
+
+--
+-- Name: idx_route_riders_unique_student_shift; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_route_riders_unique_student_shift ON public.route_riders USING btree (institution_id, student_id, shift);
+
+
+--
+-- Name: idx_route_stops_on_inst_route; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_route_stops_on_inst_route ON public.route_stops USING btree (institution_id, route_id);
+
+
+--
+-- Name: idx_route_stops_unique_position; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_route_stops_unique_position ON public.route_stops USING btree (route_id, "position");
+
+
+--
+-- Name: idx_routes_on_inst_driver; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_routes_on_inst_driver ON public.routes USING btree (institution_id, driver_staff_member_id);
 
 
 --
@@ -2491,6 +3772,41 @@ CREATE INDEX idx_rubric_levels_on_institution_template ON public.rubric_levels U
 --
 
 CREATE INDEX idx_rubric_templates_on_institution_author ON public.rubric_templates USING btree (institution_id, authored_by_user_id);
+
+
+--
+-- Name: idx_seat_assignments_on_inst_layout_from; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_seat_assignments_on_inst_layout_from ON public.seat_assignments USING btree (institution_id, classroom_layout_id, effective_from);
+
+
+--
+-- Name: idx_student_affinities_on_inst_taxonomy; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_student_affinities_on_inst_taxonomy ON public.student_affinities USING btree (institution_id, taxonomy_id);
+
+
+--
+-- Name: idx_student_affinities_unique_link; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_student_affinities_unique_link ON public.student_affinities USING btree (institution_id, student_id, taxonomy_id, academic_term_id);
+
+
+--
+-- Name: idx_student_allergies_on_inst_student; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_student_allergies_on_inst_student ON public.student_allergies USING btree (institution_id, student_id);
+
+
+--
+-- Name: idx_student_placements_on_inst_student_from; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_student_placements_on_inst_student_from ON public.student_placements USING btree (institution_id, student_id, valid_from);
 
 
 --
@@ -2645,6 +3961,27 @@ CREATE INDEX index_audit_events_on_institution_and_created_at ON public.audit_ev
 --
 
 CREATE INDEX index_audit_events_on_institution_and_target ON public.audit_events USING btree (institution_id, target_type, target_id);
+
+
+--
+-- Name: index_cafeteria_menu_items_on_institution_id_and_available; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_cafeteria_menu_items_on_institution_id_and_available ON public.cafeteria_menu_items USING btree (institution_id, available);
+
+
+--
+-- Name: index_cafeteria_purchases_on_institution_id_and_charge_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_cafeteria_purchases_on_institution_id_and_charge_id ON public.cafeteria_purchases USING btree (institution_id, charge_id);
+
+
+--
+-- Name: index_cafeteria_purchases_on_institution_id_and_student_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_cafeteria_purchases_on_institution_id_and_student_id ON public.cafeteria_purchases USING btree (institution_id, student_id);
 
 
 --
@@ -2998,6 +4335,20 @@ CREATE UNIQUE INDEX index_invoices_one_per_institution_and_period ON public.invo
 
 
 --
+-- Name: index_library_loans_on_institution_id_and_borrower_student_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_library_loans_on_institution_id_and_borrower_student_id ON public.library_loans USING btree (institution_id, borrower_student_id);
+
+
+--
+-- Name: index_library_resource_copies_on_institution_id_and_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_library_resource_copies_on_institution_id_and_status ON public.library_resource_copies USING btree (institution_id, status);
+
+
+--
 -- Name: index_payment_plans_on_institution_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3121,6 +4472,13 @@ CREATE INDEX index_report_cards_on_student_id ON public.report_cards USING btree
 --
 
 CREATE INDEX index_role_assignments_on_institution_id ON public.role_assignments USING btree (institution_id);
+
+
+--
+-- Name: index_role_assignments_on_scope_route_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_role_assignments_on_scope_route_id ON public.role_assignments USING btree (scope_route_id);
 
 
 --
@@ -3503,6 +4861,14 @@ ALTER TABLE ONLY public.sections
 
 
 --
+-- Name: library_resource_copies fk_rails_04782f7fc7; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.library_resource_copies
+    ADD CONSTRAINT fk_rails_04782f7fc7 FOREIGN KEY (resource_id) REFERENCES public.library_resources(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: submission_attachments fk_rails_05c03d867a; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3548,6 +4914,30 @@ ALTER TABLE ONLY public.student_guardians
 
 ALTER TABLE ONLY public.report_cards
     ADD CONSTRAINT fk_rails_0eed72e3b0 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: disciplinary_logs fk_rails_0f6f9b9c53; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.disciplinary_logs
+    ADD CONSTRAINT fk_rails_0f6f9b9c53 FOREIGN KEY (reported_by_institution_user_id) REFERENCES public.institution_users(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: accommodations fk_rails_0fb3409ffa; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.accommodations
+    ADD CONSTRAINT fk_rails_0fb3409ffa FOREIGN KEY (authorized_by_institution_user_id) REFERENCES public.institution_users(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: route_riders fk_rails_0ffb7a9ab1; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.route_riders
+    ADD CONSTRAINT fk_rails_0ffb7a9ab1 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
 
 
 --
@@ -3615,6 +5005,14 @@ ALTER TABLE ONLY public.roster_import_rows
 
 
 --
+-- Name: student_placements fk_rails_18193fb5e3; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.student_placements
+    ADD CONSTRAINT fk_rails_18193fb5e3 FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE CASCADE;
+
+
+--
 -- Name: submissions fk_rails_19447e9b4d; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3647,6 +5045,22 @@ ALTER TABLE ONLY public.conversations
 
 
 --
+-- Name: student_placements fk_rails_1c9fb41b84; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.student_placements
+    ADD CONSTRAINT fk_rails_1c9fb41b84 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: cafeteria_purchase_lines fk_rails_1d941855d7; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cafeteria_purchase_lines
+    ADD CONSTRAINT fk_rails_1d941855d7 FOREIGN KEY (menu_item_id) REFERENCES public.cafeteria_menu_items(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: roster_import_batches fk_rails_1ddd8e9cad; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3663,11 +5077,51 @@ ALTER TABLE ONLY public.invitations
 
 
 --
+-- Name: route_stops fk_rails_1f4cc828f8; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.route_stops
+    ADD CONSTRAINT fk_rails_1f4cc828f8 FOREIGN KEY (route_id) REFERENCES public.routes(id) ON DELETE CASCADE;
+
+
+--
+-- Name: peer_appreciations fk_rails_20ac912a33; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.peer_appreciations
+    ADD CONSTRAINT fk_rails_20ac912a33 FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE CASCADE;
+
+
+--
+-- Name: library_loans fk_rails_22f8232363; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.library_loans
+    ADD CONSTRAINT fk_rails_22f8232363 FOREIGN KEY (copy_id) REFERENCES public.library_resource_copies(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: student_allergies fk_rails_23c9c1f09f; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.student_allergies
+    ADD CONSTRAINT fk_rails_23c9c1f09f FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: attendance_records fk_rails_24851af891; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.attendance_records
     ADD CONSTRAINT fk_rails_24851af891 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: hps_term_snapshots fk_rails_2691923cf2; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.hps_term_snapshots
+    ADD CONSTRAINT fk_rails_2691923cf2 FOREIGN KEY (academic_term_id) REFERENCES public.academic_terms(id) ON DELETE CASCADE;
 
 
 --
@@ -3692,6 +5146,14 @@ ALTER TABLE ONLY public.employment_periods
 
 ALTER TABLE ONLY public.guardian_students
     ADD CONSTRAINT fk_rails_27d935807b FOREIGN KEY (created_by_id) REFERENCES public.institution_users(id) ON DELETE SET NULL;
+
+
+--
+-- Name: route_riders fk_rails_2933ecd93d; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.route_riders
+    ADD CONSTRAINT fk_rails_2933ecd93d FOREIGN KEY (route_id) REFERENCES public.routes(id) ON DELETE CASCADE;
 
 
 --
@@ -3727,6 +5189,14 @@ ALTER TABLE ONLY public.session_notes
 
 
 --
+-- Name: boarding_events fk_rails_2f07d02b12; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.boarding_events
+    ADD CONSTRAINT fk_rails_2f07d02b12 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: payments fk_rails_2f2f391007; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3759,6 +5229,14 @@ ALTER TABLE ONLY public.messages
 
 
 --
+-- Name: boarding_events fk_rails_32b5f3d6c6; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.boarding_events
+    ADD CONSTRAINT fk_rails_32b5f3d6c6 FOREIGN KEY (recorded_by_institution_user_id) REFERENCES public.institution_users(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: departments fk_rails_33e5ee827a; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3775,6 +5253,14 @@ ALTER TABLE ONLY public.submissions
 
 
 --
+-- Name: seat_assignments fk_rails_367791f28a; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.seat_assignments
+    ADD CONSTRAINT fk_rails_367791f28a FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE CASCADE;
+
+
+--
 -- Name: audit_events fk_rails_373d303452; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3788,6 +5274,14 @@ ALTER TABLE ONLY public.audit_events
 
 ALTER TABLE ONLY public.rubric_evaluations
     ADD CONSTRAINT fk_rails_3840ddaa8a FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: cafeteria_menu_items fk_rails_38d6e35ebe; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cafeteria_menu_items
+    ADD CONSTRAINT fk_rails_38d6e35ebe FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
 
 
 --
@@ -3839,6 +5333,14 @@ ALTER TABLE ONLY public.charges
 
 
 --
+-- Name: guardian_relationships fk_rails_3fc1896e36; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.guardian_relationships
+    ADD CONSTRAINT fk_rails_3fc1896e36 FOREIGN KEY (household_id) REFERENCES public.households(id) ON DELETE SET NULL;
+
+
+--
 -- Name: role_assignments fk_rails_402eb6a154; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3863,11 +5365,67 @@ ALTER TABLE ONLY public.activity_enrollments
 
 
 --
+-- Name: meeting_patterns fk_rails_41c6f45b40; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.meeting_patterns
+    ADD CONSTRAINT fk_rails_41c6f45b40 FOREIGN KEY (room_id) REFERENCES public.rooms(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: cafeteria_purchases fk_rails_42352139f0; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cafeteria_purchases
+    ADD CONSTRAINT fk_rails_42352139f0 FOREIGN KEY (charge_id) REFERENCES public.charges(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: guardian_relationships fk_rails_4298c313af; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.guardian_relationships
+    ADD CONSTRAINT fk_rails_4298c313af FOREIGN KEY (guardian_student_id) REFERENCES public.guardian_students(id) ON DELETE CASCADE;
+
+
+--
+-- Name: affinity_taxonomy fk_rails_438d28b022; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.affinity_taxonomy
+    ADD CONSTRAINT fk_rails_438d28b022 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: role_permissions fk_rails_439e640a3f; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.role_permissions
     ADD CONSTRAINT fk_rails_439e640a3f FOREIGN KEY (permission_id) REFERENCES public.permissions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: disciplinary_logs fk_rails_4512f14aa5; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.disciplinary_logs
+    ADD CONSTRAINT fk_rails_4512f14aa5 FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE CASCADE;
+
+
+--
+-- Name: accommodations fk_rails_451b46d84a; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.accommodations
+    ADD CONSTRAINT fk_rails_451b46d84a FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: disciplinary_logs fk_rails_455a29b78b; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.disciplinary_logs
+    ADD CONSTRAINT fk_rails_455a29b78b FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
 
 
 --
@@ -3879,11 +5437,27 @@ ALTER TABLE ONLY public.invoices
 
 
 --
+-- Name: peer_appreciations fk_rails_465947ef76; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.peer_appreciations
+    ADD CONSTRAINT fk_rails_465947ef76 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: rubric_templates fk_rails_47d9a03d06; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.rubric_templates
     ADD CONSTRAINT fk_rails_47d9a03d06 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: student_affinities fk_rails_48d04b1eca; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.student_affinities
+    ADD CONSTRAINT fk_rails_48d04b1eca FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE CASCADE;
 
 
 --
@@ -3927,6 +5501,14 @@ ALTER TABLE ONLY public.assessments
 
 
 --
+-- Name: route_riders fk_rails_50d32573e6; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.route_riders
+    ADD CONSTRAINT fk_rails_50d32573e6 FOREIGN KEY (route_stop_id) REFERENCES public.route_stops(id) ON DELETE SET NULL;
+
+
+--
 -- Name: institution_users fk_rails_54725f8cd2; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3959,6 +5541,14 @@ ALTER TABLE ONLY public.rubric_evaluations
 
 
 --
+-- Name: accommodations fk_rails_570c3596e7; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.accommodations
+    ADD CONSTRAINT fk_rails_570c3596e7 FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE CASCADE;
+
+
+--
 -- Name: email_otps fk_rails_57d2c47354; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3972,6 +5562,14 @@ ALTER TABLE ONLY public.email_otps
 
 ALTER TABLE ONLY public.assessments
     ADD CONSTRAINT fk_rails_5977cbb29b FOREIGN KEY (assignment_id) REFERENCES public.assignments(id) ON DELETE SET NULL;
+
+
+--
+-- Name: peer_appreciations fk_rails_5b34a227e6; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.peer_appreciations
+    ADD CONSTRAINT fk_rails_5b34a227e6 FOREIGN KEY (giver_guardian_user_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 
 --
@@ -4007,11 +5605,35 @@ ALTER TABLE ONLY public.assignments
 
 
 --
+-- Name: boarding_events fk_rails_5fb0a11ec6; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.boarding_events
+    ADD CONSTRAINT fk_rails_5fb0a11ec6 FOREIGN KEY (route_id) REFERENCES public.routes(id) ON DELETE CASCADE;
+
+
+--
 -- Name: role_permissions fk_rails_60126080bd; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.role_permissions
     ADD CONSTRAINT fk_rails_60126080bd FOREIGN KEY (role_id) REFERENCES public.roles(id) ON DELETE CASCADE;
+
+
+--
+-- Name: medical_histories fk_rails_60d81313ff; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.medical_histories
+    ADD CONSTRAINT fk_rails_60d81313ff FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: character_program_consents fk_rails_6163c184b0; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.character_program_consents
+    ADD CONSTRAINT fk_rails_6163c184b0 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
 
 
 --
@@ -4039,6 +5661,22 @@ ALTER TABLE ONLY public.assignment_materials
 
 
 --
+-- Name: character_evaluations fk_rails_631e05dfe4; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.character_evaluations
+    ADD CONSTRAINT fk_rails_631e05dfe4 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: character_frameworks fk_rails_636ffa8dcc; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.character_frameworks
+    ADD CONSTRAINT fk_rails_636ffa8dcc FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: subscriptions fk_rails_63d3df128b; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4055,11 +5693,27 @@ ALTER TABLE ONLY public.assignments
 
 
 --
+-- Name: classroom_layouts fk_rails_642b1ed42f; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.classroom_layouts
+    ADD CONSTRAINT fk_rails_642b1ed42f FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: role_assignments fk_rails_646eed7bbc; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.role_assignments
     ADD CONSTRAINT fk_rails_646eed7bbc FOREIGN KEY (scope_grade_level_id) REFERENCES public.grade_levels(id) ON DELETE CASCADE;
+
+
+--
+-- Name: character_dimensions fk_rails_662f16e5ca; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.character_dimensions
+    ADD CONSTRAINT fk_rails_662f16e5ca FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
 
 
 --
@@ -4119,11 +5773,35 @@ ALTER TABLE ONLY public.enrollments
 
 
 --
+-- Name: student_placements fk_rails_6af522c18c; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.student_placements
+    ADD CONSTRAINT fk_rails_6af522c18c FOREIGN KEY (grade_level_id) REFERENCES public.grade_levels(id) ON DELETE CASCADE;
+
+
+--
 -- Name: staff_members fk_rails_6b44b8a383; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.staff_members
     ADD CONSTRAINT fk_rails_6b44b8a383 FOREIGN KEY (department_id) REFERENCES public.departments(id) ON DELETE SET NULL;
+
+
+--
+-- Name: student_affinities fk_rails_6ca864a80c; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.student_affinities
+    ADD CONSTRAINT fk_rails_6ca864a80c FOREIGN KEY (academic_term_id) REFERENCES public.academic_terms(id) ON DELETE CASCADE;
+
+
+--
+-- Name: character_levels fk_rails_6cdd625ba5; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.character_levels
+    ADD CONSTRAINT fk_rails_6cdd625ba5 FOREIGN KEY (dimension_id) REFERENCES public.character_dimensions(id) ON DELETE CASCADE;
 
 
 --
@@ -4143,6 +5821,22 @@ ALTER TABLE ONLY public.conversations
 
 
 --
+-- Name: classroom_layouts fk_rails_7026b4734c; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.classroom_layouts
+    ADD CONSTRAINT fk_rails_7026b4734c FOREIGN KEY (academic_term_id) REFERENCES public.academic_terms(id) ON DELETE CASCADE;
+
+
+--
+-- Name: character_evaluations fk_rails_710ec7973f; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.character_evaluations
+    ADD CONSTRAINT fk_rails_710ec7973f FOREIGN KEY (framework_id) REFERENCES public.character_frameworks(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: assignment_materials fk_rails_72cc164557; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4151,11 +5845,27 @@ ALTER TABLE ONLY public.assignment_materials
 
 
 --
+-- Name: student_affinities fk_rails_7352153b1a; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.student_affinities
+    ADD CONSTRAINT fk_rails_7352153b1a FOREIGN KEY (taxonomy_id) REFERENCES public.affinity_taxonomy(id) ON DELETE CASCADE;
+
+
+--
 -- Name: assignments fk_rails_7453d408a5; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.assignments
     ADD CONSTRAINT fk_rails_7453d408a5 FOREIGN KEY (created_by_institution_user_id) REFERENCES public.institution_users(id) ON DELETE SET NULL;
+
+
+--
+-- Name: library_resources fk_rails_74c3db7765; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.library_resources
+    ADD CONSTRAINT fk_rails_74c3db7765 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
 
 
 --
@@ -4183,6 +5893,14 @@ ALTER TABLE ONLY public.group_memberships
 
 
 --
+-- Name: cafeteria_purchases fk_rails_76a09b3352; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cafeteria_purchases
+    ADD CONSTRAINT fk_rails_76a09b3352 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: institution_entitlements fk_rails_789c0738df; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4204,6 +5922,14 @@ ALTER TABLE ONLY public.submissions
 
 ALTER TABLE ONLY public.sections
     ADD CONSTRAINT fk_rails_7a7057fef3 FOREIGN KEY (institution_id) REFERENCES public.institutions(id);
+
+
+--
+-- Name: character_dimension_scores fk_rails_7ce8806bd8; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.character_dimension_scores
+    ADD CONSTRAINT fk_rails_7ce8806bd8 FOREIGN KEY (evaluation_id) REFERENCES public.character_evaluations(id) ON DELETE CASCADE;
 
 
 --
@@ -4263,6 +5989,14 @@ ALTER TABLE ONLY public.conversations
 
 
 --
+-- Name: library_loans fk_rails_80e2fe4aca; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.library_loans
+    ADD CONSTRAINT fk_rails_80e2fe4aca FOREIGN KEY (issued_by_institution_user_id) REFERENCES public.institution_users(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: rubric_criteria fk_rails_80f1e80590; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4279,11 +6013,43 @@ ALTER TABLE ONLY public.attendance_records
 
 
 --
+-- Name: student_allergies fk_rails_8301b3ce51; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.student_allergies
+    ADD CONSTRAINT fk_rails_8301b3ce51 FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE CASCADE;
+
+
+--
 -- Name: submissions fk_rails_8432d864a2; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.submissions
     ADD CONSTRAINT fk_rails_8432d864a2 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: route_stops fk_rails_853f30742d; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.route_stops
+    ADD CONSTRAINT fk_rails_853f30742d FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: meeting_patterns fk_rails_85ac26cd3d; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.meeting_patterns
+    ADD CONSTRAINT fk_rails_85ac26cd3d FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: boarding_events fk_rails_864428bde2; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.boarding_events
+    ADD CONSTRAINT fk_rails_864428bde2 FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE CASCADE;
 
 
 --
@@ -4295,6 +6061,22 @@ ALTER TABLE ONLY public.counseling_cases
 
 
 --
+-- Name: routes fk_rails_88bc3b2cff; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.routes
+    ADD CONSTRAINT fk_rails_88bc3b2cff FOREIGN KEY (driver_staff_member_id) REFERENCES public.staff_members(id) ON DELETE SET NULL;
+
+
+--
+-- Name: cafeteria_purchases fk_rails_8943ffe370; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cafeteria_purchases
+    ADD CONSTRAINT fk_rails_8943ffe370 FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: guardian_students fk_rails_8a488ba66f; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4303,11 +6085,43 @@ ALTER TABLE ONLY public.guardian_students
 
 
 --
+-- Name: peer_appreciations fk_rails_8a78bdd64d; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.peer_appreciations
+    ADD CONSTRAINT fk_rails_8a78bdd64d FOREIGN KEY (tag_id) REFERENCES public.peer_appreciation_tags(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: guardian_relationships fk_rails_8bfbc2799f; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.guardian_relationships
+    ADD CONSTRAINT fk_rails_8bfbc2799f FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: library_loans fk_rails_8d6f1544b7; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.library_loans
+    ADD CONSTRAINT fk_rails_8d6f1544b7 FOREIGN KEY (borrower_institution_user_id) REFERENCES public.institution_users(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: submission_attachments fk_rails_903b1e71cc; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.submission_attachments
     ADD CONSTRAINT fk_rails_903b1e71cc FOREIGN KEY (attached_by_user_id) REFERENCES public.users(id) ON DELETE SET NULL;
+
+
+--
+-- Name: routes fk_rails_90999b5290; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.routes
+    ADD CONSTRAINT fk_rails_90999b5290 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
 
 
 --
@@ -4332,6 +6146,14 @@ ALTER TABLE ONLY public.calendar_events
 
 ALTER TABLE ONLY public.installments
     ADD CONSTRAINT fk_rails_91c63f70fd FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: cafeteria_purchase_lines fk_rails_9243c2ac39; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cafeteria_purchase_lines
+    ADD CONSTRAINT fk_rails_9243c2ac39 FOREIGN KEY (purchase_id) REFERENCES public.cafeteria_purchases(id) ON DELETE CASCADE;
 
 
 --
@@ -4375,6 +6197,22 @@ ALTER TABLE ONLY public.usage_daily_rollups
 
 
 --
+-- Name: role_assignments fk_rails_9b879e183a; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.role_assignments
+    ADD CONSTRAINT fk_rails_9b879e183a FOREIGN KEY (scope_route_id) REFERENCES public.routes(id) ON DELETE CASCADE;
+
+
+--
+-- Name: student_placements fk_rails_9daf5d0b7c; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.student_placements
+    ADD CONSTRAINT fk_rails_9daf5d0b7c FOREIGN KEY (academic_term_id) REFERENCES public.academic_terms(id) ON DELETE CASCADE;
+
+
+--
 -- Name: calendar_events fk_rails_a13b118c67; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4399,6 +6237,22 @@ ALTER TABLE ONLY public.referrals
 
 
 --
+-- Name: character_evaluations fk_rails_a4ae08b190; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.character_evaluations
+    ADD CONSTRAINT fk_rails_a4ae08b190 FOREIGN KEY (author_institution_user_id) REFERENCES public.institution_users(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: library_loans fk_rails_a553e1fae0; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.library_loans
+    ADD CONSTRAINT fk_rails_a553e1fae0 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: student_accounts fk_rails_a63606332a; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4407,11 +6261,35 @@ ALTER TABLE ONLY public.student_accounts
 
 
 --
+-- Name: classroom_layouts fk_rails_a905a0ac26; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.classroom_layouts
+    ADD CONSTRAINT fk_rails_a905a0ac26 FOREIGN KEY (section_id) REFERENCES public.sections(id) ON DELETE CASCADE;
+
+
+--
+-- Name: care_auras fk_rails_a974033225; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.care_auras
+    ADD CONSTRAINT fk_rails_a974033225 FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE CASCADE;
+
+
+--
 -- Name: payments fk_rails_a9b0755c20; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.payments
     ADD CONSTRAINT fk_rails_a9b0755c20 FOREIGN KEY (student_account_id) REFERENCES public.student_accounts(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: peer_appreciations fk_rails_ab30c04ecc; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.peer_appreciations
+    ADD CONSTRAINT fk_rails_ab30c04ecc FOREIGN KEY (academic_term_id) REFERENCES public.academic_terms(id) ON DELETE CASCADE;
 
 
 --
@@ -4439,6 +6317,14 @@ ALTER TABLE ONLY public.conversation_participants
 
 
 --
+-- Name: cafeteria_purchases fk_rails_b0a31c85fd; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cafeteria_purchases
+    ADD CONSTRAINT fk_rails_b0a31c85fd FOREIGN KEY (recorded_by_institution_user_id) REFERENCES public.institution_users(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: counseling_cases fk_rails_b0c6112576; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4460,6 +6346,22 @@ ALTER TABLE ONLY public.dietary_restrictions
 
 ALTER TABLE ONLY public.students
     ADD CONSTRAINT fk_rails_b2fee63e99 FOREIGN KEY (program_id) REFERENCES public.programs(id);
+
+
+--
+-- Name: library_loans fk_rails_b303cf8ecc; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.library_loans
+    ADD CONSTRAINT fk_rails_b303cf8ecc FOREIGN KEY (borrower_student_id) REFERENCES public.students(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: character_program_consents fk_rails_b34ec1389b; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.character_program_consents
+    ADD CONSTRAINT fk_rails_b34ec1389b FOREIGN KEY (granted_by_guardian_user_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 
 --
@@ -4487,6 +6389,14 @@ ALTER TABLE ONLY public.announcements
 
 
 --
+-- Name: character_dimension_scores fk_rails_b813123410; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.character_dimension_scores
+    ADD CONSTRAINT fk_rails_b813123410 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: teaching_assignments fk_rails_b86c9538a3; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4500,6 +6410,38 @@ ALTER TABLE ONLY public.teaching_assignments
 
 ALTER TABLE ONLY public.roster_import_batches
     ADD CONSTRAINT fk_rails_b8dabed25c FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: care_auras fk_rails_b9314c8338; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.care_auras
+    ADD CONSTRAINT fk_rails_b9314c8338 FOREIGN KEY (authored_by_counselor_id) REFERENCES public.institution_users(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: households fk_rails_b9fc41fba6; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.households
+    ADD CONSTRAINT fk_rails_b9fc41fba6 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: peer_appreciation_tags fk_rails_bb0995073b; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.peer_appreciation_tags
+    ADD CONSTRAINT fk_rails_bb0995073b FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: hps_term_snapshots fk_rails_bb3e105301; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.hps_term_snapshots
+    ADD CONSTRAINT fk_rails_bb3e105301 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
 
 
 --
@@ -4591,6 +6533,14 @@ ALTER TABLE ONLY public.referrals
 
 
 --
+-- Name: peer_appreciations fk_rails_c2ecc37ba6; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.peer_appreciations
+    ADD CONSTRAINT fk_rails_c2ecc37ba6 FOREIGN KEY (giver_student_id) REFERENCES public.students(id) ON DELETE CASCADE;
+
+
+--
 -- Name: submission_groups fk_rails_c35f1bef68; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4604,6 +6554,14 @@ ALTER TABLE ONLY public.submission_groups
 
 ALTER TABLE ONLY public.active_storage_attachments
     ADD CONSTRAINT fk_rails_c3b3935057 FOREIGN KEY (blob_id) REFERENCES public.active_storage_blobs(id);
+
+
+--
+-- Name: cafeteria_purchase_lines fk_rails_c3c97878cf; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cafeteria_purchase_lines
+    ADD CONSTRAINT fk_rails_c3c97878cf FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
 
 
 --
@@ -4671,6 +6629,14 @@ ALTER TABLE ONLY public.role_assignments
 
 
 --
+-- Name: care_auras fk_rails_cb00545723; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.care_auras
+    ADD CONSTRAINT fk_rails_cb00545723 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: conversation_participants fk_rails_cd21bdc262; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4679,11 +6645,35 @@ ALTER TABLE ONLY public.conversation_participants
 
 
 --
+-- Name: meeting_patterns fk_rails_cd592e4b53; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.meeting_patterns
+    ADD CONSTRAINT fk_rails_cd592e4b53 FOREIGN KEY (subject_id) REFERENCES public.subjects(id) ON DELETE CASCADE;
+
+
+--
+-- Name: medical_histories fk_rails_cedac8245e; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.medical_histories
+    ADD CONSTRAINT fk_rails_cedac8245e FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE CASCADE;
+
+
+--
 -- Name: group_memberships fk_rails_cfcf8ca0a6; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.group_memberships
     ADD CONSTRAINT fk_rails_cfcf8ca0a6 FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE CASCADE;
+
+
+--
+-- Name: route_riders fk_rails_d0a2b7485a; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.route_riders
+    ADD CONSTRAINT fk_rails_d0a2b7485a FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE CASCADE;
 
 
 --
@@ -4743,6 +6733,22 @@ ALTER TABLE ONLY public.roster_import_rows
 
 
 --
+-- Name: meeting_patterns fk_rails_d5e12c128b; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.meeting_patterns
+    ADD CONSTRAINT fk_rails_d5e12c128b FOREIGN KEY (section_id) REFERENCES public.sections(id) ON DELETE CASCADE;
+
+
+--
+-- Name: affinity_taxonomy fk_rails_d973a92d33; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.affinity_taxonomy
+    ADD CONSTRAINT fk_rails_d973a92d33 FOREIGN KEY (parent_id) REFERENCES public.affinity_taxonomy(id) ON DELETE CASCADE;
+
+
+--
 -- Name: rubric_levels fk_rails_da91b8ecba; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4764,6 +6770,22 @@ ALTER TABLE ONLY public.employment_periods
 
 ALTER TABLE ONLY public.rubric_evaluations
     ADD CONSTRAINT fk_rails_dd5889f3a1 FOREIGN KEY (assignment_id) REFERENCES public.assignments(id) ON DELETE CASCADE;
+
+
+--
+-- Name: seat_assignments fk_rails_dd5e702175; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.seat_assignments
+    ADD CONSTRAINT fk_rails_dd5e702175 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: student_placements fk_rails_deb636331c; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.student_placements
+    ADD CONSTRAINT fk_rails_deb636331c FOREIGN KEY (section_id) REFERENCES public.sections(id) ON DELETE CASCADE;
 
 
 --
@@ -4799,6 +6821,14 @@ ALTER TABLE ONLY public.subjects
 
 
 --
+-- Name: affinity_taxonomy fk_rails_e39aa645da; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.affinity_taxonomy
+    ADD CONSTRAINT fk_rails_e39aa645da FOREIGN KEY (department_id) REFERENCES public.departments(id) ON DELETE SET NULL;
+
+
+--
 -- Name: charges fk_rails_e47d53b4c6; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4812,6 +6842,38 @@ ALTER TABLE ONLY public.charges
 
 ALTER TABLE ONLY public.role_assignments
     ADD CONSTRAINT fk_rails_e4bfc1cd2c FOREIGN KEY (role_id) REFERENCES public.roles(id) ON DELETE CASCADE;
+
+
+--
+-- Name: student_affinities fk_rails_e50b4c976f; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.student_affinities
+    ADD CONSTRAINT fk_rails_e50b4c976f FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: character_program_consents fk_rails_e514d744a2; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.character_program_consents
+    ADD CONSTRAINT fk_rails_e514d744a2 FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE CASCADE;
+
+
+--
+-- Name: character_evaluations fk_rails_e7be994f33; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.character_evaluations
+    ADD CONSTRAINT fk_rails_e7be994f33 FOREIGN KEY (academic_term_id) REFERENCES public.academic_terms(id) ON DELETE CASCADE;
+
+
+--
+-- Name: seat_assignments fk_rails_e8e04827c0; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.seat_assignments
+    ADD CONSTRAINT fk_rails_e8e04827c0 FOREIGN KEY (classroom_layout_id) REFERENCES public.classroom_layouts(id) ON DELETE CASCADE;
 
 
 --
@@ -4855,6 +6917,22 @@ ALTER TABLE ONLY public.guardian_students
 
 
 --
+-- Name: character_evaluations fk_rails_edda201842; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.character_evaluations
+    ADD CONSTRAINT fk_rails_edda201842 FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE CASCADE;
+
+
+--
+-- Name: character_dimensions fk_rails_eed1f2d3ad; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.character_dimensions
+    ADD CONSTRAINT fk_rails_eed1f2d3ad FOREIGN KEY (framework_id) REFERENCES public.character_frameworks(id) ON DELETE CASCADE;
+
+
+--
 -- Name: enrollments fk_rails_f01c555e06; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4868,6 +6946,14 @@ ALTER TABLE ONLY public.enrollments
 
 ALTER TABLE ONLY public.teachers
     ADD CONSTRAINT fk_rails_f0edb92a45 FOREIGN KEY (staff_member_id) REFERENCES public.staff_members(id) ON DELETE SET NULL;
+
+
+--
+-- Name: care_auras fk_rails_f15a82bef7; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.care_auras
+    ADD CONSTRAINT fk_rails_f15a82bef7 FOREIGN KEY (academic_term_id) REFERENCES public.academic_terms(id) ON DELETE CASCADE;
 
 
 --
@@ -4887,11 +6973,43 @@ ALTER TABLE ONLY public.role_assignments
 
 
 --
+-- Name: rooms fk_rails_f4d7f67edb; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.rooms
+    ADD CONSTRAINT fk_rails_f4d7f67edb FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: library_resource_copies fk_rails_f4f3fef62b; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.library_resource_copies
+    ADD CONSTRAINT fk_rails_f4f3fef62b FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: calendar_events fk_rails_f872036c76; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.calendar_events
     ADD CONSTRAINT fk_rails_f872036c76 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: hps_term_snapshots fk_rails_f8adf4b299; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.hps_term_snapshots
+    ADD CONSTRAINT fk_rails_f8adf4b299 FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE CASCADE;
+
+
+--
+-- Name: character_levels fk_rails_f8eab38ee3; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.character_levels
+    ADD CONSTRAINT fk_rails_f8eab38ee3 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
 
 
 --
@@ -4924,6 +7042,19 @@ CREATE POLICY academic_terms_tenant_isolation ON public.academic_terms USING ((i
 
 
 --
+-- Name: accommodations; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.accommodations ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: accommodations accommodations_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY accommodations_tenant_isolation ON public.accommodations USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
 -- Name: activities; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -4947,6 +7078,19 @@ ALTER TABLE public.activity_enrollments ENABLE ROW LEVEL SECURITY;
 --
 
 CREATE POLICY activity_enrollments_tenant_isolation ON public.activity_enrollments USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: affinity_taxonomy; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.affinity_taxonomy ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: affinity_taxonomy affinity_taxonomy_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY affinity_taxonomy_tenant_isolation ON public.affinity_taxonomy USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
 
 
 --
@@ -5028,6 +7172,58 @@ CREATE POLICY audit_events_tenant_isolation ON public.audit_events USING ((insti
 
 
 --
+-- Name: boarding_events; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.boarding_events ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: boarding_events boarding_events_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY boarding_events_tenant_isolation ON public.boarding_events USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: cafeteria_menu_items; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.cafeteria_menu_items ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: cafeteria_menu_items cafeteria_menu_items_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY cafeteria_menu_items_tenant_isolation ON public.cafeteria_menu_items USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: cafeteria_purchase_lines; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.cafeteria_purchase_lines ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: cafeteria_purchase_lines cafeteria_purchase_lines_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY cafeteria_purchase_lines_tenant_isolation ON public.cafeteria_purchase_lines USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: cafeteria_purchases; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.cafeteria_purchases ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: cafeteria_purchases cafeteria_purchases_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY cafeteria_purchases_tenant_isolation ON public.cafeteria_purchases USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
 -- Name: calendar_events; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -5041,6 +7237,97 @@ CREATE POLICY calendar_events_tenant_isolation ON public.calendar_events USING (
 
 
 --
+-- Name: care_auras; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.care_auras ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: care_auras care_auras_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY care_auras_tenant_isolation ON public.care_auras USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: character_dimension_scores; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.character_dimension_scores ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: character_dimension_scores character_dimension_scores_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY character_dimension_scores_tenant_isolation ON public.character_dimension_scores USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: character_dimensions; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.character_dimensions ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: character_dimensions character_dimensions_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY character_dimensions_tenant_isolation ON public.character_dimensions USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: character_evaluations; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.character_evaluations ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: character_evaluations character_evaluations_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY character_evaluations_tenant_isolation ON public.character_evaluations USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: character_frameworks; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.character_frameworks ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: character_frameworks character_frameworks_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY character_frameworks_tenant_isolation ON public.character_frameworks USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: character_levels; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.character_levels ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: character_levels character_levels_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY character_levels_tenant_isolation ON public.character_levels USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: character_program_consents; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.character_program_consents ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: character_program_consents character_program_consents_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY character_program_consents_tenant_isolation ON public.character_program_consents USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
 -- Name: charges; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -5051,6 +7338,19 @@ ALTER TABLE public.charges ENABLE ROW LEVEL SECURITY;
 --
 
 CREATE POLICY charges_tenant_isolation ON public.charges USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: classroom_layouts; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.classroom_layouts ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: classroom_layouts classroom_layouts_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY classroom_layouts_tenant_isolation ON public.classroom_layouts USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
 
 
 --
@@ -5116,6 +7416,19 @@ ALTER TABLE public.dietary_restrictions ENABLE ROW LEVEL SECURITY;
 --
 
 CREATE POLICY dietary_restrictions_tenant_isolation ON public.dietary_restrictions USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: disciplinary_logs; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.disciplinary_logs ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: disciplinary_logs disciplinary_logs_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY disciplinary_logs_tenant_isolation ON public.disciplinary_logs USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
 
 
 --
@@ -5197,6 +7510,19 @@ CREATE POLICY group_memberships_tenant_isolation ON public.group_memberships USI
 
 
 --
+-- Name: guardian_relationships; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.guardian_relationships ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: guardian_relationships guardian_relationships_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY guardian_relationships_tenant_isolation ON public.guardian_relationships USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
 -- Name: guardian_students; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -5220,6 +7546,32 @@ ALTER TABLE public.guardians ENABLE ROW LEVEL SECURITY;
 --
 
 CREATE POLICY guardians_tenant_isolation ON public.guardians USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: households; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.households ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: households households_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY households_tenant_isolation ON public.households USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: hps_term_snapshots; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.hps_term_snapshots ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: hps_term_snapshots hps_term_snapshots_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY hps_term_snapshots_tenant_isolation ON public.hps_term_snapshots USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
 
 
 --
@@ -5275,6 +7627,71 @@ CREATE POLICY invitations_tenant_isolation ON public.invitations USING ((institu
 
 
 --
+-- Name: library_loans; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.library_loans ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: library_loans library_loans_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY library_loans_tenant_isolation ON public.library_loans USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: library_resource_copies; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.library_resource_copies ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: library_resource_copies library_resource_copies_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY library_resource_copies_tenant_isolation ON public.library_resource_copies USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: library_resources; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.library_resources ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: library_resources library_resources_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY library_resources_tenant_isolation ON public.library_resources USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: medical_histories; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.medical_histories ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: medical_histories medical_histories_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY medical_histories_tenant_isolation ON public.medical_histories USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: meeting_patterns; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.meeting_patterns ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: meeting_patterns meeting_patterns_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY meeting_patterns_tenant_isolation ON public.meeting_patterns USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
 -- Name: messages; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -5311,6 +7728,32 @@ ALTER TABLE public.payments ENABLE ROW LEVEL SECURITY;
 --
 
 CREATE POLICY payments_tenant_isolation ON public.payments USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: peer_appreciation_tags; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.peer_appreciation_tags ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: peer_appreciation_tags peer_appreciation_tags_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY peer_appreciation_tags_tenant_isolation ON public.peer_appreciation_tags USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: peer_appreciations; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.peer_appreciations ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: peer_appreciations peer_appreciations_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY peer_appreciations_tenant_isolation ON public.peer_appreciations USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
 
 
 --
@@ -5392,6 +7835,19 @@ CREATE POLICY roles_tenant_isolation ON public.roles USING ((institution_id = (N
 
 
 --
+-- Name: rooms; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.rooms ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: rooms rooms_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY rooms_tenant_isolation ON public.rooms USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
 -- Name: roster_import_batches; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -5415,6 +7871,45 @@ ALTER TABLE public.roster_import_rows ENABLE ROW LEVEL SECURITY;
 --
 
 CREATE POLICY roster_import_rows_tenant_isolation ON public.roster_import_rows USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: route_riders; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.route_riders ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: route_riders route_riders_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY route_riders_tenant_isolation ON public.route_riders USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: route_stops; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.route_stops ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: route_stops route_stops_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY route_stops_tenant_isolation ON public.route_stops USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: routes; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.routes ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: routes routes_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY routes_tenant_isolation ON public.routes USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
 
 
 --
@@ -5483,6 +7978,19 @@ CREATE POLICY rubric_templates_tenant_isolation ON public.rubric_templates USING
 
 
 --
+-- Name: seat_assignments; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.seat_assignments ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: seat_assignments seat_assignments_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY seat_assignments_tenant_isolation ON public.seat_assignments USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
 -- Name: sections; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -5535,6 +8043,32 @@ CREATE POLICY student_accounts_tenant_isolation ON public.student_accounts USING
 
 
 --
+-- Name: student_affinities; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.student_affinities ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: student_affinities student_affinities_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY student_affinities_tenant_isolation ON public.student_affinities USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: student_allergies; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.student_allergies ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: student_allergies student_allergies_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY student_allergies_tenant_isolation ON public.student_allergies USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
 -- Name: student_guardians; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -5545,6 +8079,19 @@ ALTER TABLE public.student_guardians ENABLE ROW LEVEL SECURITY;
 --
 
 CREATE POLICY student_guardians_tenant_isolation ON public.student_guardians USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: student_placements; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.student_placements ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: student_placements student_placements_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY student_placements_tenant_isolation ON public.student_placements USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
 
 
 --
@@ -5645,6 +8192,22 @@ CREATE POLICY teaching_assignments_tenant_isolation ON public.teaching_assignmen
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260722080000'),
+('20260722070000'),
+('20260722060000'),
+('20260722050000'),
+('20260722043000'),
+('20260721170000'),
+('20260721160000'),
+('20260721150000'),
+('20260721140000'),
+('20260721130000'),
+('20260721120000'),
+('20260717220000'),
+('20260717213000'),
+('20260717210303'),
+('20260717161248'),
+('20260717155106'),
 ('20260716203439'),
 ('20260716153456'),
 ('20260716151744'),

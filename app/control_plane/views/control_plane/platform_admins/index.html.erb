@@ -5,22 +5,25 @@
       subtitle: "#{@platform_admins.size} administradores" %>
 
 <%= render layout: "shared/table",
-      locals: { headers: [ "Correo", "Nombre", "Estado", "Último acceso", "" ] } do %>
+      locals: { headers: [ "Correo", "Nombre", "Rol", "Estado", "Último acceso", "" ] } do %>
   <% @platform_admins.each do |admin| %>
     <tr>
       <th scope="row"><%= link_to admin.email, control_plane_platform_admin_path(admin) %></th>
       <td><%= admin.name %></td>
+      <td><%= admin.role.humanize %></td>
       <td><%= ui_badge(admin.active? ? "Activo" : "Suspendido", variant: admin.active? ? :success : :neutral) %></td>
       <td><%= datetime(admin.last_sign_in_at) %></td>
       <td>
         <% if admin == current_platform_admin %>
           <span class="hint">(tú)</span>
-        <% elsif admin.active? %>
-          <%= button_to "Suspender", suspend_control_plane_platform_admin_path(admin), method: :patch,
-                class: "btn btn--secondary btn--sm" %>
-        <% else %>
-          <%= button_to "Reactivar", reactivate_control_plane_platform_admin_path(admin), method: :patch,
-                class: "btn btn--secondary btn--sm" %>
+        <% elsif can_platform?("platform_admins.manage") %>
+          <% if admin.active? %>
+            <%= button_to "Suspender", suspend_control_plane_platform_admin_path(admin), method: :patch,
+                  class: "btn btn--secondary btn--sm" %>
+          <% else %>
+            <%= button_to "Reactivar", reactivate_control_plane_platform_admin_path(admin), method: :patch,
+                  class: "btn btn--secondary btn--sm" %>
+          <% end %>
         <% end %>
       </td>
     </tr>
