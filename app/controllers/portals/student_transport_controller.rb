@@ -4,9 +4,10 @@ module Portals
     layout "portal"
 
     def show
-      @info = Portals::StudentTransportInfo.stub
       @portal_label = "Portal del estudiante"
       @portal_person_name = Current.user.name
+      student = Core::Access::StudentSelfScope.for(Current.user)
+      @riders = student ? Transportation::RiderView.for(student: student) : Transportation::RouteRider.none
     end
   end
 end

@@ -1,13 +1,23 @@
 module Transportation
-  # Apéndice A is explicit: "solo UI; broadcast es posterior" — this flashes a
-  # stub confirmation and redirects; it does not persist per-rider state.
-  # TODO: reemplazar por un modelo real de eventos de abordaje + broadcast.
   class BoardingEventsController < ApplicationController
     def create
-      @route = Transportation::RouteRoster.find(params[:route_id]) or raise ActiveRecord::RecordNotFound
+      @route = Transportation::Route.find_by(institution_id: Current.institution_id, id: params[:route_id])
+      raise ActiveRecord::RecordNotFound if @route.nil?
+
       authorize!("boarding.manage", @route)
 
-      flash[:notice] = "Registro de #{params[:status_label] || 'abordaje'} guardado (stub)."
+      student = GroupManagement::Student.find_by(institution_id: Current.institution_id, id: params[:student_id])
+      raise ActiveRecord::RecordNotFound if student.nil?
+
+      event = Transportation::BoardingEvent.new(
+        institution_id: Current.institution_id, route: @route, student: student,
+        recorded_by: Current.institution_user, event_type: params[:event_type]
+      )
+      if event.save
+        flash[:notice] = "Registro de #{event.event_type_label.downcase} guardado."
+      else
+        flash[:alert] = event.errors.full_messages.to_sentence
+      end
       redirect_to transportation_boarding_path
     end
   end

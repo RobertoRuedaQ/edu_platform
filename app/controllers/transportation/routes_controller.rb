@@ -6,9 +6,11 @@ module Transportation
     end
 
     def show
-      @route = Transportation::RouteRoster.find(params[:id]) or raise ActiveRecord::RecordNotFound
+      @route = Transportation::Route.find_by(institution_id: Current.institution_id, id: params[:id])
+      raise ActiveRecord::RecordNotFound if @route.nil?
+
       authorize!("routes.view", @route)
-      @riders = Transportation::RiderRoster.for_route(@route.id)
+      @riders = @route.route_riders.includes(:student, :route_stop).order(:shift)
     end
   end
 end

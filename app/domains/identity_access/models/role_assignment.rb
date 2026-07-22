@@ -11,6 +11,7 @@ module IdentityAccess
     belongs_to :scope_department,  class_name: "StaffManagement::Department",   optional: true
     belongs_to :scope_grade_level, class_name: "GroupManagement::GradeLevel",   optional: true
     belongs_to :scope_group,       class_name: "GroupManagement::Section",      optional: true
+    belongs_to :scope_route,       class_name: "Transportation::Route",        optional: true
 
     # R5 (dating): a grant only applies within [valid_from, valid_until].
     # valid_until nil == open-ended.
@@ -22,11 +23,11 @@ module IdentityAccess
     # Human-readable label of the scope, for badges/rows.
     def scope_label
       return "Toda la institución" if institution_wide?
-      [ scope_department&.name, scope_grade_level&.name, scope_group&.name ].compact.join(" · ")
+      [ scope_department&.name, scope_grade_level&.name, scope_group&.name, scope_route&.name ].compact.join(" · ")
     end
 
     def institution_wide?
-      scope_department_id.nil? && scope_grade_level_id.nil? && scope_group_id.nil?
+      scope_department_id.nil? && scope_grade_level_id.nil? && scope_group_id.nil? && scope_route_id.nil?
     end
   end
 end

@@ -17,6 +17,64 @@
 > moviera el changelog fuera del doc magro. Las entradas v1.6.0+ se escribieron directamente aquí,
 > ya con el split vigente.
 
+### v1.49.0 — 2026-07-22 — `transportation`: rutas/paradas/pasajeros/abordaje reales — tercer incremento de Fase D (`CLOSURE_PLAN.md`), y el scope `:route` se vuelve real en RBAC
+
+**No es parte del criterio de hecho end-to-end** (completo desde v1.46.0) — es el tercer y más
+grande paso de Fase D. A diferencia de `cafeteria` (v1.47.0) y `student_support` (v1.48.0),
+`transportation` no tenía NINGUNA tabla real — el recon de `CLOSURE_PLAN.md §5` (2026-07-21) ya
+había señalado que este dominio es peor que "sin construir": `config/navigation/transportation.rb`
+registra dos tiles reales ("Rutas"/"Abordaje") y los controllers/rutas son reales, todo apuntando a
+`RouteRoster`/`RiderRoster` — dos `Data.define` con filas 100% inventadas. Un miembro de staff podía
+navegar hoy a una pantalla que parecía real y encontrar datos falsos — un dead end activo, no un
+hueco invisible.
+
+**Decisiones confirmadas por el owner antes de migrar** (ninguna se asumió): (1) el conductor de una
+ruta es un `StaffManagement::StaffMember` real vía FK nullable (`driver_staff_member_id`, `on_delete:
+nullify`, molde exacto de `Extracurriculars::Activity#instructor_staff_member_id`) — no texto
+libre; `staff_members.staff_category` ya incluía `'transport'` en su CHECK desde el primer commit,
+así que el esquema ya anticipaba esto. (2) un estudiante puede tener una ruta distinta en la mañana
+que en la tarde — `route_riders` lleva una columna `shift` (`am`/`pm`), nunca una sola fila asumida
+para ambos turnos; único índice `(institution, student, shift)` — un estudiante no puede montar dos
+buses en el mismo turno, pero sí rutas distintas entre turnos.
+
+**El hallazgo más grande, no anticipado en el plan original**: `Authorization::Assignment::
+SCOPE_READERS` tiene `route: :route_id` desde el slice original (stub) de este dominio, pero
+`IdentityAccess::RoleAssignment` NUNCA tuvo una columna `scope_route_id`, y
+`PermissionCheck#scope_type_for` ni siquiera contemplaba `:route` (caía a `:group` por default) —
+"un conductor ve solo su propia ruta" **no podía existir como grant real en producción**, solo como
+un override de test (`Authorization::StubResolver` vía `with_raw_grants`, retirado en este slice).
+Confirmado explícitamente con el owner: cerrar esto AHORA, no diferirlo — sin esto, el incremento
+dejaría el RBAC de este dominio "de palabra, no de hecho", exactamente el mismo criterio que motivó
+todo Fase D. `role_assignments` ganó `scope_route_id` (FK a `routes`, `on_delete: cascade`, mismo
+patrón que `scope_department_id`/`scope_grade_level_id`/`scope_group_id`); el índice único
+`idx_ra_unique_scope` se recreó incluyendo la columna nueva (`nulls_not_distinct: true`, nativo de
+PG18). `grant_role!` (test helper) ganó su rama `:route`.
+
+**Cambio técnico**: cuatro tablas net-new (`routes`, `route_stops` con `position` único por ruta,
+`route_riders` con `shift`, `boarding_events` append-only con `recorded_by` identity-accountable
+`ON DELETE RESTRICT`, molde `disciplinary_logs`), todas RLS `ENABLE+FORCE`. `Transportation::
+BoardingEventsController#create` era un no-op literal antes de este slice (`flash[:notice]` de éxito
+sin ningún `.save`) — ahora persiste un `BoardingEvent` real, o falla limpio (sin 500) si el
+`event_type` no es válido. Los portales (`Portals::GuardianTransportController`/
+`StudentTransportController`) se reescribieron sobre `Transportation::RiderView` (molde
+`Attendance::StudentView`, "una computación, N superficies") vía `GuardianScope`/`StudentSelfScope`
+— reemplazando datos 100% inventados ("Ana Martínez"/"Luis Martínez") por los hijos/el estudiante
+reales, ahora potencialmente con 0, 1 o 2 filas (am/pm) en vez de una sola asumida.
+
+**Deliberadamente fuera de alcance**: tiempo real (Turbo Streams sobre el abordaje) e integración
+GPS/mapa — ninguna con señal de necesidad real hoy, ambas siguen en `OPEN_PROCESS.md` como
+diferidas.
+
+**Tests (suite completa 770→778 runs / 0 fallos / 1 skip preexistente, en serie
+`PARALLEL_WORKERS=1`):** el CHECK de BD rechaza un `shift`/`event_type` inválido incluso saltando la
+validación de app; un estudiante puede tener rutas distintas entre turnos pero no dos en el mismo
+turno; un conductor con `scope_type: :route` ve y opera solo su propia ruta (`routes.view`/
+`boarding.manage`), nunca la otra; `boarding_events#create` persiste de verdad y rechaza limpio un
+`event_type` inválido; los portales de acudiente/estudiante renderizan las rutas reales del
+hijo/estudiante, con turnos separados, y un estudiante sin ruta ve un estado vacío honesto
+(`test/integration/transportation_test.rb`, `test/models/transportation/route_test.rb`, ambos
+nuevos).
+
 ### v1.48.0 — 2026-07-21 — `student_support`: `medical_history`/`student_allergies`/`accommodations` reales — segundo incremento de Fase D (`CLOSURE_PLAN.md`)
 
 **No es parte del criterio de hecho end-to-end** (completo desde v1.46.0) — es el segundo paso de

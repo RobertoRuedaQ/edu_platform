@@ -1,8 +1,14 @@
 <% content_for :title, "Transporte" %>
 
-<%= render "shared/detail_list", items: {
-      "Ruta"     => @info.route_name,
-      "Vehículo" => @info.vehicle_plate,
-      "Parada"   => @info.stop_name,
-      "Hora de recogida" => @info.pickup_time
-    } %>
+<% if @riders.any? -%>
+  <% @riders.each do |rider| -%>
+    <%= render "shared/detail_list", items: {
+          "Turno"    => rider.shift_label,
+          "Ruta"     => rider.route.name,
+          "Vehículo" => rider.route.vehicle_plate,
+          "Parada"   => rider.stop_name || "—"
+        } %>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state", title: "Sin ruta asignada" %>
+<% end -%>

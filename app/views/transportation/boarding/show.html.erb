@@ -2,21 +2,25 @@
 
 <%= render "shared/page_header", title: "Abordaje", subtitle: "Tu ruta de hoy." %>
 
-<%# Apéndice A: solo UI, sin persistencia ni broadcast todavía. %>
 <% if @routes.any? -%>
   <% @routes.each do |route| -%>
     <h3><%= route.name %></h3>
-    <%= render "shared/timeline", items: Transportation::RiderRoster.for_route(route.id).map { |rider|
-          { title: rider.student_name, meta: rider.stop_name,
-            body: safe_join([
-              button_to("Marcar abordaje",
-                transportation_boarding_events_path(route_id: route.id, student_id: rider.student_id, status_label: "abordaje"),
-                method: :post, class: "btn btn--secondary btn--sm"),
-              button_to("Marcar descenso",
-                transportation_boarding_events_path(route_id: route.id, student_id: rider.student_id, status_label: "descenso"),
-                method: :post, class: "btn btn--ghost btn--sm")
-            ]) }
-        } %>
+    <% riders = route.route_riders.includes(:student, :route_stop) -%>
+    <% if riders.any? -%>
+      <%= render "shared/timeline", items: riders.map { |rider|
+            { title: rider.student_name, meta: "#{rider.shift_label} · #{rider.stop_name || '—'}",
+              body: safe_join([
+                button_to("Marcar abordaje",
+                  transportation_boarding_events_path(route_id: route.id, student_id: rider.student_id, event_type: "boarded"),
+                  method: :post, class: "btn btn--secondary btn--sm"),
+                button_to("Marcar descenso",
+                  transportation_boarding_events_path(route_id: route.id, student_id: rider.student_id, event_type: "alighted"),
+                  method: :post, class: "btn btn--ghost btn--sm")
+              ]) }
+          } %>
+    <% else -%>
+      <%= render "shared/empty_state", title: "Sin estudiantes asignados a esta ruta" %>
+    <% end -%>
   <% end -%>
 <% else -%>
   <%= render "shared/empty_state", title: "No tienes una ruta asignada hoy" %>

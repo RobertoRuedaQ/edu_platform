@@ -422,6 +422,25 @@ ALTER TABLE ONLY public.audit_events FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: boarding_events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.boarding_events (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    route_id uuid NOT NULL,
+    student_id uuid NOT NULL,
+    recorded_by_institution_user_id uuid NOT NULL,
+    event_type character varying NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT boarding_events_event_type_check CHECK (((event_type)::text = ANY ((ARRAY['boarded'::character varying, 'alighted'::character varying])::text[])))
+);
+
+ALTER TABLE ONLY public.boarding_events FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: calendar_events; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1438,6 +1457,7 @@ CREATE TABLE public.role_assignments (
     updated_at timestamp(6) without time zone NOT NULL,
     valid_from date DEFAULT CURRENT_DATE NOT NULL,
     valid_until date,
+    scope_route_id uuid,
     CONSTRAINT role_assignments_valid_until_after_valid_from CHECK (((valid_until IS NULL) OR (valid_until >= valid_from)))
 );
 
@@ -1518,6 +1538,61 @@ CREATE TABLE public.roster_import_rows (
 );
 
 ALTER TABLE ONLY public.roster_import_rows FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: route_riders; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.route_riders (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    route_id uuid NOT NULL,
+    student_id uuid NOT NULL,
+    route_stop_id uuid,
+    shift character varying NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT route_riders_shift_check CHECK (((shift)::text = ANY ((ARRAY['am'::character varying, 'pm'::character varying])::text[])))
+);
+
+ALTER TABLE ONLY public.route_riders FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: route_stops; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.route_stops (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    route_id uuid NOT NULL,
+    name character varying NOT NULL,
+    scheduled_time time without time zone,
+    "position" integer NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+ALTER TABLE ONLY public.route_stops FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: routes; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.routes (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    driver_staff_member_id uuid,
+    name character varying NOT NULL,
+    vehicle_plate character varying,
+    capacity integer,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+ALTER TABLE ONLY public.routes FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -2200,6 +2275,14 @@ ALTER TABLE ONLY public.audit_events
 
 
 --
+-- Name: boarding_events boarding_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.boarding_events
+    ADD CONSTRAINT boarding_events_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: calendar_events calendar_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2664,6 +2747,30 @@ ALTER TABLE ONLY public.roster_import_rows
 
 
 --
+-- Name: route_riders route_riders_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.route_riders
+    ADD CONSTRAINT route_riders_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: route_stops route_stops_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.route_stops
+    ADD CONSTRAINT route_stops_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: routes routes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.routes
+    ADD CONSTRAINT routes_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: rubric_cell_descriptors rubric_cell_descriptors_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3004,6 +3111,13 @@ CREATE INDEX idx_assignments_on_institution_subject_status ON public.assignments
 
 
 --
+-- Name: idx_boarding_events_on_inst_route; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_boarding_events_on_inst_route ON public.boarding_events USING btree (institution_id, route_id);
+
+
+--
 -- Name: idx_care_auras_on_inst_student_from; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3245,7 +3359,42 @@ CREATE INDEX idx_ra_inst_user ON public.role_assignments USING btree (institutio
 -- Name: idx_ra_unique_scope; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE UNIQUE INDEX idx_ra_unique_scope ON public.role_assignments USING btree (institution_id, institution_user_id, role_id, scope_department_id, scope_grade_level_id, scope_group_id) NULLS NOT DISTINCT;
+CREATE UNIQUE INDEX idx_ra_unique_scope ON public.role_assignments USING btree (institution_id, institution_user_id, role_id, scope_department_id, scope_grade_level_id, scope_group_id, scope_route_id) NULLS NOT DISTINCT;
+
+
+--
+-- Name: idx_route_riders_on_inst_route; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_route_riders_on_inst_route ON public.route_riders USING btree (institution_id, route_id);
+
+
+--
+-- Name: idx_route_riders_unique_student_shift; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_route_riders_unique_student_shift ON public.route_riders USING btree (institution_id, student_id, shift);
+
+
+--
+-- Name: idx_route_stops_on_inst_route; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_route_stops_on_inst_route ON public.route_stops USING btree (institution_id, route_id);
+
+
+--
+-- Name: idx_route_stops_unique_position; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_route_stops_unique_position ON public.route_stops USING btree (route_id, "position");
+
+
+--
+-- Name: idx_routes_on_inst_driver; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_routes_on_inst_driver ON public.routes USING btree (institution_id, driver_staff_member_id);
 
 
 --
@@ -3977,6 +4126,13 @@ CREATE INDEX index_role_assignments_on_institution_id ON public.role_assignments
 
 
 --
+-- Name: index_role_assignments_on_scope_route_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_role_assignments_on_scope_route_id ON public.role_assignments USING btree (scope_route_id);
+
+
+--
 -- Name: index_role_permissions_on_institution_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -4420,6 +4576,14 @@ ALTER TABLE ONLY public.accommodations
 
 
 --
+-- Name: route_riders fk_rails_0ffb7a9ab1; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.route_riders
+    ADD CONSTRAINT fk_rails_0ffb7a9ab1 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: enrollments fk_rails_107f77c451; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4548,6 +4712,14 @@ ALTER TABLE ONLY public.invitations
 
 
 --
+-- Name: route_stops fk_rails_1f4cc828f8; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.route_stops
+    ADD CONSTRAINT fk_rails_1f4cc828f8 FOREIGN KEY (route_id) REFERENCES public.routes(id) ON DELETE CASCADE;
+
+
+--
 -- Name: peer_appreciations fk_rails_20ac912a33; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4604,6 +4776,14 @@ ALTER TABLE ONLY public.guardian_students
 
 
 --
+-- Name: route_riders fk_rails_2933ecd93d; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.route_riders
+    ADD CONSTRAINT fk_rails_2933ecd93d FOREIGN KEY (route_id) REFERENCES public.routes(id) ON DELETE CASCADE;
+
+
+--
 -- Name: plan_price_tiers fk_rails_2ab14ed687; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4636,6 +4816,14 @@ ALTER TABLE ONLY public.session_notes
 
 
 --
+-- Name: boarding_events fk_rails_2f07d02b12; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.boarding_events
+    ADD CONSTRAINT fk_rails_2f07d02b12 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: payments fk_rails_2f2f391007; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4665,6 +4853,14 @@ ALTER TABLE ONLY public.payment_plans
 
 ALTER TABLE ONLY public.messages
     ADD CONSTRAINT fk_rails_31aae3c129 FOREIGN KEY (institution_user_id) REFERENCES public.institution_users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: boarding_events fk_rails_32b5f3d6c6; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.boarding_events
+    ADD CONSTRAINT fk_rails_32b5f3d6c6 FOREIGN KEY (recorded_by_institution_user_id) REFERENCES public.institution_users(id) ON DELETE RESTRICT;
 
 
 --
@@ -4908,6 +5104,14 @@ ALTER TABLE ONLY public.assessments
 
 
 --
+-- Name: route_riders fk_rails_50d32573e6; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.route_riders
+    ADD CONSTRAINT fk_rails_50d32573e6 FOREIGN KEY (route_stop_id) REFERENCES public.route_stops(id) ON DELETE SET NULL;
+
+
+--
 -- Name: institution_users fk_rails_54725f8cd2; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -5001,6 +5205,14 @@ ALTER TABLE ONLY public.control_plane_audit_events
 
 ALTER TABLE ONLY public.assignments
     ADD CONSTRAINT fk_rails_5e63c7027f FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: boarding_events fk_rails_5fb0a11ec6; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.boarding_events
+    ADD CONSTRAINT fk_rails_5fb0a11ec6 FOREIGN KEY (route_id) REFERENCES public.routes(id) ON DELETE CASCADE;
 
 
 --
@@ -5396,11 +5608,35 @@ ALTER TABLE ONLY public.submissions
 
 
 --
+-- Name: route_stops fk_rails_853f30742d; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.route_stops
+    ADD CONSTRAINT fk_rails_853f30742d FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: boarding_events fk_rails_864428bde2; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.boarding_events
+    ADD CONSTRAINT fk_rails_864428bde2 FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE CASCADE;
+
+
+--
 -- Name: counseling_cases fk_rails_8671932b08; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.counseling_cases
     ADD CONSTRAINT fk_rails_8671932b08 FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: routes fk_rails_88bc3b2cff; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.routes
+    ADD CONSTRAINT fk_rails_88bc3b2cff FOREIGN KEY (driver_staff_member_id) REFERENCES public.staff_members(id) ON DELETE SET NULL;
 
 
 --
@@ -5433,6 +5669,14 @@ ALTER TABLE ONLY public.guardian_relationships
 
 ALTER TABLE ONLY public.submission_attachments
     ADD CONSTRAINT fk_rails_903b1e71cc FOREIGN KEY (attached_by_user_id) REFERENCES public.users(id) ON DELETE SET NULL;
+
+
+--
+-- Name: routes fk_rails_90999b5290; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.routes
+    ADD CONSTRAINT fk_rails_90999b5290 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
 
 
 --
@@ -5497,6 +5741,14 @@ ALTER TABLE ONLY public.active_storage_variant_records
 
 ALTER TABLE ONLY public.usage_daily_rollups
     ADD CONSTRAINT fk_rails_9acf8873cf FOREIGN KEY (addon_id) REFERENCES public.addons(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: role_assignments fk_rails_9b879e183a; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.role_assignments
+    ADD CONSTRAINT fk_rails_9b879e183a FOREIGN KEY (scope_route_id) REFERENCES public.routes(id) ON DELETE CASCADE;
 
 
 --
@@ -5921,6 +6173,14 @@ ALTER TABLE ONLY public.medical_histories
 
 ALTER TABLE ONLY public.group_memberships
     ADD CONSTRAINT fk_rails_cfcf8ca0a6 FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE CASCADE;
+
+
+--
+-- Name: route_riders fk_rails_d0a2b7485a; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.route_riders
+    ADD CONSTRAINT fk_rails_d0a2b7485a FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE CASCADE;
 
 
 --
@@ -6392,6 +6652,19 @@ ALTER TABLE public.audit_events ENABLE ROW LEVEL SECURITY;
 --
 
 CREATE POLICY audit_events_tenant_isolation ON public.audit_events USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: boarding_events; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.boarding_events ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: boarding_events boarding_events_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY boarding_events_tenant_isolation ON public.boarding_events USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
 
 
 --
@@ -6980,6 +7253,45 @@ CREATE POLICY roster_import_rows_tenant_isolation ON public.roster_import_rows U
 
 
 --
+-- Name: route_riders; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.route_riders ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: route_riders route_riders_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY route_riders_tenant_isolation ON public.route_riders USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: route_stops; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.route_stops ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: route_stops route_stops_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY route_stops_tenant_isolation ON public.route_stops USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: routes; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.routes ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: routes routes_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY routes_tenant_isolation ON public.routes USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
 -- Name: rubric_cell_descriptors; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -7259,6 +7571,7 @@ CREATE POLICY teaching_assignments_tenant_isolation ON public.teaching_assignmen
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260722050000'),
 ('20260721170000'),
 ('20260721160000'),
 ('20260721150000'),
