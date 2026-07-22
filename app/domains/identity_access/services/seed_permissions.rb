@@ -193,7 +193,17 @@ module IdentityAccess
       # ships anyway on the owner's explicit instruction to assume a
       # documented, conservative default (see EarlyWarningScope's own
       # comment) — revisit the moment a real policy is defined.
-      "hps.early_warning.view" => "Ver la síntesis de alertas tempranas (Lente 6 del HPS)"
+      "hps.early_warning.view" => "Ver la síntesis de alertas tempranas (Lente 6 del HPS)",
+      # library (guidelines/library_prompt.md, Fase D greenfield increment 1,
+      # OPEN_PROCESS.md #1 — confirmed explicitly by the owner). Split by
+      # action, molde assignment.manage/calendar.manage: catalog curation vs.
+      # circulation reporting vs. desk operation are three distinct actors in
+      # a real school library (cataloguer, coordinator, front-desk staff) —
+      # no existing key (checkout.manage is cafeteria-purchase-specific) was
+      # reusable.
+      "library.catalog.manage" => "Crear, editar y catalogar títulos y ejemplares físicos",
+      "library.loans.manage" => "Consultar el historial global de préstamos y la cartera en mora",
+      "library.checkout" => "Operar el mostrador de préstamo y devolución"
     }.freeze
 
     def self.call

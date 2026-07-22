@@ -1,0 +1,28 @@
+<% content_for :title, "Préstamos" %>
+
+<%= render "shared/page_header", title: "Historial de préstamos", subtitle: "Vista de reportes (lectura)." %>
+
+<% if @loans.any? -%>
+  <%= render layout: "shared/table", locals: { headers: ["Ejemplar", "Prestatario", "Prestado", "Vence", "Devuelto", "Estado"] } do -%>
+    <% @loans.each do |loan| -%>
+      <tr>
+        <td><%= loan.copy.resource.title %> (<%= loan.copy.barcode %>)</td>
+        <td><%= loan.borrower_name %></td>
+        <td><%= loan.borrowed_at.strftime("%d/%m/%Y") %></td>
+        <td><%= loan.due_at.strftime("%d/%m/%Y") %></td>
+        <td><%= loan.returned_at&.strftime("%d/%m/%Y") || "—" %></td>
+        <td>
+          <% if loan.overdue? -%>
+            <%= ui_badge "Vencido", variant: :danger %>
+          <% else -%>
+            <%= ui_badge loan.status.humanize,
+                  variant: { "active" => :warning, "returned" => :success, "lost" => :danger }.fetch(loan.status, :neutral) %>
+          <% end -%>
+        </td>
+      </tr>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state", title: "Sin préstamos todavía",
+        description: "Los préstamos registrados desde el mostrador aparecerán aquí." %>
+<% end -%>

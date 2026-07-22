@@ -1,0 +1,5 @@
+<% content_for :title, "Editar título" %>
+
+<%= render "shared/page_header", title: "Editar título" %>
+
+<%= render "form", resource: @resource, url: library_resource_path(@resource), method: :patch %>

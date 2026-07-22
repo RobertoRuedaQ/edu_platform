@@ -17,6 +17,66 @@
 > moviera el changelog fuera del doc magro. Las entradas v1.6.0+ se escribieron directamente aquí,
 > ya con el split vigente.
 
+### v1.54.0 — 2026-07-22 — `library`: primer dominio greenfield de Fase D (`guidelines/library_prompt.md`, `OPEN_PROCESS.md` #1)
+
+**Distinto de todo lo demás de Fase D**: cafeteria/transportation/schedules-timetable convertían un
+stub existente con lógica ya observable; `admissions`/`library` no tenían absolutamente ningún
+archivo, ruta ni nav — el gate exigía "confirmación explícita del owner" precisamente porque no
+había ningún spec del que inferir las reglas de negocio. El owner entregó
+`guidelines/library_prompt.md` (especificación funcional completa de ambos dominios) y pidió empezar
+a ejecutarla. Se secuenció driver-based: este incremento cierra `library` completo; `admissions`
+(base + adenda de flujo dinámico/applicant tracker) queda para incrementos siguientes, diseñados
+cuando se lleguen, no construidos a ciegas ahora.
+
+**Dos correcciones a la spec, verificadas contra el repo real antes de construir** (el repo manda
+sobre el plan, igual que en cada incremento anterior de Fase D):
+1. La spec nombra `Core::Person` repetidamente — no existe en ningún lugar de este codebase
+   (`grep` exhaustivo, cero resultados fuera de la spec misma). El modelo real de identidad global es
+   `Core::User` (`PROJECT_STATE.md` §3.2: "Una persona = un `users`"). Diseñado contra `Core::User`/
+   `Core::InstitutionUser`.
+2. La spec solo nombra `borrower_institution_user_id` para el préstamo, pero su propia sección de UX
+   exige que ESTUDIANTES vean sus préstamos en un portal de autoservicio — un estudiante es una fila
+   `GroupManagement::Student`, nunca un `Core::InstitutionUser`. Corregido con el molde EXACTO que
+   este codebase ya usa para "el actor es uno de dos tipos de persona distintos"
+   (`Communication::ConversationParticipant`: dos FK nullable + CHECK `num_nonnulls(...) = 1`,
+   validación-espejo a nivel de modelo) — nunca una asociación polimórfica verdadera.
+
+**Cambio técnico**: tres tablas net-new (`library_resources`, `library_resource_copies`,
+`library_loans`), las tres RLS `ENABLE+FORCE`. `Library::LoanRecorder`/`ReturnRecorder` bloquean
+**`copy`, nunca `loan`** — la carrera real es el entrelazado entre préstamos DISTINTOS sobre el MISMO
+ejemplar (una devolución tardía llegando después de que el ejemplar ya se volvió a prestar), no dos
+operaciones concurrentes sobre una misma fila de préstamo; esto es correcto solo porque TODO escritor
+de `loan.status` (ambos servicios) toma `copy.lock!` primero, así que un `loan.reload` tras el lock
+siempre ve los commits de cualquier otra transacción. **Primer molde de este codebase que bloquea una
+fila y guarda SU PROPIA columna de estado** — `Finance::ChargeCreator`/`Extracurriculars::
+EnrollmentCreator` (los únicos otros usuarios de `.lock!` en todo el repo) bloquean el agregado y
+cuentan/suman FILAS HIJAS, nunca el estado de la fila bloqueada misma. Respaldo de BD: índice único
+parcial `(institution_id, copy_id) WHERE status='active'` (molde `activity_enrollments`).
+Idempotencia propia en `library_loans.idempotency_key` (la spec no la pedía, pero ningún otro
+servicio transaccional de este repo carece de una — sin ella, un doble-click en "Prestar" habría
+mostrado un error de "no disponible" en vez de devolver el préstamo ya existente).
+`MAX_ACTIVE_LOANS_STUDENT = 3`/`MAX_ACTIVE_LOANS_STAFF = 5` son PLACEHOLDER explícito (la spec pide
+"máximo por rol de usuario"; sin mecanismo de settings-por-institución, A3, mismo criterio que
+`HEAT_RISK_THRESHOLD`). **Multas por mora deliberadamente diferidas** — la propia spec las condiciona
+("si tiene configurada esa regla") a un mecanismo de settings que no existe; inventar una política de
+cobro sin ninguna decisión de negocio real contradice la disciplina ya repetida en billing hardening.
+Portales estudiante/acudiente (molde `cafeteria`/`transport`: summarizan, sin nesting per-child —
+unos pocos préstamos por hijo es contenido liviano, a diferencia de finance/report_cards) leen
+préstamos propios + catálogo disponible, sin `authorize!`. Metering M1 cableado **desde el día uno**
+(`Library::LoanRecorder` emite `"préstamos"` ya en este incremento) — a diferencia de
+`cafeteria`/`transportation`, que quedaron sin medir hasta v1.52.0.
+
+**Tests (suite completa 800→829 runs / 0 fallos / 1 skip preexistente, en serie
+`PARALLEL_WORKERS=1`):** el CHECK de BD rechaza `status`/identidad-de-prestatario inválidos incluso
+saltando la validación de app; el índice único parcial respalda contra doble-préstamo incluso
+bypaseando el servicio; `LoanRecorder` es idempotente (resubmit nunca duplica) y aplica el límite
+correcto según el TIPO de prestatario; `ReturnRecorder` es idempotente (devolver dos veces nunca
+falla) y libera el ejemplar para un préstamo real posterior; RBAC fail-closed por cada uno de los tres
+permisos nuevos; el catálogo NUNCA permite marcar un ejemplar "loaned" a mano (ese estado solo nace de
+`LoanRecorder`); metering M1 emite una unidad real y nunca duplica en un resubmit; ambos portales leen
+datos reales por relación (`test/models/library/`, cuatro archivos nuevos;
+`test/integration/library_test.rb`, nuevo).
+
 ### v1.53.0 — 2026-07-22 — Onboarding: purga real de `roster_import_rows` post-commit (`OPEN_PROCESS.md` ítem #2)
 
 Gated hasta que el owner confirmó explícitamente este ítem (de los cuatro de "onboarding hardening",

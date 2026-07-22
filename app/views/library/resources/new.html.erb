@@ -1,0 +1,5 @@
+<% content_for :title, "Nuevo título" %>
+
+<%= render "shared/page_header", title: "Nuevo título" %>
+
+<%= render "form", resource: @resource, url: library_resources_path, method: :post %>

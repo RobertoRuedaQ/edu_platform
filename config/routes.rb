@@ -46,6 +46,9 @@ Rails.application.routes.draw do
     resource :student, only: :show, controller: "student_portal" do
       resource :cafeteria, only: :show, controller: "student_cafeteria"
       resource :transport, only: :show, controller: "student_transport"
+      # library (guidelines/library_prompt.md, Fase D greenfield increment 1):
+      # own loans + catalog browse, same molde as cafeteria/transport above.
+      resource :library, only: :show, controller: "student_library"
       # report_cards (v1.17.0): published-only, by self-scope — no
       # authorize!, outside Navigation::Registry (§7). Plural: many terms.
       resources :report_cards, only: :index, controller: "student_report_cards"
@@ -169,6 +172,11 @@ Rails.application.routes.draw do
       end
       resource :cafeteria, only: :show, controller: "guardian_cafeteria"
       resource :transport, only: :show, controller: "guardian_transport"
+      # library (guidelines/library_prompt.md, Fase D greenfield increment 1):
+      # same molde as cafeteria/transport above — summarizes ALL children on
+      # one page, never per-child nesting (a few current loans per child is
+      # light content, unlike finance/report_cards).
+      resource :library, only: :show, controller: "guardian_library"
     end
   end
 
@@ -288,6 +296,21 @@ Rails.application.routes.draw do
     get "menu", to: "menu#index", as: "menu"
     resources :checkouts, only: %i[new create]
     resources :balances, only: :index
+  end
+
+  # --- library (guidelines/library_prompt.md, Fase D greenfield increment 1,
+  # OPEN_PROCESS.md #1 — confirmed explicitly by the owner) ------------------
+  # library.catalog.manage gates the catalog/copies (cataloguer); library.
+  # checkout gates the front-desk lend/return flow; library.loans.manage
+  # gates the read-only history/reports index — three distinct actors, molde
+  # assignment.manage/calendar.manage's action-split discipline.
+  namespace :library do
+    resources :resources, only: %i[index new create edit update] do
+      resources :copies, only: %i[index new create update], controller: "resource_copies"
+    end
+    resources :checkouts, only: %i[new create]
+    resources :returns, only: :create
+    resources :loans, only: :index
   end
 
   # --- attendance (net-new domain, v1.16.0, MVP critical path item #2) ------

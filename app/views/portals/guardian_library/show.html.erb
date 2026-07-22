@@ -1,0 +1,27 @@
+<% content_for :title, "Biblioteca" %>
+
+<%= render "shared/page_header", title: "Biblioteca", subtitle: "Préstamos de tus hijos." %>
+
+<% @loans_by_child.each do |child, loans| -%>
+  <h3><%= "#{child.first_name} #{child.last_name}" %></h3>
+  <% if loans.any? -%>
+    <%= render layout: "shared/table", locals: { headers: ["Título", "Prestado", "Vence", "Estado"] } do -%>
+      <% loans.each do |loan| -%>
+        <tr>
+          <td><%= loan.copy.resource.title %></td>
+          <td><%= loan.borrowed_at.strftime("%d/%m/%Y") %></td>
+          <td><%= loan.due_at.strftime("%d/%m/%Y") %></td>
+          <td>
+            <% if loan.overdue? -%>
+              <%= ui_badge "Vencido", variant: :danger %>
+            <% else -%>
+              <%= ui_badge loan.status.humanize, variant: (loan.status == "active" ? :warning : :success) %>
+            <% end -%>
+          </td>
+        </tr>
+      <% end -%>
+    <% end -%>
+  <% else -%>
+    <%= render "shared/empty_state", title: "Sin préstamos activos", description: "Sin libros prestados en este momento." %>
+  <% end -%>
+<% end -%>

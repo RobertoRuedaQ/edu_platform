@@ -1,0 +1,27 @@
+<% content_for :title, "Mostrador" %>
+
+<%= render "shared/page_header", title: "Mostrador de préstamos",
+      subtitle: "Un solo paso para prestar o recibir un ejemplar." %>
+
+<div class="tile-grid">
+  <section>
+    <h3>Prestar</h3>
+    <%= form_with url: library_checkouts_path, method: :post do -%>
+      <%= hidden_field_tag :idempotency_key, @idempotency_key %>
+      <%= render "shared/field", label: "Código de barras del ejemplar", name: "barcode",
+            placeholder: "Ej. LIB-000123", required: true %>
+      <%= render "shared/field", label: "Código del estudiante o correo del funcionario",
+            name: "borrower_identifier", placeholder: "Ej. COL-E-101 o docente@colegio.test", required: true %>
+      <%= ui_button "Prestar", type: "submit", variant: :primary %>
+    <% end -%>
+  </section>
+
+  <section>
+    <h3>Devolver</h3>
+    <%= form_with url: library_returns_path, method: :post do -%>
+      <%= render "shared/field", label: "Código de barras del ejemplar", name: "barcode",
+            placeholder: "Ej. LIB-000123", required: true %>
+      <%= ui_button "Devolver", type: "submit", variant: :secondary %>
+    <% end -%>
+  </section>
+</div>

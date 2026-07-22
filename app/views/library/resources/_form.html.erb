@@ -1,0 +1,15 @@
+<%# locals: (resource:, url:, method:) -%>
+<%= form_with url: url, method: method do -%>
+  <% if resource.errors.any? -%>
+    <%= render "shared/alert", variant: :danger, message: resource.errors.full_messages.join(", ") %>
+  <% end -%>
+
+  <%= render "shared/field", label: "Título", name: "resource[title]", type: "text", value: resource.title, required: true %>
+  <%= render "shared/field", label: "Autor", name: "resource[author]", type: "text", value: resource.author %>
+  <%= render "shared/field", label: "Editorial", name: "resource[publisher]", type: "text", value: resource.publisher %>
+  <%= render "shared/field", label: "ISBN", name: "resource[isbn]", type: "text", value: resource.isbn %>
+  <%= render "shared/field", label: "Categoría (Dewey)", name: "resource[dewey_category]", type: "text",
+        value: resource.dewey_category %>
+
+  <%= ui_button "Guardar", type: "submit", variant: :primary %>
+<% end -%>

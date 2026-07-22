@@ -21,6 +21,7 @@ module ControlPlane
       assignments
       calendar
       extracurriculars
+      library
     ].freeze
   end
 end

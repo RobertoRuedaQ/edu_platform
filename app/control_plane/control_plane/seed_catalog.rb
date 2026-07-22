@@ -59,7 +59,14 @@ module ControlPlane
       # emits one "inscripciones" unit per NEW active Enrollment (the
       # idempotent re-enroll-while-active path returns before creating one).
       { key: "extracurriculars", name: "Extracurriculares", metered: true, unit: "inscripciones",
-        included_quota: 500, overage_unit_price_cents: 200 }
+        included_quota: 500, overage_unit_price_cents: 200 },
+      # library (guidelines/library_prompt.md, Fase D greenfield increment 1):
+      # Library::LoanRecorder emits one "préstamos" unit per NEW real Loan
+      # (already idempotent by its own idempotency_key, never double-counts
+      # a resubmit) — wired for real from day one, unlike cafeteria/
+      # transportation which were retrofitted later (M1, v1.52.0).
+      { key: "library", name: "Biblioteca", metered: true, unit: "préstamos",
+        included_quota: 3_000, overage_unit_price_cents: 50 }
     ].freeze
 
     PLAN = {

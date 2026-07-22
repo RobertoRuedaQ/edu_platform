@@ -1,0 +1,14 @@
+<% content_for :title, "Nuevo ejemplar" %>
+
+<%= render "shared/page_header", title: "Nuevo ejemplar — #{@resource.title}" %>
+
+<%= form_with url: library_resource_copies_path(@resource), method: :post do -%>
+  <% if @copy.errors.any? -%>
+    <%= render "shared/alert", variant: :danger, message: @copy.errors.full_messages.join(", ") %>
+  <% end -%>
+
+  <%= render "shared/field", label: "Código de barras", name: "resource_copy[barcode]", type: "text",
+        value: @copy.barcode, required: true %>
+
+  <%= ui_button "Guardar", type: "submit", variant: :primary %>
+<% end -%>

@@ -28,13 +28,18 @@
 > veces) — **todo lo que sigue está gateado por una confirmación explícita del owner o una decisión
 > de negocio real.** Cada ítem indica cuál.
 
-1. **Fase D — greenfield puro, sin urgencia** — ⛔ **gateado: requiere confirmación explícita**
-   (`guidelines/CLOSURE_PLAN.md` §5, Tier C de `PROJECT_STATE.md` §4: "crear SOLO bajo confirmación
-   explícita"). `admissions`/`library` no existen en absoluto (cero archivos/rutas/nav) —
-   construirlos es un dominio enteramente nuevo, no una conversión stub→real, sin ningún spec ni
-   stub previo del que inferir las reglas de negocio. Con `cafeteria` resto (v1.51.0),
-   `transportation` (v1.49.0) y `schedules` timetable (v1.50.0) cerrados, **Fase D queda reducida a
-   esto únicamente** — no queda ningún dead-end activo ni trabajo diferido en el repo.
+1. **Fase D — greenfield puro** — ⛔ **gateado: en curso, confirmado explícitamente por el owner**
+   (`guidelines/library_prompt.md`, la especificación funcional completa que el owner entregó).
+   ~~`library`~~ ✅ **CERRADO (v1.54.0)** — tres tablas net-new, `LoanRecorder`/`ReturnRecorder`
+   (`copy.lock!`, primer molde de este repo que guarda la propia columna de estado de la fila
+   bloqueada), portales estudiante/acudiente, metering M1 cableado desde el día uno. Ver
+   `HISTORIA.md` v1.54.0. **`admissions` sigue pendiente** — dos incrementos diseñados a nivel
+   overview en el plan de v1.54.0 (ver `.claude/plans/snoopy-questing-sunrise.md` o rediseñar cuando
+   se lleguen, no construir a ciegas): (2) base — campañas/aspirantes/solicitudes/documentos,
+   conversión atómica a estudiante real (`Core::People::Resolver` + `guardian_students` +
+   `Schedules::Enrollment`); (3) adenda — pasos configurables por campaña + tracker público del
+   aspirante por token (subdominio-scoped, molde `Invitations::Issuer`, corrección a la spec — un
+   token verdaderamente sin-tenant no tiene precedente en este repo).
 
 2. **Onboarding — hardening no bloqueante** — ⛔ **gateado: sin necesidad de producción confirmada**
    (ver `HISTORIA.md` v1.7.0/v1.32.0, marcado así explícitamente en el propio texto del ítem, no
@@ -59,10 +64,10 @@
 
 5. **M1 — metering por dominio, resto** — ⛔ **gateado: sin evento de negocio claro todavía** (ver
    `PROJECT_STATE.md` §10, fila M1). `cafeteria` y `transportation` ya cerrados (v1.51.0→v1.52.0,
-   v1.49.0→v1.52.0) — sigue abierto solo para `student_support`/`counseling`/`analytics_bi` (Clase C
-   o sin evento de negocio claro) y `schedules`-timetable (real desde v1.50.0, pero sin un evento
-   tan claro como una clase impartida) — cerrar por dominio, cuando cada uno tenga un evento real
-   que medir, nunca de una vez.
+   v1.49.0→v1.52.0); `library` cerrado desde el día uno (v1.54.0, sin retrofit) — sigue abierto solo
+   para `student_support`/`counseling`/`analytics_bi` (Clase C o sin evento de negocio claro) y
+   `schedules`-timetable (real desde v1.50.0, pero sin un evento tan claro como una clase impartida)
+   — cerrar por dominio, cuando cada uno tenga un evento real que medir, nunca de una vez.
 
 6. **Decisiones abiertas de arquitectura sin backlog de construcción propio** — ⛔ **gateado:
    pregunta para el owner, no una tarea de construcción** — ver `PROJECT_STATE.md` §10 para el

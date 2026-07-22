@@ -1251,6 +1251,68 @@ CREATE TABLE public.invoices (
 
 
 --
+-- Name: library_loans; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.library_loans (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    copy_id uuid NOT NULL,
+    borrower_institution_user_id uuid,
+    borrower_student_id uuid,
+    issued_by_institution_user_id uuid NOT NULL,
+    borrowed_at timestamp(6) without time zone NOT NULL,
+    due_at timestamp(6) without time zone NOT NULL,
+    returned_at timestamp(6) without time zone,
+    status character varying DEFAULT 'active'::character varying NOT NULL,
+    idempotency_key character varying,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT library_loans_borrower_identity_check CHECK ((num_nonnulls(borrower_institution_user_id, borrower_student_id) = 1)),
+    CONSTRAINT library_loans_status_check CHECK (((status)::text = ANY ((ARRAY['active'::character varying, 'returned'::character varying, 'overdue'::character varying, 'lost'::character varying])::text[])))
+);
+
+ALTER TABLE ONLY public.library_loans FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: library_resource_copies; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.library_resource_copies (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    resource_id uuid NOT NULL,
+    barcode character varying NOT NULL,
+    status character varying DEFAULT 'available'::character varying NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT library_resource_copies_status_check CHECK (((status)::text = ANY ((ARRAY['available'::character varying, 'loaned'::character varying, 'maintenance'::character varying, 'lost'::character varying])::text[])))
+);
+
+ALTER TABLE ONLY public.library_resource_copies FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: library_resources; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.library_resources (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    title character varying NOT NULL,
+    author character varying,
+    publisher character varying,
+    isbn character varying,
+    dewey_category character varying,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+ALTER TABLE ONLY public.library_resources FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: medical_histories; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2731,6 +2793,30 @@ ALTER TABLE ONLY public.invoices
 
 
 --
+-- Name: library_loans library_loans_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.library_loans
+    ADD CONSTRAINT library_loans_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: library_resource_copies library_resource_copies_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.library_resource_copies
+    ADD CONSTRAINT library_resource_copies_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: library_resources library_resources_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.library_resources
+    ADD CONSTRAINT library_resources_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: medical_histories medical_histories_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3395,6 +3481,41 @@ CREATE UNIQUE INDEX idx_installments_seq ON public.installments USING btree (ins
 
 
 --
+-- Name: idx_library_copies_barcode_unique; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_library_copies_barcode_unique ON public.library_resource_copies USING btree (institution_id, barcode);
+
+
+--
+-- Name: idx_library_loans_active_unique; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_library_loans_active_unique ON public.library_loans USING btree (institution_id, copy_id) WHERE ((status)::text = 'active'::text);
+
+
+--
+-- Name: idx_library_loans_idempotency; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_library_loans_idempotency ON public.library_loans USING btree (institution_id, idempotency_key);
+
+
+--
+-- Name: idx_library_loans_on_institution_copy; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_library_loans_on_institution_copy ON public.library_loans USING btree (institution_id, copy_id);
+
+
+--
+-- Name: idx_library_resources_isbn_unique; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_library_resources_isbn_unique ON public.library_resources USING btree (institution_id, isbn) WHERE (isbn IS NOT NULL);
+
+
+--
 -- Name: idx_medical_histories_unique_student; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3423,10 +3544,24 @@ CREATE INDEX idx_messages_on_conversation_and_time ON public.messages USING btre
 
 
 --
+-- Name: idx_on_institution_id_borrower_institution_user_id_e162896789; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_on_institution_id_borrower_institution_user_id_e162896789 ON public.library_loans USING btree (institution_id, borrower_institution_user_id);
+
+
+--
 -- Name: idx_on_institution_id_purchase_id_21da670fc8; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_on_institution_id_purchase_id_21da670fc8 ON public.cafeteria_purchase_lines USING btree (institution_id, purchase_id);
+
+
+--
+-- Name: idx_on_institution_id_resource_id_df9ac07f1a; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_on_institution_id_resource_id_df9ac07f1a ON public.library_resource_copies USING btree (institution_id, resource_id);
 
 
 --
@@ -4200,6 +4335,20 @@ CREATE UNIQUE INDEX index_invoices_one_per_institution_and_period ON public.invo
 
 
 --
+-- Name: index_library_loans_on_institution_id_and_borrower_student_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_library_loans_on_institution_id_and_borrower_student_id ON public.library_loans USING btree (institution_id, borrower_student_id);
+
+
+--
+-- Name: index_library_resource_copies_on_institution_id_and_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_library_resource_copies_on_institution_id_and_status ON public.library_resource_copies USING btree (institution_id, status);
+
+
+--
 -- Name: index_payment_plans_on_institution_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -4712,6 +4861,14 @@ ALTER TABLE ONLY public.sections
 
 
 --
+-- Name: library_resource_copies fk_rails_04782f7fc7; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.library_resource_copies
+    ADD CONSTRAINT fk_rails_04782f7fc7 FOREIGN KEY (resource_id) REFERENCES public.library_resources(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: submission_attachments fk_rails_05c03d867a; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4933,6 +5090,14 @@ ALTER TABLE ONLY public.route_stops
 
 ALTER TABLE ONLY public.peer_appreciations
     ADD CONSTRAINT fk_rails_20ac912a33 FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE CASCADE;
+
+
+--
+-- Name: library_loans fk_rails_22f8232363; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.library_loans
+    ADD CONSTRAINT fk_rails_22f8232363 FOREIGN KEY (copy_id) REFERENCES public.library_resource_copies(id) ON DELETE RESTRICT;
 
 
 --
@@ -5696,6 +5861,14 @@ ALTER TABLE ONLY public.assignments
 
 
 --
+-- Name: library_resources fk_rails_74c3db7765; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.library_resources
+    ADD CONSTRAINT fk_rails_74c3db7765 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: sessions fk_rails_758836b4f0; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -5816,6 +5989,14 @@ ALTER TABLE ONLY public.conversations
 
 
 --
+-- Name: library_loans fk_rails_80e2fe4aca; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.library_loans
+    ADD CONSTRAINT fk_rails_80e2fe4aca FOREIGN KEY (issued_by_institution_user_id) REFERENCES public.institution_users(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: rubric_criteria fk_rails_80f1e80590; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -5917,6 +6098,14 @@ ALTER TABLE ONLY public.peer_appreciations
 
 ALTER TABLE ONLY public.guardian_relationships
     ADD CONSTRAINT fk_rails_8bfbc2799f FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: library_loans fk_rails_8d6f1544b7; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.library_loans
+    ADD CONSTRAINT fk_rails_8d6f1544b7 FOREIGN KEY (borrower_institution_user_id) REFERENCES public.institution_users(id) ON DELETE RESTRICT;
 
 
 --
@@ -6056,6 +6245,14 @@ ALTER TABLE ONLY public.character_evaluations
 
 
 --
+-- Name: library_loans fk_rails_a553e1fae0; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.library_loans
+    ADD CONSTRAINT fk_rails_a553e1fae0 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: student_accounts fk_rails_a63606332a; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -6149,6 +6346,14 @@ ALTER TABLE ONLY public.dietary_restrictions
 
 ALTER TABLE ONLY public.students
     ADD CONSTRAINT fk_rails_b2fee63e99 FOREIGN KEY (program_id) REFERENCES public.programs(id);
+
+
+--
+-- Name: library_loans fk_rails_b303cf8ecc; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.library_loans
+    ADD CONSTRAINT fk_rails_b303cf8ecc FOREIGN KEY (borrower_student_id) REFERENCES public.students(id) ON DELETE RESTRICT;
 
 
 --
@@ -6773,6 +6978,14 @@ ALTER TABLE ONLY public.role_assignments
 
 ALTER TABLE ONLY public.rooms
     ADD CONSTRAINT fk_rails_f4d7f67edb FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: library_resource_copies fk_rails_f4f3fef62b; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.library_resource_copies
+    ADD CONSTRAINT fk_rails_f4f3fef62b FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
 
 
 --
@@ -7414,6 +7627,45 @@ CREATE POLICY invitations_tenant_isolation ON public.invitations USING ((institu
 
 
 --
+-- Name: library_loans; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.library_loans ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: library_loans library_loans_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY library_loans_tenant_isolation ON public.library_loans USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: library_resource_copies; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.library_resource_copies ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: library_resource_copies library_resource_copies_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY library_resource_copies_tenant_isolation ON public.library_resource_copies USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: library_resources; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.library_resources ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: library_resources library_resources_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY library_resources_tenant_isolation ON public.library_resources USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
 -- Name: medical_histories; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -7940,6 +8192,7 @@ CREATE POLICY teaching_assignments_tenant_isolation ON public.teaching_assignmen
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260722080000'),
 ('20260722070000'),
 ('20260722060000'),
 ('20260722050000'),

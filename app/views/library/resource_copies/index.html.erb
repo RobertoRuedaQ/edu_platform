@@ -1,0 +1,34 @@
+<% content_for :title, "Ejemplares — #{@resource.title}" %>
+
+<%= render "shared/page_header", title: "Ejemplares de \"#{@resource.title}\"",
+      actions: ui_button("Nuevo ejemplar", href: new_library_resource_copy_path(@resource), variant: :primary) %>
+
+<% if @copies.any? -%>
+  <%= render layout: "shared/table", locals: { headers: ["Código de barras", "Estado", ""] } do -%>
+    <% @copies.each do |copy| -%>
+      <tr>
+        <td><%= copy.barcode %></td>
+        <td><%= ui_badge copy.status.humanize,
+              variant: { "available" => :success, "loaned" => :warning, "maintenance" => :neutral, "lost" => :danger }.fetch(copy.status, :neutral) %></td>
+        <td>
+          <% if copy.status != "loaned" -%>
+            <%# "loaned" is deliberately excluded — that transition ONLY
+                happens via Library::LoanRecorder (lock + idempotent + real
+                Loan row), never a bare status edit here. -%>
+            <%= form_with url: library_resource_copy_path(@resource, copy), method: :patch, class: "inline-form" do -%>
+              <select name="resource_copy[status]">
+                <% %w[available maintenance lost].each do |status| -%>
+                  <option value="<%= status %>" <%= "selected" if copy.status == status %>><%= status.humanize %></option>
+                <% end -%>
+              </select>
+              <%= ui_button "Actualizar", type: "submit", variant: :secondary, size: :sm %>
+            <% end -%>
+          <% end -%>
+        </td>
+      </tr>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state", title: "Sin ejemplares todavía",
+        description: "Registra el primer ejemplar físico de este título." %>
+<% end -%>
