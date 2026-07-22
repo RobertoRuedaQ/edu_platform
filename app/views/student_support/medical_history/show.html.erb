@@ -2,7 +2,11 @@
 
 <%= render "shared/page_header",
       title: @record.student_name,
-      subtitle: @tier == :full ? "Historia médica completa" : "Alergias y contraindicaciones" %>
+      subtitle: @tier == :full ? "Historia médica completa" : "Alergias y contraindicaciones",
+      actions: (safe_join([
+        (ui_button("Editar historia", href: edit_student_support_student_medical_history_path(@student.id), variant: :secondary) if @tier == :full),
+        (ui_button("Agregar alergia", href: new_student_support_student_student_allergy_path(@student.id), variant: :primary) if @tier == :full)
+      ].compact, " ") if @tier == :full) %>
 
 <% if @tier == :full -%>
   <%= render "shared/detail_list", items: {
@@ -19,7 +23,7 @@
 <h3>Alergias y contraindicaciones</h3>
 <% if @record.allergies.any? -%>
   <% @record.allergies.each do |allergy| -%>
-    <%= render "shared/allergen_flag", name: allergy.name, severity: allergy.severity, reaction: allergy.reaction %>
+    <%= render "shared/allergen_flag", name: allergy.allergen_name, severity: allergy.severity_symbol, reaction: allergy.reaction %>
   <% end -%>
 <% else -%>
   <%= render "shared/empty_state", title: "Sin alergias registradas" %>

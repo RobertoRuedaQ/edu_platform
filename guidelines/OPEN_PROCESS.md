@@ -196,7 +196,7 @@
     - **Primera entrada de `Navigation::Registry` del dominio `core`** (`config/navigation/core.rb`) — a diferencia de las lentes HPS institución-wide-only, esta SÍ es una administración genuina con su propio índice (términos, no personas).
     - 7 tests nuevos (740→747 runs totales, 0 fallos, 1 skip preexistente, en serie). Ver `HISTORIA.md` v1.44.0.
 
-30. **`student_support` — `disciplinary_logs` real** (`guidelines/CLOSURE_PLAN.md` §3.1/Fase B) — ✅ **cerrado (v1.45.0).** Cierra "seguimiento disciplinario" del criterio de hecho — la única salvedad de tier C que el plan NO permitía diferir. Corte mínimo ya confirmado por el owner: solo convivencia, `medical_history`/`accommodations` siguen stub Clase C.
+30. **`student_support` — `disciplinary_logs` real** (`guidelines/CLOSURE_PLAN.md` §3.1/Fase B) — ✅ **cerrado (v1.45.0).** Cierra "seguimiento disciplinario" del criterio de hecho — la única salvedad de tier C que el plan NO permitía diferir. Corte mínimo ya confirmado por el owner: solo convivencia, `medical_history`/`accommodations` siguen stub Clase C en ese momento (cerrados después, ver ítem #33, v1.48.0).
     - **El hallazgo**: `DisciplinaryLogsController#create` no persistía NADA (`flash[:notice]` de éxito sin ningún `.save` — un no-op literal detrás de un mensaje de éxito falso), y resolvía el estudiante vía `GroupManagement::StudentRoster`, OTRO stub con IDs falsos.
     - **`StudentSupport::DisciplinaryLog`** net-new, molde EXACTO `Counseling::Case` (la referencia explícita del plan): tenant-scoped, `reported_by_institution_user_id` FK RESTRICT (identidad/accountability), `category` string+CHECK. **Sin columna `status`** — a diferencia de `care_auras`/`character_evaluations`, no hay ningún ciclo de vida; es inmutable desde que se crea (nunca hubo ni hay ruta update/destroy).
     - **Reusa el permiso `disciplinary_logs.manage` YA EXISTENTE** — cero permiso nuevo. Auditado (`disciplinary_log.recorded`).
@@ -218,6 +218,14 @@
     - `DietaryRestriction` ganó `ALLERGEN_NAMES`/`BLOCKING_TYPES` (separa alergias reales de preferencias informativas) + `severity_symbol` (traduce el español sembrado al inglés que `shared/_allergen_flag` espera). `CheckoutsController` resuelve al estudiante por `student_code` real, retirando otro uso de `GroupManagement::StudentRoster`.
     - **Deliberadamente fuera de alcance**: `MenuRoster`/`Purchase`/`StudentAccount` siguen stub — modelar un menú/compra/saldo real es una pieza más grande, dejada para un futuro incremento driver-based.
     - 4 tests nuevos + 3 existentes corregidos (dependían del stub con IDs falsos) (763→767 runs totales, 0 fallos, 1 skip preexistente, en serie). Ver `HISTORIA.md` v1.47.0.
+
+33. **`student_support` — `medical_history`/`student_allergies`/`accommodations` reales, segundo incremento de Fase D** (`guidelines/CLOSURE_PLAN.md` Fase D) — ✅ **cerrado (v1.48.0).** Cierra el resto de `student_support` que Fase B (v1.45.0) había diferido a propósito como tier C.
+    - **El hallazgo**: `AccommodationsController` no exponía `new`/`create` (`only: %i[index edit update]`) — sin una acomodación sembrada por consola, la pantalla quedaba permanentemente vacía; mismo hueco operativo que motivó el CRUD de `academic_terms` (v1.44.0).
+    - Tres tablas net-new (`medical_histories`, `student_allergies`, `accommodations`, RLS `ENABLE+FORCE`) reemplazan `MedicalHistoryRoster`/`AccommodationRoster`. `student_allergies` independiente de `medical_histories` (no anidada) — un colegio puede registrar una alergia antes de una historia médica completa.
+    - **Patrón de dos tiers reusado** (`medical_history.view` completo vs. `medical_history.view_summary` resumen, ya existía en el controller antes de este incremento) — ahora respaldado por datos reales. `StudentAllergiesController` (nuevo) gateado únicamente por el tier completo.
+    - **Sin cifrado de columna** — misma postura que las notas clínicas T3 de `counseling` (verificado por grep antes de decidir): RLS + RBAC es la protección real en esta fase.
+    - `update_params` de `accommodations` deliberadamente restringido a `:description` — cambiar `kind`/`status` es una decisión de producto más grande, dejada para un incremento futuro.
+    - 3 tests nuevos + resto migrados de IDs de stub falsos (`"s-1"`/`"s-4"`/`"acc-1"`) a estudiantes/registros reales vía `find_or_create_by!` idempotente (767→770 runs totales, 0 fallos, 1 skip preexistente, en serie). Ver `HISTORIA.md` v1.48.0.
 
 ---
 

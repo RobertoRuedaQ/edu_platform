@@ -4,12 +4,12 @@
 <%= render "shared/page_header", title: student_name, subtitle: @student.section&.name %>
 
 <%#
-  Perfil y Matrícula son datos reales (#4 barrido, v1.14.0). Convivencia es
-  real desde guidelines/CLOSURE_PLAN.md Fase B (StudentSupport::
-  DisciplinaryLog). Acomodaciones se queda cross-domain en stub
-  (student_support, Clase C — sin tabla real, ver HISTORIA.md) — gateada por
-  su propio permiso, ausente (no deshabilitada) si el actor no lo tiene, igual
-  que el resto de la nav.
+  Perfil y Matrícula son datos reales (#4 barrido, v1.14.0). Convivencia y
+  Acomodaciones son reales desde guidelines/CLOSURE_PLAN.md Fase B/D
+  (StudentSupport::DisciplinaryLog/Accommodation) — gateadas por su propio
+  permiso, ausentes (no deshabilitadas) si el actor no lo tiene, igual que el
+  resto de la nav. `medical_history` no tiene panel aquí (vive en su propia
+  ruta de dos niveles, no en esta vista resumen).
 -%>
 <% panels = {} -%>
 
@@ -57,10 +57,11 @@
 
 <% if can?("accommodations.view", @student) -%>
   <% panels["Acomodaciones"] = capture do %>
-    <% accommodations = StudentSupport::AccommodationRoster.for_student(@student.id).select { |a| a.status == "active" } -%>
+    <% accommodations = StudentSupport::Accommodation.where(institution_id: Current.institution_id,
+         student_id: @student.id, status: "active") -%>
     <% if accommodations.any? -%>
       <% accommodations.each do |accommodation| -%>
-        <p><strong><%= accommodation.kind.humanize %>:</strong> <%= accommodation.description %></p>
+        <p><strong><%= accommodation.kind_label %>:</strong> <%= accommodation.description %></p>
       <% end -%>
     <% else -%>
       <%= render "shared/empty_state", title: "Sin acomodaciones vigentes" %>

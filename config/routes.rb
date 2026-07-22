@@ -267,8 +267,9 @@ Rails.application.routes.draw do
     get "dashboard", to: "support_dashboard#show", as: "support_dashboard"
 
     resources :students, only: [] do
-      resource :medical_history, only: :show, controller: "medical_history"
-      resources :accommodations, only: %i[index edit update]
+      resource :medical_history, only: %i[show edit update], controller: "medical_history"
+      resources :student_allergies, only: %i[new create]
+      resources :accommodations, only: %i[index new create edit update]
       resources :disciplinary_logs, only: %i[index create]
     end
   end

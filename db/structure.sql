@@ -64,6 +64,27 @@ ALTER TABLE ONLY public.academic_terms FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: accommodations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.accommodations (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    student_id uuid NOT NULL,
+    authorized_by_institution_user_id uuid NOT NULL,
+    kind character varying NOT NULL,
+    description text NOT NULL,
+    status character varying DEFAULT 'active'::character varying NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT accommodations_kind_check CHECK (((kind)::text = ANY ((ARRAY['extra_time'::character varying, 'adapted_material'::character varying, 'preferential_seating'::character varying, 'other'::character varying])::text[]))),
+    CONSTRAINT accommodations_status_check CHECK (((status)::text = ANY ((ARRAY['active'::character varying, 'expired'::character varying])::text[])))
+);
+
+ALTER TABLE ONLY public.accommodations FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: active_storage_attachments; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1149,6 +1170,24 @@ CREATE TABLE public.invoices (
 
 
 --
+-- Name: medical_histories; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.medical_histories (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    student_id uuid NOT NULL,
+    blood_type character varying,
+    conditions jsonb DEFAULT '[]'::jsonb NOT NULL,
+    medications jsonb DEFAULT '[]'::jsonb NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+ALTER TABLE ONLY public.medical_histories FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: messages; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1717,6 +1756,25 @@ ALTER TABLE ONLY public.student_affinities FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: student_allergies; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.student_allergies (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    student_id uuid NOT NULL,
+    allergen_name character varying NOT NULL,
+    severity character varying NOT NULL,
+    reaction text,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT student_allergies_severity_check CHECK (((severity)::text = ANY ((ARRAY['mild'::character varying, 'moderate'::character varying, 'severe'::character varying, 'anaphylaxis'::character varying])::text[])))
+);
+
+ALTER TABLE ONLY public.student_allergies FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: student_guardians; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2019,6 +2077,14 @@ ALTER TABLE ONLY public.active_storage_variant_records ALTER COLUMN id SET DEFAU
 
 ALTER TABLE ONLY public.academic_terms
     ADD CONSTRAINT academic_terms_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: accommodations accommodations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.accommodations
+    ADD CONSTRAINT accommodations_pkey PRIMARY KEY (id);
 
 
 --
@@ -2454,6 +2520,14 @@ ALTER TABLE ONLY public.invoices
 
 
 --
+-- Name: medical_histories medical_histories_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.medical_histories
+    ADD CONSTRAINT medical_histories_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: messages messages_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2710,6 +2784,14 @@ ALTER TABLE ONLY public.student_affinities
 
 
 --
+-- Name: student_allergies student_allergies_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.student_allergies
+    ADD CONSTRAINT student_allergies_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: student_guardians student_guardians_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2835,6 +2917,13 @@ ALTER TABLE ONLY public.usage_events
 
 ALTER TABLE ONLY public.users
     ADD CONSTRAINT users_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: idx_accommodations_on_inst_student; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_accommodations_on_inst_student ON public.accommodations USING btree (institution_id, student_id);
 
 
 --
@@ -3041,6 +3130,13 @@ CREATE UNIQUE INDEX idx_installments_seq ON public.installments USING btree (ins
 
 
 --
+-- Name: idx_medical_histories_unique_student; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_medical_histories_unique_student ON public.medical_histories USING btree (institution_id, student_id);
+
+
+--
 -- Name: idx_messages_on_conversation_and_time; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3234,6 +3330,13 @@ CREATE INDEX idx_student_affinities_on_inst_taxonomy ON public.student_affinitie
 --
 
 CREATE UNIQUE INDEX idx_student_affinities_unique_link ON public.student_affinities USING btree (institution_id, student_id, taxonomy_id, academic_term_id);
+
+
+--
+-- Name: idx_student_allergies_on_inst_student; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_student_allergies_on_inst_student ON public.student_allergies USING btree (institution_id, student_id);
 
 
 --
@@ -4309,6 +4412,14 @@ ALTER TABLE ONLY public.disciplinary_logs
 
 
 --
+-- Name: accommodations fk_rails_0fb3409ffa; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.accommodations
+    ADD CONSTRAINT fk_rails_0fb3409ffa FOREIGN KEY (authorized_by_institution_user_id) REFERENCES public.institution_users(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: enrollments fk_rails_107f77c451; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4442,6 +4553,14 @@ ALTER TABLE ONLY public.invitations
 
 ALTER TABLE ONLY public.peer_appreciations
     ADD CONSTRAINT fk_rails_20ac912a33 FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE CASCADE;
+
+
+--
+-- Name: student_allergies fk_rails_23c9c1f09f; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.student_allergies
+    ADD CONSTRAINT fk_rails_23c9c1f09f FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
 
 
 --
@@ -4701,6 +4820,14 @@ ALTER TABLE ONLY public.disciplinary_logs
 
 
 --
+-- Name: accommodations fk_rails_451b46d84a; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.accommodations
+    ADD CONSTRAINT fk_rails_451b46d84a FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: disciplinary_logs fk_rails_455a29b78b; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4813,6 +4940,14 @@ ALTER TABLE ONLY public.rubric_evaluations
 
 
 --
+-- Name: accommodations fk_rails_570c3596e7; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.accommodations
+    ADD CONSTRAINT fk_rails_570c3596e7 FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE CASCADE;
+
+
+--
 -- Name: email_otps fk_rails_57d2c47354; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4874,6 +5009,14 @@ ALTER TABLE ONLY public.assignments
 
 ALTER TABLE ONLY public.role_permissions
     ADD CONSTRAINT fk_rails_60126080bd FOREIGN KEY (role_id) REFERENCES public.roles(id) ON DELETE CASCADE;
+
+
+--
+-- Name: medical_histories fk_rails_60d81313ff; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.medical_histories
+    ADD CONSTRAINT fk_rails_60d81313ff FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
 
 
 --
@@ -5234,6 +5377,14 @@ ALTER TABLE ONLY public.rubric_criteria
 
 ALTER TABLE ONLY public.attendance_records
     ADD CONSTRAINT fk_rails_828d16c97c FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE CASCADE;
+
+
+--
+-- Name: student_allergies fk_rails_8301b3ce51; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.student_allergies
+    ADD CONSTRAINT fk_rails_8301b3ce51 FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE CASCADE;
 
 
 --
@@ -5757,6 +5908,14 @@ ALTER TABLE ONLY public.conversation_participants
 
 
 --
+-- Name: medical_histories fk_rails_cedac8245e; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.medical_histories
+    ADD CONSTRAINT fk_rails_cedac8245e FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE CASCADE;
+
+
+--
 -- Name: group_memberships fk_rails_cfcf8ca0a6; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -6103,6 +6262,19 @@ ALTER TABLE public.academic_terms ENABLE ROW LEVEL SECURITY;
 --
 
 CREATE POLICY academic_terms_tenant_isolation ON public.academic_terms USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: accommodations; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.accommodations ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: accommodations accommodations_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY accommodations_tenant_isolation ON public.accommodations USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
 
 
 --
@@ -6626,6 +6798,19 @@ CREATE POLICY invitations_tenant_isolation ON public.invitations USING ((institu
 
 
 --
+-- Name: medical_histories; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.medical_histories ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: medical_histories medical_histories_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY medical_histories_tenant_isolation ON public.medical_histories USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
 -- Name: messages; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -6938,6 +7123,19 @@ CREATE POLICY student_affinities_tenant_isolation ON public.student_affinities U
 
 
 --
+-- Name: student_allergies; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.student_allergies ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: student_allergies student_allergies_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY student_allergies_tenant_isolation ON public.student_allergies USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
 -- Name: student_guardians; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -7061,6 +7259,7 @@ CREATE POLICY teaching_assignments_tenant_isolation ON public.teaching_assignmen
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260721170000'),
 ('20260721160000'),
 ('20260721150000'),
 ('20260721140000'),

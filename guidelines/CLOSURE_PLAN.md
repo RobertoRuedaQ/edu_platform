@@ -166,13 +166,12 @@ real. Ver `HISTORIA.md` v1.46.0.
   (ya real) conectado de verdad al checkout, reemplazando el stub paralelo `DietaryRestrictionRoster`.
   `MenuRoster`/`Purchase`/`StudentAccount` (menú, venta, saldo) siguen stub — deferido, es una pieza
   más grande (Menú/MenuItem + Compra + deducción de saldo con locking). Ver `HISTORIA.md` v1.47.0.
-- **`student_support` — resto** (`medical_history`/`accommodations`, ambos aún stub con
-  `flash[:notice]` falso en `accommodations#update`) — sin construir. Candidato natural para el
-  próximo incremento: mismo molde que `disciplinary_logs` (v1.45.0) — `medical_history` es de
-  SOLO LECTURA hoy (dos niveles ya modelados vía permisos `medical_history.view`/`.view_summary`);
-  `accommodations` tiene edición (`accommodations.manage`) pero NINGUNA acción de creación en las
-  rutas actuales (`only: %i[index edit update]`) — confirmar con el owner si construir un `new`/
-  `create` real entra en el mismo incremento o se difiere, igual que se hizo con `academic_terms`.
+- ~~**`student_support` — resto**~~ ✅ **CERRADO (v1.48.0).** `medical_histories`/`student_allergies`/
+  `accommodations` (tres tablas net-new, RLS `ENABLE+FORCE`) reemplazan `MedicalHistoryRoster`/
+  `AccommodationRoster`. `AccommodationsController` ganó `new`/`create` (antes `only: %i[index edit
+  update]`, sin ningún camino de creación real) — mismo criterio que `academic_terms` (v1.44.0): sin
+  eso la pantalla quedaba permanentemente vacía. `StudentAllergiesController` (nuevo, `new`/`create`)
+  gateado por el tier completo únicamente. Ver `HISTORIA.md` v1.48.0.
 - **`cafeteria` — resto** (Menú/Compra/Saldo) — sin construir, driver-based, cuando haya necesidad.
 - **`transportation` / timetable / `admissions`/`library`** — sin construir, sin recon todavía.
 

@@ -17,6 +17,51 @@
 > moviera el changelog fuera del doc magro. Las entradas v1.6.0+ se escribieron directamente aquí,
 > ya con el split vigente.
 
+### v1.48.0 — 2026-07-21 — `student_support`: `medical_history`/`student_allergies`/`accommodations` reales — segundo incremento de Fase D (`CLOSURE_PLAN.md`)
+
+**No es parte del criterio de hecho end-to-end** (completo desde v1.46.0) — es el segundo paso de
+Fase D, mismo patrón de conversión stub→real ya aplicado a `disciplinary_logs` (v1.45.0) y a
+`cafeteria`'s `DietaryRestriction` (v1.47.0).
+
+**El hallazgo**: `StudentSupport::MedicalHistoryController` y `StudentSupport::AccommodationsController`
+leían dos stubs paralelos (`MedicalHistoryRoster`/`AccommodationRoster`, con estudiantes falsos
+"s-1"/"s-4" y una acomodación falsa "acc-1"), y ninguno de los dos tenía siquiera una ruta de
+creación: `AccommodationsController` solo exponía `index`/`edit`/`update` — sin una acomodación
+sembrada de antemano por consola, la pantalla quedaba permanentemente vacía. El mismo vacío
+operativo que motivó agregar CRUD completo a `academic_terms` en v1.44.0.
+
+**Cambio técnico**: tres tablas nuevas — `medical_histories` (una fila por estudiante, `blood_type`
++ `conditions`/`medications` en `jsonb`, único índice `institution_id, student_id`),
+`student_allergies` (independiente de `medical_histories`, no anidada — un colegio puede registrar
+una alergia antes de tener una historia médica completa; `severity` con CHECK
+`mild/moderate/severe/anaphylaxis`), y `accommodations` (`kind` con CHECK
+`extra_time/adapted_material/preferential_seating/other`, `status` con CHECK `active/expired`,
+`authorized_by_institution_user_id` con `ON DELETE RESTRICT` — autor identity-accountable, mismo
+molde que el resto del repo). Las tres con RLS `ENABLE + FORCE`. Sin cifrado de columna — misma
+postura que `counseling`'s notas clínicas T3 (verificado por grep antes de decidir): RLS + RBAC es
+el mecanismo de protección real en esta fase, no cifrado a nivel de columna.
+
+**Patrón de dos niveles reusado** (`medical_history.view` completo vs. `medical_history.view_summary`
+resumen — mismo molde que ya existía en el controller antes de este incremento, ahora respaldado por
+datos reales): el controller intenta el permiso amplio primero, cae al resumido, y solo usa
+`authorize!` como gate final si ninguno aplica. `StudentAllergiesController` (nuevo, solo
+`new`/`create`) está gateado únicamente por el tier completo — el tier resumido puede leer pero nunca
+autorear una alergia. `AccommodationsController` ganó `new`/`create` (antes inexistentes);
+`update_params` deliberadamente restringido a `:description` — cambiar `kind`/`status` es una
+decisión de producto más grande, dejada explícitamente para un incremento futuro.
+
+**Deliberadamente fuera de este incremento**: nada quedó a medias dentro de las tres tablas — el
+resto de Fase D pendiente (`cafeteria`'s `Menu`/`Purchase`/`StudentAccount`, `transportation`,
+horario/`admissions`/`library`) sigue sin tocar.
+
+**Tests (suite completa 767→770 runs / 0 fallos / 1 skip preexistente, en serie
+`PARALLEL_WORKERS=1`):** un estudiante sin fila de `MedicalHistory` aún renderiza un estado vacío
+honesto, nunca un 404; el tier completo (`medical_staff`) puede editar la historia y agregar una
+alergia, el tier resumido no puede (403 en ambos casos); un coordinador puede crear una nueva
+acomodación, un rol de solo lectura no puede; todos los tests que dependían de IDs falsos de los
+stubs retirados (`s-1`/`s-4`/`acc-1`) migrados a estudiantes/registros reales vía
+`find_or_create_by!` idempotente (`student_support_test.rb`).
+
 ### v1.47.0 — 2026-07-21 — `cafeteria`: chequeo de alérgenos real — primer incremento de Fase D (`CLOSURE_PLAN.md`)
 
 **No es parte del criterio de hecho end-to-end** (ya completo desde v1.46.0) — es el primer paso de

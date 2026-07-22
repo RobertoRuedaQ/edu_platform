@@ -3,6 +3,13 @@ require "test_helper"
 class StudentSupportTest < ActionDispatch::IntegrationTest
   setup { @user, @institution = sign_in_as_member }
 
+  def within_tenant(institution)
+    ActiveRecord::Base.transaction do
+      Tenant::Guc.set_local(institution.id)
+      yield
+    end
+  end
+
   # Counselor scoped to 9°A only: full wellbeing toolkit, but the NARROW
   # medical tier (summary, not the owner's full record).
   def as_counselor_9a(&block)
@@ -52,82 +59,10 @@ class StudentSupportTest < ActionDispatch::IntegrationTest
   # file used to hold them from before counseling was carved out as its own
   # domain.
 
-  # --- medical_history: two tiers of the same resource -----------------------
-
-  test "medical_staff sees the full clinical record" do
-    as_medical_staff do
-      get "/student_support/students/s-1/medical_history"
-      assert_response :success
-      assert_select "dd", text: /Asma leve/
-    end
-  end
-
-  test "counselor sees only the allergy summary, never the full record" do
-    as_counselor_9a do
-      get "/student_support/students/s-1/medical_history" # s-1 is in stub-section-9a
-      assert_response :success
-      assert_select ".allergen__name", text: "Maní"
-      assert_select "dd", text: /Asma leve/, count: 0
-    end
-  end
-
-  test "counselor is denied medical history outside their own group" do
-    as_counselor_9a do
-      get "/student_support/students/s-4/medical_history" # s-4 is in stub-section-10a
-      assert_response :forbidden
-    end
-  end
-
-  test "an actor with neither medical tier is denied" do
-    as_coordinator do
-      get "/student_support/students/s-1/medical_history"
-      assert_response :forbidden
-    end
-  end
-
-  # --- accommodations: view vs manage ----------------------------------------
-
-  test "accommodations index is scoped by the student's group" do
-    as_counselor_9a do
-      get "/student_support/students/s-1/accommodations" # s-1 is in stub-section-9a
-      assert_response :success
-
-      get "/student_support/students/s-4/accommodations" # s-4 is in stub-section-10a
-      assert_response :forbidden
-    end
-  end
-
-  test "can? shows 'Editar' only for a role holding accommodations.manage" do
-    as_coordinator do
-      get "/student_support/students/s-1/accommodations"
-      assert_select "a.btn", text: "Editar"
-    end
-
-    as_homeroom_readonly do
-      get "/student_support/students/s-1/accommodations"
-      assert_response :success
-      assert_select "a.btn", text: "Editar", count: 0
-    end
-  end
-
-  test "authorize! denies editing an accommodation for a read-only role, matching can?" do
-    as_homeroom_readonly do
-      get "/student_support/students/s-1/accommodations/acc-1/edit"
-      assert_response :forbidden
-    end
-  end
-
-  test "coordinator can edit an accommodation" do
-    as_coordinator do
-      get "/student_support/students/s-1/accommodations/acc-1/edit"
-      assert_response :success
-    end
-  end
-
-  # --- disciplinary_logs (convivencia) — REAL since guidelines/CLOSURE_PLAN.md
-  # Fase B (StudentSupport::DisciplinaryLog replaces the DisciplinaryLogRoster
-  # stub). Real students in real sections, not the old stub string ids.
-
+  # Real students in real sections (matching GroupRoster's fixed section ids
+  # so the group-scoped role helpers above cover/exclude the right one),
+  # shared by medical_history/accommodations/disciplinary_logs tests — all
+  # real since guidelines/CLOSURE_PLAN.md Fase B/D replaced their stubs.
   def build_real_students
     ActiveRecord::Base.transaction do
       Tenant::Guc.set_local(@institution.id)
@@ -141,13 +76,194 @@ class StudentSupportTest < ActionDispatch::IntegrationTest
         s.name = "11°B"
         s.academic_year = 2026
       end
-      in_scope = GroupManagement::Student.create!(institution: @institution, first_name: "Ana", last_name: "P",
-        gender: "female", birthdate: Date.new(2013, 3, 1), student_code: "DISC-IN", entry_year: 2023, section: section_9a)
-      out_of_scope = GroupManagement::Student.create!(institution: @institution, first_name: "Leo", last_name: "P",
-        gender: "male", birthdate: Date.new(2013, 3, 1), student_code: "DISC-OUT", entry_year: 2023, section: section_11b)
+      in_scope = GroupManagement::Student.find_or_create_by!(student_code: "DISC-IN") do |s|
+        s.institution = @institution; s.first_name = "Ana"; s.last_name = "P"; s.gender = "female"
+        s.birthdate = Date.new(2013, 3, 1); s.entry_year = 2023; s.section = section_9a
+      end
+      out_of_scope = GroupManagement::Student.find_or_create_by!(student_code: "DISC-OUT") do |s|
+        s.institution = @institution; s.first_name = "Leo"; s.last_name = "P"; s.gender = "male"
+        s.birthdate = Date.new(2013, 3, 1); s.entry_year = 2023; s.section = section_11b
+      end
       [ in_scope, out_of_scope ]
     end
   end
+
+  # --- medical_history: two tiers of the same resource -----------------------
+  # REAL since guidelines/CLOSURE_PLAN.md Fase D — StudentSupport::
+  # MedicalHistory/StudentAllergy replace the MedicalHistoryRoster stub.
+
+  test "medical_staff sees the full clinical record" do
+    in_scope, = build_real_students
+    within_tenant(@institution) do
+      StudentSupport::MedicalHistory.create!(institution: @institution, student: in_scope, conditions: [ "Asma leve" ])
+    end
+
+    as_medical_staff do
+      get "/student_support/students/#{in_scope.id}/medical_history"
+      assert_response :success
+      assert_select "dd", text: /Asma leve/
+    end
+  end
+
+  test "counselor sees only the allergy summary, never the full record" do
+    in_scope, = build_real_students
+    within_tenant(@institution) do
+      StudentSupport::MedicalHistory.create!(institution: @institution, student: in_scope, conditions: [ "Asma leve" ])
+      StudentSupport::StudentAllergy.create!(institution: @institution, student: in_scope,
+        allergen_name: "Maní", severity: "severe")
+    end
+
+    as_counselor_9a do
+      get "/student_support/students/#{in_scope.id}/medical_history"
+      assert_response :success
+      assert_select ".allergen__name", text: "Maní"
+      assert_select "dd", text: /Asma leve/, count: 0
+    end
+  end
+
+  test "counselor is denied medical history outside their own group" do
+    _in_scope, out_of_scope = build_real_students
+
+    as_counselor_9a do
+      get "/student_support/students/#{out_of_scope.id}/medical_history"
+      assert_response :forbidden
+    end
+  end
+
+  test "an actor with neither medical tier is denied" do
+    in_scope, = build_real_students
+
+    as_coordinator do
+      get "/student_support/students/#{in_scope.id}/medical_history"
+      assert_response :forbidden
+    end
+  end
+
+  test "a student with NO medical history row yet still renders — an honest empty state, never a 404" do
+    in_scope, = build_real_students
+
+    as_medical_staff do
+      get "/student_support/students/#{in_scope.id}/medical_history"
+      assert_response :success
+      assert_select ".empty-state__title", text: "Sin alergias registradas"
+    end
+  end
+
+  test "medical_staff (full tier) can edit the record and add an allergy; the summary tier cannot" do
+    in_scope, = build_real_students
+
+    as_medical_staff do
+      get "/student_support/students/#{in_scope.id}/medical_history/edit"
+      assert_response :success
+
+      patch "/student_support/students/#{in_scope.id}/medical_history",
+        params: { medical_history: { blood_type: "O+", conditions: "Asma leve", medications: "" } }
+      assert_response :redirect
+      assert_equal "O+", within_tenant(@institution) { StudentSupport::MedicalHistory.find_by!(student_id: in_scope.id).blood_type }
+
+      assert_difference -> { StudentSupport::StudentAllergy.count }, 1 do
+        post "/student_support/students/#{in_scope.id}/student_allergies",
+          params: { student_allergy: { allergen_name: "Maní", severity: "severe" } }
+      end
+      assert_response :redirect
+    end
+
+    as_counselor_9a do
+      get "/student_support/students/#{in_scope.id}/medical_history/edit"
+      assert_response :forbidden
+
+      post "/student_support/students/#{in_scope.id}/student_allergies",
+        params: { student_allergy: { allergen_name: "Lactosa", severity: "mild" } }
+      assert_response :forbidden
+    end
+  end
+
+  # --- accommodations: view vs manage ----------------------------------------
+  # REAL since guidelines/CLOSURE_PLAN.md Fase D — StudentSupport::
+  # Accommodation replaces the AccommodationRoster stub (#update was a no-op).
+
+  def build_accommodation(student)
+    within_tenant(@institution) do
+      staff = @institution.memberships.find_by!(user: @user)
+      StudentSupport::Accommodation.create!(institution: @institution, student: student, authorized_by: staff,
+        kind: "extra_time", description: "Tiempo adicional en evaluaciones.")
+    end
+  end
+
+  test "accommodations index is scoped by the student's group" do
+    in_scope, out_of_scope = build_real_students
+
+    as_counselor_9a do
+      get "/student_support/students/#{in_scope.id}/accommodations"
+      assert_response :success
+
+      get "/student_support/students/#{out_of_scope.id}/accommodations"
+      assert_response :forbidden
+    end
+  end
+
+  test "can? shows 'Editar' only for a role holding accommodations.manage" do
+    in_scope, = build_real_students
+    build_accommodation(in_scope)
+
+    as_coordinator do
+      get "/student_support/students/#{in_scope.id}/accommodations"
+      assert_select "a.btn", text: "Editar"
+    end
+
+    as_homeroom_readonly do
+      get "/student_support/students/#{in_scope.id}/accommodations"
+      assert_response :success
+      assert_select "a.btn", text: "Editar", count: 0
+    end
+  end
+
+  test "authorize! denies editing an accommodation for a read-only role, matching can?" do
+    in_scope, = build_real_students
+    accommodation = build_accommodation(in_scope)
+
+    as_homeroom_readonly do
+      get "/student_support/students/#{in_scope.id}/accommodations/#{accommodation.id}/edit"
+      assert_response :forbidden
+    end
+  end
+
+  test "coordinator can edit an accommodation, and it persists for real" do
+    in_scope, = build_real_students
+    accommodation = build_accommodation(in_scope)
+
+    as_coordinator do
+      get "/student_support/students/#{in_scope.id}/accommodations/#{accommodation.id}/edit"
+      assert_response :success
+
+      patch "/student_support/students/#{in_scope.id}/accommodations/#{accommodation.id}",
+        params: { accommodation: { description: "Descripción actualizada." } }
+      assert_response :redirect
+      assert_equal "Descripción actualizada.", accommodation.reload.description
+    end
+  end
+
+  test "coordinator can create a new accommodation; a read-only role cannot" do
+    in_scope, = build_real_students
+
+    as_coordinator do
+      assert_difference -> { StudentSupport::Accommodation.count }, 1 do
+        post "/student_support/students/#{in_scope.id}/accommodations",
+          params: { accommodation: { kind: "adapted_material", description: "Material en fuente ampliada." } }
+      end
+      assert_response :redirect
+    end
+
+    as_homeroom_readonly do
+      post "/student_support/students/#{in_scope.id}/accommodations",
+        params: { accommodation: { kind: "other", description: "x" } }
+      assert_response :forbidden
+    end
+  end
+
+  # --- disciplinary_logs (convivencia) — REAL since guidelines/CLOSURE_PLAN.md
+  # Fase B (StudentSupport::DisciplinaryLog replaces the DisciplinaryLogRoster
+  # stub). Real students in real sections, not the old stub string ids.
 
   test "disciplinary log index/create are scoped to the student's group" do
     in_scope, out_of_scope = build_real_students
@@ -210,9 +326,9 @@ class StudentSupportTest < ActionDispatch::IntegrationTest
   test "support_dashboard shows scoped counts for a role holding all three permissions" do
     # Counseling::Case is real since #4 barrido (v1.14.0) — seed one open
     # case in the actor's own group so the dashboard's stat has something
-    # real to count (accommodations stays stub, Class C, unaffected;
-    # disciplinary_logs is real since guidelines/CLOSURE_PLAN.md Fase B but
-    # this test seeds none, so its stat stays "0").
+    # real to count (accommodations/disciplinary_logs are both real since
+    # guidelines/CLOSURE_PLAN.md Fase B/D but this test seeds neither, so
+    # those stats stay "0").
     ActiveRecord::Base.transaction do
       Tenant::Guc.set_local(@institution.id)
       section = GroupManagement::Section.find_or_create_by!(id: GroupManagement::GroupRoster::SECTION_9A_ID) do |s|
@@ -238,10 +354,10 @@ class StudentSupportTest < ActionDispatch::IntegrationTest
 
   test "students#show exposes Convivencia and Acomodaciones only with the matching permission" do
     # group_management#show reads a REAL GroupManagement::Student since the
-    # #4 barrido (v1.14.0). Convivencia is REAL since guidelines/CLOSURE_PLAN.md
-    # Fase B (StudentSupport::DisciplinaryLog); Acomodaciones stays on its
-    # pre-existing stub (student_support has no real accommodations table yet,
-    # Class C) — both gated by can? against this real student's real group_id.
+    # #4 barrido (v1.14.0). Convivencia AND Acomodaciones are both real since
+    # guidelines/CLOSURE_PLAN.md Fase B/D (StudentSupport::DisciplinaryLog/
+    # Accommodation) — both gated by can? against this real student's real
+    # group_id.
     real_student = ActiveRecord::Base.transaction do
       Tenant::Guc.set_local(@institution.id)
       section = GroupManagement::Section.find_or_create_by!(id: GroupManagement::GroupRoster::SECTION_9A_ID) do |s|

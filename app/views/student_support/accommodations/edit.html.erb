@@ -1,8 +1,12 @@
 <% content_for :title, "Editar acomodación" %>
 
-<%= render "shared/page_header", title: "Editar acomodación", subtitle: @accommodation.kind.humanize %>
+<%= render "shared/page_header", title: "Editar acomodación", subtitle: @accommodation.kind_label %>
+
+<% if @accommodation.errors.any? -%>
+  <%= render "shared/alert", variant: :danger, message: @accommodation.errors.full_messages.join(", ") %>
+<% end -%>
 
 <%= form_with url: student_support_student_accommodation_path(@accommodation.student_id, @accommodation.id), method: :patch do %>
-  <%= render "shared/field", label: "Descripción", name: "description", value: @accommodation.description %>
+  <%= render "shared/field", label: "Descripción", name: "accommodation[description]", value: @accommodation.description %>
   <%= ui_button "Guardar cambios", type: "submit", variant: :primary %>
 <% end %>
