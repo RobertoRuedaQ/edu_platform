@@ -28,3 +28,15 @@ Navigation::Registry.register(
   permission: "hps.classroom.view",
   position: 70
 )
+
+# HPS Lens 3 — "Constelación de Afinidades" (v1.42.0, BI_DOCUMENT.md Slice 7).
+# Supervision surface, gated by hps.constellation.view (tenant-scoped: institución-
+# wide OR department-scoped specialist, never cross-tenant). Sits just after the
+# aula map, before the BI audit entry.
+Navigation::Registry.register(
+  domain: "analytics_bi",
+  label: "Constelación de afinidades",
+  path: "/analytics_bi/constellations",
+  permission: "hps.constellation.view",
+  position: 75
+)

@@ -438,6 +438,15 @@ Rails.application.routes.draw do
     # and the portal ficha (Lens 2) that reads it is Slice 6. The entry point is
     # a supervised student (student_id param), never a person search (§1.1.6).
     resources :character_evaluations, only: %i[new create]
+    # constellations (Lens 3, BI_DOCUMENT.md Slice 7): the "Constelación de
+    # Afinidades" supervision surface, gated by hps.constellation.view. index only
+    # — the graph ships the whole authorized scope once and the client dims/filters
+    # (§10.4), so there is no per-node show. student_affinities is the MINIMAL
+    # teacher_observed authoring path (gated by hps.affinity.author, student_id in
+    # params, never a person search §1.1.6); guardian/self-reported authoring is
+    # deferred to a future portal slice, same as Lens 2 was deferred from Slice 5.
+    resources :constellations, only: :index
+    resources :student_affinities, only: %i[new create]
   end
 
   # --- identity_access (domain views, Prompt Unificado) ---------------------

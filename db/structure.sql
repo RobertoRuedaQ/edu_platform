@@ -239,6 +239,27 @@ CREATE TABLE public.addons (
 
 
 --
+-- Name: affinity_taxonomy; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.affinity_taxonomy (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    parent_id uuid,
+    department_id uuid,
+    name character varying NOT NULL,
+    kind character varying NOT NULL,
+    active boolean DEFAULT true NOT NULL,
+    search_tsv tsvector GENERATED ALWAYS AS (to_tsvector('spanish'::regconfig, (COALESCE(name, ''::character varying))::text)) STORED,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT affinity_taxonomy_kind_check CHECK (((kind)::text = ANY ((ARRAY['sport'::character varying, 'art'::character varying, 'hobby'::character varying, 'academic'::character varying])::text[])))
+);
+
+ALTER TABLE ONLY public.affinity_taxonomy FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: announcements; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1617,6 +1638,27 @@ ALTER TABLE ONLY public.student_accounts FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: student_affinities; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.student_affinities (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    student_id uuid NOT NULL,
+    taxonomy_id uuid NOT NULL,
+    academic_term_id uuid NOT NULL,
+    source character varying NOT NULL,
+    context character varying NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT student_affinities_context_check CHECK (((context)::text = ANY ((ARRAY['in_school'::character varying, 'out_of_school'::character varying])::text[]))),
+    CONSTRAINT student_affinities_source_check CHECK (((source)::text = ANY ((ARRAY['teacher_observed'::character varying, 'guardian_reported'::character varying, 'self_reported'::character varying])::text[])))
+);
+
+ALTER TABLE ONLY public.student_affinities FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: student_guardians; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1967,6 +2009,14 @@ ALTER TABLE ONLY public.activity_enrollments
 
 ALTER TABLE ONLY public.addons
     ADD CONSTRAINT addons_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: affinity_taxonomy affinity_taxonomy_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.affinity_taxonomy
+    ADD CONSTRAINT affinity_taxonomy_pkey PRIMARY KEY (id);
 
 
 --
@@ -2570,6 +2620,14 @@ ALTER TABLE ONLY public.student_accounts
 
 
 --
+-- Name: student_affinities student_affinities_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.student_affinities
+    ADD CONSTRAINT student_affinities_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: student_guardians student_guardians_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2730,6 +2788,34 @@ CREATE INDEX idx_activity_enrollments_on_institution_activity ON public.activity
 --
 
 CREATE INDEX idx_activity_enrollments_on_institution_student ON public.activity_enrollments USING btree (institution_id, student_id);
+
+
+--
+-- Name: idx_affinity_taxonomy_on_inst_active; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_affinity_taxonomy_on_inst_active ON public.affinity_taxonomy USING btree (institution_id, active);
+
+
+--
+-- Name: idx_affinity_taxonomy_on_inst_department; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_affinity_taxonomy_on_inst_department ON public.affinity_taxonomy USING btree (institution_id, department_id);
+
+
+--
+-- Name: idx_affinity_taxonomy_on_inst_parent; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_affinity_taxonomy_on_inst_parent ON public.affinity_taxonomy USING btree (institution_id, parent_id);
+
+
+--
+-- Name: idx_affinity_taxonomy_on_search_tsv; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_affinity_taxonomy_on_search_tsv ON public.affinity_taxonomy USING gin (search_tsv);
 
 
 --
@@ -3024,6 +3110,20 @@ CREATE INDEX idx_rubric_templates_on_institution_author ON public.rubric_templat
 --
 
 CREATE INDEX idx_seat_assignments_on_inst_layout_from ON public.seat_assignments USING btree (institution_id, classroom_layout_id, effective_from);
+
+
+--
+-- Name: idx_student_affinities_on_inst_taxonomy; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_student_affinities_on_inst_taxonomy ON public.student_affinities USING btree (institution_id, taxonomy_id);
+
+
+--
+-- Name: idx_student_affinities_unique_link; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_student_affinities_unique_link ON public.student_affinities USING btree (institution_id, student_id, taxonomy_id, academic_term_id);
 
 
 --
@@ -4443,6 +4543,14 @@ ALTER TABLE ONLY public.activity_enrollments
 
 
 --
+-- Name: affinity_taxonomy fk_rails_438d28b022; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.affinity_taxonomy
+    ADD CONSTRAINT fk_rails_438d28b022 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: role_permissions fk_rails_439e640a3f; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4472,6 +4580,14 @@ ALTER TABLE ONLY public.peer_appreciations
 
 ALTER TABLE ONLY public.rubric_templates
     ADD CONSTRAINT fk_rails_47d9a03d06 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: student_affinities fk_rails_48d04b1eca; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.student_affinities
+    ADD CONSTRAINT fk_rails_48d04b1eca FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE CASCADE;
 
 
 --
@@ -4771,6 +4887,14 @@ ALTER TABLE ONLY public.staff_members
 
 
 --
+-- Name: student_affinities fk_rails_6ca864a80c; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.student_affinities
+    ADD CONSTRAINT fk_rails_6ca864a80c FOREIGN KEY (academic_term_id) REFERENCES public.academic_terms(id) ON DELETE CASCADE;
+
+
+--
 -- Name: character_levels fk_rails_6cdd625ba5; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4816,6 +4940,14 @@ ALTER TABLE ONLY public.character_evaluations
 
 ALTER TABLE ONLY public.assignment_materials
     ADD CONSTRAINT fk_rails_72cc164557 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: student_affinities fk_rails_7352153b1a; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.student_affinities
+    ADD CONSTRAINT fk_rails_7352153b1a FOREIGN KEY (taxonomy_id) REFERENCES public.affinity_taxonomy(id) ON DELETE CASCADE;
 
 
 --
@@ -5523,6 +5655,14 @@ ALTER TABLE ONLY public.roster_import_rows
 
 
 --
+-- Name: affinity_taxonomy fk_rails_d973a92d33; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.affinity_taxonomy
+    ADD CONSTRAINT fk_rails_d973a92d33 FOREIGN KEY (parent_id) REFERENCES public.affinity_taxonomy(id) ON DELETE CASCADE;
+
+
+--
 -- Name: rubric_levels fk_rails_da91b8ecba; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -5595,6 +5735,14 @@ ALTER TABLE ONLY public.subjects
 
 
 --
+-- Name: affinity_taxonomy fk_rails_e39aa645da; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.affinity_taxonomy
+    ADD CONSTRAINT fk_rails_e39aa645da FOREIGN KEY (department_id) REFERENCES public.departments(id) ON DELETE SET NULL;
+
+
+--
 -- Name: charges fk_rails_e47d53b4c6; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -5608,6 +5756,14 @@ ALTER TABLE ONLY public.charges
 
 ALTER TABLE ONLY public.role_assignments
     ADD CONSTRAINT fk_rails_e4bfc1cd2c FOREIGN KEY (role_id) REFERENCES public.roles(id) ON DELETE CASCADE;
+
+
+--
+-- Name: student_affinities fk_rails_e50b4c976f; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.student_affinities
+    ADD CONSTRAINT fk_rails_e50b4c976f FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
 
 
 --
@@ -5807,6 +5963,19 @@ ALTER TABLE public.activity_enrollments ENABLE ROW LEVEL SECURITY;
 --
 
 CREATE POLICY activity_enrollments_tenant_isolation ON public.activity_enrollments USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: affinity_taxonomy; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.affinity_taxonomy ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: affinity_taxonomy affinity_taxonomy_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY affinity_taxonomy_tenant_isolation ON public.affinity_taxonomy USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
 
 
 --
@@ -6551,6 +6720,19 @@ CREATE POLICY student_accounts_tenant_isolation ON public.student_accounts USING
 
 
 --
+-- Name: student_affinities; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.student_affinities ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: student_affinities student_affinities_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY student_affinities_tenant_isolation ON public.student_affinities USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
 -- Name: student_guardians; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -6674,6 +6856,7 @@ CREATE POLICY teaching_assignments_tenant_isolation ON public.teaching_assignmen
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260721130000'),
 ('20260721120000'),
 ('20260717220000'),
 ('20260717213000'),

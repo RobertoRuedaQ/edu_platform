@@ -137,7 +137,23 @@ module IdentityAccess
       # it via bootstrap, like every key EXCEPT cross_tenant_reports.view) — it is
       # NOT cross-tenant.
       "hps.character.author"   => "Crear y publicar evaluaciones de carácter (Lente 2 del HPS, T2)",
-      "hps.character.moderate" => "Moderar aportes de pares/acudientes (retirar y ver trazabilidad, auditado)"
+      "hps.character.moderate" => "Moderar aportes de pares/acudientes (retirar y ver trazabilidad, auditado)",
+      # analytics_bi HPS Lens 3 (v1.42.0, BI_DOCUMENT.md Slice 7): "Constelación de
+      # Afinidades". Two keys, split by ACTION (view vs author), not by
+      # confidentiality — the same read/write discipline the Lens-1 tests rely on
+      # (hps.classroom.view never implies a write):
+      #   hps.constellation.view — SUPERVISION (RBAC + scope): institución-wide
+      #     (orientación/directivas) OR department_id (a specialist), resolved in
+      #     AnalyticsBi::Lens::ConstellationScope via the EXISTING :department scope
+      #     reader (no new scope_type). Views the transversal talent graph.
+      #   hps.affinity.author — the MINIMAL teacher_observed tagging write
+      #     (AnalyticsBi::StudentAffinitiesController, molde #4, scope group_id via
+      #     the student's section). guardian_reported/self_reported authoring is a
+      #     deferred portal slice. Mirrors hps.character.author exactly.
+      # hps.* is a NORMAL per-institution permission (institution_admin inherits it
+      # via bootstrap, like every key EXCEPT cross_tenant_reports.view) — NOT cross-tenant.
+      "hps.constellation.view" => "Ver la constelación de afinidades (Lente 3 del HPS)",
+      "hps.affinity.author"    => "Registrar afinidades observadas por el docente (Lente 3 del HPS, T2)"
     }.freeze
 
     def self.call

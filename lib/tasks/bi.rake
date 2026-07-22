@@ -91,4 +91,48 @@ namespace :bi do
       puts "#{institution.name}: character starter seeded (framework + #{STARTER_TAGS.size} tags)"
     end
   end
+
+  # Slice 7 (BI_DOCUMENT.md §5.5). Seeds a STARTER affinity_taxonomy tree — same
+  # posture as bi:seed_character_starter (Slice 5): a real curated taxonomy is a
+  # pedagogical/product decision this task does not make, it only stands in for
+  # a framework-authoring UI that this slice deliberately did not build.
+  # Idempotent — safe to re-run. Usage: bin/rails bi:seed_affinity_starter[institution_id].
+  STARTER_TAXONOMY = {
+    "sport" => { "Deportes" => %w[Fútbol Baloncesto Natación Atletismo] },
+    "art"   => { "Artes" => %w[Piano Pintura Teatro Danza] },
+    "hobby" => { "Pasatiempos" => %w[Ajedrez Videojuegos Lectura] },
+    "academic" => { "Académico" => %w[Matemáticas Ciencias Robótica] }
+  }.freeze
+
+  desc "Seed the starter affinity taxonomy (Slice 7, §5.5). Idempotent. " \
+       "Usage: bin/rails bi:seed_affinity_starter[institution_id] (all if omitted)."
+  task :seed_affinity_starter, [ :institution_id ] => :environment do |_t, args|
+    institutions = args[:institution_id].presence ? Core::Institution.where(id: args[:institution_id]) : Core::Institution.all
+
+    institutions.find_each do |institution|
+      count = 0
+      Current.set(institution_id: institution.id) do
+        ActiveRecord::Base.transaction do
+          Tenant::Guc.set_local(institution.id)
+
+          STARTER_TAXONOMY.each do |kind, roots|
+            roots.each do |root_name, children|
+              root = AnalyticsBi::AffinityTaxonomy.find_or_create_by!(
+                institution: institution, name: root_name, parent_id: nil
+              ) { |t| t.kind = kind; t.active = true }
+              count += 1
+
+              children.each do |child_name|
+                AnalyticsBi::AffinityTaxonomy.find_or_create_by!(
+                  institution: institution, name: child_name, parent: root
+                ) { |t| t.kind = kind; t.active = true }
+                count += 1
+              end
+            end
+          end
+        end
+      end
+      puts "#{institution.name}: affinity starter seeded (#{count} taxonomy nodes)"
+    end
+  end
 end

@@ -17,10 +17,10 @@
 
 | Campo | Valor |
 |---|---|
-| **Versión** | `v0.7.0` |
+| **Versión** | `v0.8.0` |
 | **Fecha** | 2026-07-21 |
-| **Estado global de referencia** | `PROJECT_STATE.md v1.40.0` — `analytics_bi` AMBAS mitades reales (`InstitutionDashboard`/`CrossTenantReportRoster`) **+ Lente 1 real + Lente 5 real + temporalidad año-a-año real + instrumento de carácter (T2) real + Lente 2 (Ficha de Personaje) real**, la primera lente de autoservicio (acudiente/estudiante). |
-| **Estado del dominio** | Filosofía, tiers de confidencialidad, ERD conceptual, modelo de acceso de las 5 lentes, guardas de RLS/clínicas, estrategia de procesamiento y slicing — **fijados**. **Slice 1 (cross-tenant) cerrado** (primera conexión BYPASSRLS real). **Slice 2 (Lente 1, mapa espacial + heat) cerrado (v1.36.0)** — geometría de aula (`classroom_layouts`/`seat_assignments`) net-new en `group_management` (decisión A2), heat derivado in-memory de T1 (notas/asistencia). **Slice 3 (Lente 5, "Auras de Cuidado") cerrado (v1.37.0)** — proyección `care_auras` net-new en `analytics_bi`, escrita SOLO por `AnalyticsBi::Aura::Projector` invocado desde `counseling` (cero PII clínica, cero acoplamiento inverso), leída por el docente como un ícono abstracto sobre la Lente 1 (`hps.aura.view`); aislamiento clínico probado a nivel de MODELO (SQL tap + estructura de asociaciones). **Slice 4 (temporalidad año-a-año) cerrado (v1.38.0)** — `student_placements` net-new en `group_management` (decisión A1 resuelta) efectivo-fechado/append-only vía `GroupManagement::SectionReassigner`, el ÚNICO seam que mueve un estudiante de sección; `hps_term_snapshots` net-new en `analytics_bi` (§7), congelado por `AnalyticsBi::Hps::Snapshotter` vía el fan-out `HpsTermSnapshotJob`/`HpsTermSnapshotAllJob`. **Slice 5 (instrumento de carácter, T2) cerrado (v1.39.0)** — el instrumento staff-autoría (`character_frameworks`→`evaluations`→`dimension_scores`, molde rúbrica con `framework_snapshot` congelado) y, SEPARADO, el camino de pares/acudientes (`peer_appreciations`, catálogo cerrado `peer_appreciation_tags`, umbral de agregación, moderación append-only) gateado por el **primer consentimiento del codebase** (`character_program_consents`). **Slice 6 (Lente 2, "Ficha de Personaje") cerrado (v1.40.0)** — la primera lente de AUTOSERVICIO: radar/brújula/medallas/crecimiento consumidos en solo-lectura de las tablas del Slice 5 (cero tablas nuevas), la UI de consentimiento del acudiente y la superficie de dar un aporte de par (ambas deferidas del Slice 5), gateadas por identidad (`GuardianScope`/`StudentSelfScope`), nunca RBAC. Slices 7–8 (afinidades/Lente 3, núcleo familiar/Lente 4) sin construir aún. |
+| **Estado global de referencia** | `PROJECT_STATE.md v1.42.0` — `analytics_bi` AMBAS mitades reales (`InstitutionDashboard`/`CrossTenantReportRoster`) **+ Lente 1 real + Lente 5 real + temporalidad año-a-año real + instrumento de carácter (T2) real + Lente 2 real + Lente 3 (Constelación de Afinidades) real** — la primera librería JS del codebase (Cytoscape.js, importmap, progressive enhancement). |
+| **Estado del dominio** | Filosofía, tiers de confidencialidad, ERD conceptual, modelo de acceso de las 5 lentes, guardas de RLS/clínicas, estrategia de procesamiento y slicing — **fijados**. **Slice 1 (cross-tenant) cerrado** (primera conexión BYPASSRLS real). **Slice 2 (Lente 1, mapa espacial + heat) cerrado (v1.36.0)** — geometría de aula (`classroom_layouts`/`seat_assignments`) net-new en `group_management` (decisión A2), heat derivado in-memory de T1 (notas/asistencia). **Slice 3 (Lente 5, "Auras de Cuidado") cerrado (v1.37.0)** — proyección `care_auras` net-new en `analytics_bi`, escrita SOLO por `AnalyticsBi::Aura::Projector` invocado desde `counseling` (cero PII clínica, cero acoplamiento inverso), leída por el docente como un ícono abstracto sobre la Lente 1 (`hps.aura.view`); aislamiento clínico probado a nivel de MODELO (SQL tap + estructura de asociaciones). **Slice 4 (temporalidad año-a-año) cerrado (v1.38.0)** — `student_placements` net-new en `group_management` (decisión A1 resuelta) efectivo-fechado/append-only vía `GroupManagement::SectionReassigner`, el ÚNICO seam que mueve un estudiante de sección; `hps_term_snapshots` net-new en `analytics_bi` (§7), congelado por `AnalyticsBi::Hps::Snapshotter` vía el fan-out `HpsTermSnapshotJob`/`HpsTermSnapshotAllJob`. **Slice 5 (instrumento de carácter, T2) cerrado (v1.39.0)** — el instrumento staff-autoría (`character_frameworks`→`evaluations`→`dimension_scores`, molde rúbrica con `framework_snapshot` congelado) y, SEPARADO, el camino de pares/acudientes (`peer_appreciations`, catálogo cerrado `peer_appreciation_tags`, umbral de agregación, moderación append-only) gateado por el **primer consentimiento del codebase** (`character_program_consents`). **Slice 6 (Lente 2, "Ficha de Personaje") cerrado (v1.40.0)** — la primera lente de AUTOSERVICIO: radar/brújula/medallas/crecimiento consumidos en solo-lectura de las tablas del Slice 5 (cero tablas nuevas), la UI de consentimiento del acudiente y la superficie de dar un aporte de par (ambas deferidas del Slice 5), gateadas por identidad (`GuardianScope`/`StudentSelfScope`), nunca RBAC. **Slice 7 (Lente 3, "Constelación de Afinidades") cerrado (v1.42.0)** — `affinity_taxonomy`/`student_affinities` net-new (T2), scope institución-wide o `department_id` (especialista, reusando el `:department` scope reader existente), relajación acotada de §10.3 con Cytoscape.js (importmap, progressive enhancement — fallback accesible siempre real). Slice 8 (núcleo familiar/Lente 4) sin construir aún. |
 
 **Versionado (igual que los demás docs):** MAJOR = cambia una decisión de diseño asentada del dominio
 o su modelo de tiers · MINOR = se cierra un slice o una decisión abierta · PATCH =
@@ -726,7 +726,7 @@ con entrada en `HISTORIA.md` + actualización de `OPEN_PROCESS.md`.
 | **4** | Temporalidad año-a-año (`student_placements` + `hps_term_snapshots`) | net-new transversal | media | **✅ HECHO (v1.38.0)** — §5.2 / A1 resuelta a favor de `group_management` |
 | **5** | Instrumento de carácter (T2, molde rúbrica) | net-new + sensible | alta (NNA) | **✅ HECHO (v1.39.0)** — §5.4, consentimiento |
 | **6** | Lente 2 — ficha de personaje (portal, autoservicio) | usa slice 5 | alta (digna+NNA) | **✅ HECHO (v1.40.0)** — Slices 4, 5 |
-| **7** | Afinidades + Lente 3 constelación | net-new + lib JS | alta | §5.5, §10.3 |
+| **7** | Afinidades + Lente 3 constelación | net-new + lib JS | alta | **✅ HECHO (v1.42.0)** — §5.5, §10.3 |
 | **8** | Núcleo familiar + Lente 4 (grafo orbital, tensión, lazos fraternales) | extiende `guardian_students` | alta | §5.6, §10.3 |
 
 **Justificación del orden:**
@@ -785,6 +785,106 @@ Antes de dar por cerrado cualquier slice de este dominio:
 ---
 
 ## 14. Changelog
+
+### v0.8.0 — 2026-07-21 — Slice 7 cerrado: Lente 3 "Constelación de Afinidades"
+
+- **Primera librería JS real del codebase** — la relajación acotada que §10.3 ya pre-aprobaba
+  específicamente para esta lente y la Lente 4, ejercida por primera vez. Además, primer consumidor
+  real del mecanismo `IdentityAccess::PermissionCheck#scope_for` (existía desde P1, sin ningún
+  dominio adoptándolo — "adopción incremental por dominio").
+
+- **`AnalyticsBi::AffinityTaxonomy`/`AnalyticsBi::StudentAffinity`** (§5.5), net-new, tenant-scoped
+  (RLS `ENABLE+FORCE`, `uuidv7()`, índice líder `institution_id`). Árbol curado auto-referencial
+  (`parent_id`), `kind` (`sport`/`art`/`hobby`/`academic`, `string`+CHECK — desviación documentada
+  del `smallint` del boceto, mismo molde `care_auras.aura_kind`/`character_evaluations.author_kind`).
+  **`search_tsv` es una columna GENERADA nativa de PG18** (`GENERATED ALWAYS AS
+  (to_tsvector('spanish', name)) STORED`, índice GIN) — sin trigger/callback, Postgres la mantiene
+  sola. `student_affinities` (vínculo estudiante↔talento): `source`
+  (`teacher_observed`/`guardian_reported`/`self_reported`) + `context`
+  (`in_school`/`out_of_school`), ambos `string`+CHECK; único por `(institution, student, taxonomy,
+  term)`.
+
+- **Extensión de esquema más allá del boceto de §5.5 (documentada): `affinity_taxonomy` gana un
+  `department_id` FK nullable.** El §4 hace de la Lente 3 una superficie de SUPERVISIÓN con scope
+  "institución-wide O `department_id` (un especialista)" — pero ni el boceto del ERD ni `students`
+  exponían una dimensión de departamento para que el lector de scope `:department` (YA existente en
+  `Authorization::Assignment::SCOPE_READERS`) tuviera algo que cubrir. Etiquetar el árbol curado por
+  departamento (el subárbol Deportes → el departamento Deportes) es la forma mínima y honesta de
+  hacer el modelo de acceso del §4 REAL y testeable, reusando el lector `:department` exactamente
+  como la Lente 1 reusó `:group`/`:grade_level` — **nunca un `scope_type` nuevo**. Un
+  `department_id` NULL es un talento de nivel-institución, visible solo con un grant institución-wide.
+  La constelación en sí sigue siendo "transversal al colegio" (§1.2): un especialista con scope de
+  departamento ve a TODOS los estudiantes de todo el colegio que tengan un talento de su
+  departamento, nunca solo los de su propia sección.
+
+- **La búsqueda es SOLO de talento, nunca de persona (no-negociable §1.1.6).**
+  `AnalyticsBi::Lens::TaxonomySearchScope` corre `websearch_to_tsquery('spanish', ...)` contra
+  `search_tsv` — su SQL no tiene ningún join ni columna de `students`, probado con una aserción
+  estructural sobre el SQL generado (no solo revisión de código). Una búsqueda vacía no matchea
+  "todo", matchea nada.
+
+- **`AnalyticsBi::Lens::ConstellationScope`** resuelve QUÉ nodos de talento puede ver el observador
+  (institución-wide vs. su(s) departamento(s)) vía `context.scope_for("hps.constellation.view")` —
+  filtra a nivel de índice (`idx_affinity_taxonomy_on_inst_department`) en vez de cargar cada fila y
+  llamar `can?` una por una (ambos son equivalentes, documentado en el propio motor). Un observador
+  con el permiso pero SIN ningún grant de departamento falla cerrado (relación vacía), nunca "ve
+  todo por error".
+
+- **`AnalyticsBi::Lens::ConstellationBuilder`** ensambla el grafo en memoria (§7 default): TODOS los
+  nodos de talento autorizados + TODOS los estudiantes vinculados a ellos, como un `Graph` (`Data`)
+  con nodos de talento, nodos de estudiante (**iniciales** como etiqueta de grafo — el nombre
+  completo solo en el fallback accesible que el mismo observador ya autorizado lee, misma postura
+  que `AnalyticsBi::Svg::SeatGrid`) y enlaces. **Nunca un ranking entre estudiantes** (no-negociable
+  §1.1.3) — es un mapa de descubrimiento ("quién comparte este talento"), no una tabla de
+  posiciones. Cero dato más allá de lo que el observador ya tiene permiso de ver cruza al cliente.
+
+- **Cytoscape.js, pinneado vía `bin/importmap pin cytoscape` (resuelto y vendorizado de verdad,
+  3.34.0, `vendor/javascript/cytoscape.js`)** — elegido sobre ensamblar D3 a mano
+  (`d3-force`+`d3-drag`+`d3-zoom`) porque trae arrastre/zoom/expansión (§10.3 los pide
+  explícitamente) listos para usar, con mucho menos JS propio que mantener ("aburrido sobre
+  ingenioso"). **Progressive enhancement real**: `constellation_controller.js` intenta un `import`
+  DINÁMICO de Cytoscape dentro de `connect()`, envuelto en `try/catch` — un pin roto o ausente
+  simplemente deja visible el fallback server-renderizado (lista agrupada por talento), la página
+  nunca se rompe. El servidor entrega TODO el scope autorizado una sola vez como datos ya en el DOM
+  (`data-constellation-graph-value`, mismo molde §10.4 que la Lente 1); la búsqueda filtra/atenúa en
+  el cliente sin round-trip, tanto en el grafo (dimming de nodos) como en el fallback plano (mismo
+  input, dos caminos de filtrado según haya JS o no).
+
+- **Autoría mínima: solo `teacher_observed`.** `AnalyticsBi::StudentAffinitiesController`
+  (`new`/`create`, molde #4 supervisión, gate NUEVO `hps.affinity.author` — espejo exacto de
+  `hps.character.author`, scope vía `StudentAffinity#group_id` delegado al estudiante, mismo truco
+  que `character_evaluations`/`care_aura`). El punto de entrada es un estudiante ya supervisado
+  (`student_id` en params), nunca un buscador de personas. **Deferido, documentado**: la UI de
+  autoría `guardian_reported`/`self_reported` (portal) — un futuro slice, exactamente como la Lente 2
+  fue deferida del Slice 5.
+
+- **Permisos nuevos**: `hps.constellation.view` (ver el grafo, scope institución-wide o
+  `department_id`) y `hps.affinity.author` (registrar afinidades observadas). Ambos normales
+  per-institución (heredados por `institution_admin` vía bootstrap, NO cross-tenant). Entrada nueva
+  en `Navigation::Registry` ("Constelación de afinidades") — esta lente SÍ es de supervisión, a
+  diferencia de la Lente 2.
+
+- **Taxonomía STARTER sembrada** (`bin/rails bi:seed_affinity_starter`, mismo posture que
+  `bi:seed_character_starter` del Slice 5) — Deportes/Artes/Pasatiempos/Académico con algunos hijos
+  de ejemplo; explícitamente NO curación pedagógica real, un placeholder hasta que exista una
+  necesidad real de curación (misma decisión A5 aplicada aquí por analogía).
+
+- **Tests (18 nuevos, suite completa 704→722 runs / 0 fallos / 1 skip preexistente, en serie
+  `PARALLEL_WORKERS=1`):** el CHECK de `kind` a nivel de BD (bypaseando la validación de app);
+  jerarquía padre/hijo; la búsqueda FTS acento-insensible + prueba estructural de que su SQL nunca
+  toca `students`; una búsqueda vacía no matchea nada; un nodo inactivo queda fuera de la búsqueda
+  por defecto; unicidad de `student_affinities` (AR y backstop de BD)
+  (`affinity_taxonomy_test.rb`); resolución de scope institución-wide vs. departamento (incluyendo un
+  talento de nivel-institución invisible para un especialista de departamento, y fail-closed sin
+  ningún grant de departamento) + ensamblado del grafo (conteos correctos, iniciales-nunca-nombre-
+  completo en el payload del cliente, grafo vacío honesto sin datos) (`constellation_test.rb`); caso
+  de aceptación HTTP — persona por defecto sin `hps.constellation.view`/`hps.affinity.author` recibe
+  403 en ambas superficies, un especialista de un departamento ve SOLO los talentos de su
+  departamento (el otro departamento no aparece en absoluto), un titular de `hps.affinity.author`
+  registra de verdad, y reenviar la misma afinidad es un no-op amable, nunca un 500
+  (`analytics_bi_constellation_test.rb`).
+
+- Ver `HISTORIA.md` v1.42.0 para la narrativa completa del slice.
 
 ### v0.7.0 — 2026-07-21 — Slice 6 cerrado: Lente 2 "Ficha de Personaje" (autoservicio)
 

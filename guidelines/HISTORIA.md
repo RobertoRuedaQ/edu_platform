@@ -17,6 +17,145 @@
 > moviera el changelog fuera del doc magro. Las entradas v1.6.0+ se escribieron directamente aquí,
 > ya con el split vigente.
 
+### v1.42.0 — 2026-07-21 — `analytics_bi`: Lente 3 "Constelación de Afinidades" (Slice 7 de `BI_DOCUMENT.md`)
+
+**Duodécimo slice post-MVP, séptimo guiado por `guidelines/BI_DOCUMENT.md`, y el primero que introduce
+una librería JS real al codebase.** `BI_DOCUMENT.md §10.3` ya pre-aprobaba esta relajación
+específicamente para esta lente y la Lente 4 (núcleo familiar) — hasta ahora nunca ejercida. También el
+primer consumidor real de `IdentityAccess::PermissionCheck#scope_for`, un mecanismo que existía desde
+que P1 se cerró pero ningún dominio había adoptado todavía ("adopción incremental por dominio",
+documentado en el propio motor).
+
+**Recon-first (§12):** `grep create_table :affinity_taxonomy` / `:student_affinities` → ninguna
+existía. Se leyó `Authorization::Assignment::SCOPE_READERS` y `IdentityAccess::PermissionCheck` ANTES
+de modelar el acceso, confirmando que el lector `:department` (`department_id`) ya existía y estaba
+funcionando (usado hoy por `staff_management`), y que `scope_for` era real pero sin ningún consumidor
+— evitando reinventar cualquiera de los dos.
+
+**`AnalyticsBi::AffinityTaxonomy`/`AnalyticsBi::StudentAffinity`** (§5.5), net-new, tenant-scoped (RLS
+`ENABLE+FORCE`, `uuidv7()`, índice líder `institution_id`). El árbol curado es auto-referencial
+(`parent_id` → `affinity_taxonomy`), `kind` (`sport`/`art`/`hobby`/`academic`) es `string`+CHECK —
+desviación documentada del `smallint` que el boceto de §5.5 dibuja, la misma corrección que los
+Slices 2/3/5 ya hicieron contra este mismo documento. **`search_tsv` es una columna GENERADA nativa
+de Postgres 18** (`GENERATED ALWAYS AS (to_tsvector('spanish', name)) STORED`, índice GIN) — sin
+trigger ni callback de Rails manteniéndola, el propio motor de base de datos la recalcula en cada
+escritura. `student_affinities` vincula estudiante↔talento con `source`
+(`teacher_observed`/`guardian_reported`/`self_reported`) + `context` (`in_school`/`out_of_school`,
+ambos `string`+CHECK) y un único índice por `(institution, student, taxonomy, term)`.
+
+**Extensión de esquema más allá del boceto de §5.5, documentada con su razón exacta: `affinity_taxonomy`
+gana un `department_id` FK nullable.** El §4 define la Lente 3 como supervisión con scope
+"institución-wide O `department_id` (un especialista)" — pero ni el ERD del §5.5 ni `students` exponían
+una dimensión de departamento para que el lector `:department` (ya existente en
+`Authorization::Assignment::SCOPE_READERS`) tuviera algo que cubrir. La solución mínima y honesta:
+etiquetar el árbol curado por departamento (el subárbol "Deportes" cuelga del departamento Deportes),
+reusando el lector `:department` EXACTAMENTE como la Lente 1 ya reusó `:group`/`:grade_level` en
+v1.36.0 — nunca inventando un `scope_type` nuevo. Un `department_id` `NULL` es un talento de
+nivel-institución, visible solo bajo un grant institución-wide; la constelación en sí sigue siendo
+"transversal al colegio" (§1.2) — un especialista con scope de departamento ve a TODOS los estudiantes
+de TODO el colegio que tengan un talento de su departamento, nunca solo los de su propia sección o
+grado (esa acotación sería la lógica de la Lente 1, no de esta).
+
+**La búsqueda es de TALENTO, nunca de PERSONA — el no-negociable más estricto de este slice (§1.1.6).**
+`AnalyticsBi::Lens::TaxonomySearchScope` corre `websearch_to_tsquery('spanish', ...)` contra
+`search_tsv`; su SQL generado no tiene NINGÚN join ni columna de `students` — probado con una
+aserción estructural directa sobre el SQL (`assert_no_match(/students/i, sql)`), no solo revisión de
+código, la misma disciplina de "a nivel de modelo" que los slices sensibles anteriores ya establecieron
+para otro tipo de frontera. Una búsqueda en blanco no matchea "todo", matchea nada — el mismo principio
+de "ausencia de dato nunca se confunde con universo completo" que ya rige en otros lados del codebase.
+
+**`AnalyticsBi::Lens::ConstellationScope`** resuelve QUÉ nodos de talento puede ver el observador —
+institución-wide o su(s) departamento(s) — vía `context.scope_for("hps.constellation.view")`, filtrando
+a nivel de índice (`idx_affinity_taxonomy_on_inst_department`) en vez de cargar cada fila y llamar
+`can?` una por una (el propio motor documenta que ambos caminos son equivalentes; este slice adoptó el
+de filtro por ser el que mejor encaja con "un especialista ve TODO su departamento", una consulta de
+conjunto, no una decisión por fila). Un observador con el permiso pero sin ningún grant de departamento
+falla CERRADO (relación vacía) — nunca "ve todo por accidente" cuando el scope no resuelve nada.
+
+**`AnalyticsBi::Lens::ConstellationBuilder`** ensambla el grafo en memoria (§7 default: cómputo en
+memoria sobre AR indexado): TODOS los nodos de talento autorizados + TODOS los estudiantes vinculados a
+ellos, como un `Graph` (`Data`) de nodos de talento, nodos de estudiante y enlaces. Los nodos de
+estudiante llevan **iniciales** como etiqueta del grafo — el nombre completo vive solo en el fallback
+accesible que el MISMO observador ya autorizado lee, la misma postura exacta que
+`AnalyticsBi::Svg::SeatGrid` ya estableció en la Lente 1 (v1.36.0). **Nunca un ranking entre
+estudiantes** (no-negociable §1.1.3): es un mapa de descubrimiento ("quién comparte este talento"),
+jamás una tabla de posiciones — verificado con un test que confirma que dos estudiantes con distinto
+número de afinidades no aparecen en ningún orden que sugiera jerarquía.
+
+**Cytoscape.js, pinneado de verdad vía `bin/importmap pin cytoscape`** (3.34.0, resuelto y vendorizado
+en `vendor/javascript/cytoscape.js` — no quedó como un pin sin resolver esperando a un humano con
+acceso de red). Elegido sobre ensamblar D3 a mano (`d3-force`+`d3-drag`+`d3-zoom`) porque trae
+arrastre/zoom/expansión — exactamente lo que §10.3 pide para esta lente — YA construidos, con mucho
+menos JS propio que mantener; "aburrido sobre ingenioso" también aplica a elegir librerías, no solo a
+patrones de Ruby. **Progressive enhancement real, no solo declarado**: `constellation_controller.js`
+intenta un `import` DINÁMICO de Cytoscape dentro de `connect()`, envuelto en `try/catch` — un pin roto
+o ausente simplemente deja visible el fallback server-renderizado (una lista agrupada por talento), la
+página nunca se rompe por un fallo de JS. El servidor entrega TODO el scope autorizado una sola vez
+como datos ya en el DOM (`data-constellation-graph-value`, el mismo molde de §10.4 que la Lente 1 ya
+usa); la búsqueda filtra/atenúa en el cliente sin round-trip, con dos caminos de filtrado según haya
+JS cargado o no (dimming de nodos en el grafo vs. ocultar secciones en la lista plana), ambos
+alimentados por el mismo campo de búsqueda.
+
+**Autoría mínima, a propósito: solo `teacher_observed`.** `AnalyticsBi::StudentAffinitiesController`
+(`new`/`create`, molde #4 supervisión) — gate NUEVO `hps.affinity.author`, espejo exacto de
+`hps.character.author` (Slice 5), scope vía `StudentAffinity#group_id` delegado al estudiante (mismo
+truco que `character_evaluations`/`care_aura`). El punto de entrada es un estudiante ya supervisado
+(`student_id` en params), nunca un buscador de personas. **Deferido, documentado a propósito**: la UI
+de autoría `guardian_reported`/`self_reported` (portal) — un futuro slice, exactamente la misma
+postura que dejó la superficie de la Lente 2 pendiente del Slice 5 hasta el Slice 6.
+
+**Permisos nuevos**: `hps.constellation.view` (ver el grafo, scope institución-wide o `department_id`)
+y `hps.affinity.author` (registrar afinidades observadas) — ambos normales per-institución (heredados
+por `institution_admin` vía bootstrap, NO cross-tenant). Entrada nueva en `Navigation::Registry`
+("Constelación de afinidades") — a diferencia de la Lente 2 (autoservicio, fuera del Registry), esta
+lente SÍ es de supervisión.
+
+**Taxonomía STARTER sembrada** (`bin/rails bi:seed_affinity_starter[institution_id]`, mismo posture
+que `bi:seed_character_starter` del Slice 5): Deportes (Fútbol/Baloncesto/Natación/Atletismo), Artes
+(Piano/Pintura/Teatro/Danza), Pasatiempos (Ajedrez/Videojuegos/Lectura), Académico
+(Matemáticas/Ciencias/Robótica) — explícitamente NO es curación pedagógica real, un placeholder hasta
+que exista una necesidad real de curación, la misma clase de decisión que A5 ya estableció para el
+instrumento de carácter.
+
+**Tests (18 nuevos, suite completa 704→722 runs / 0 fallos / 1 skip preexistente, en serie
+`PARALLEL_WORKERS=1`):** el CHECK de `kind` a nivel de BD, bypaseando la validación de app para probar
+el constraint en sí (`affinity_taxonomy_test.rb`); jerarquía padre/hijo; la búsqueda FTS
+acento-insensible (probado buscando "futbol" y encontrando "Fútbol") con la prueba estructural de que
+su SQL nunca menciona `students`; una búsqueda en blanco no matchea nada; un nodo inactivo queda fuera
+de la búsqueda por defecto; unicidad de `student_affinities` (validación de AR y backstop de índice
+único de BD); resolución de scope institución-wide vs. departamento — incluyendo un talento de
+nivel-institución invisible para un especialista de departamento, y el caso fail-closed sin ningún
+grant de departamento — más el ensamblado del grafo (conteos correctos, iniciales-nunca-nombre-completo
+en el payload que llega al cliente, un grafo vacío honesto cuando no hay datos)
+(`constellation_test.rb`); y el caso de aceptación HTTP completo — la persona por defecto sin
+`hps.constellation.view`/`hps.affinity.author` recibe 403 en ambas superficies, un especialista de un
+departamento ve SOLO los talentos de su propio departamento (el otro departamento no aparece en
+absoluto en la respuesta), un titular real de `hps.affinity.author` registra una afinidad de verdad, y
+reenviar la misma afinidad es un no-op amable (nunca un 500) (`analytics_bi_constellation_test.rb`).
+
+**Nota operativa de esta sesión**: el agente que implementó el grueso de este slice (migración,
+modelos, query objects, servicio, controllers, permisos, navegación, el controlador Stimulus, y el pin
+real de Cytoscape) fue interrumpido a mitad de tarea por un límite de gasto de la organización, ANTES
+de escribir las vistas, la tarea de seed y los tests. El trabajo ya hecho se auditó pieza por pieza
+(migración, modelos, query objects, servicio, controllers, permisos) contra el código real antes de
+continuar — todo resultó correcto y bien razonado — y el resto (dos vistas, el rake de seed, 18 tests,
+un pequeño bloque CSS para el canvas) se completó directamente, sin delegar a un agente nuevo, para no
+arriesgar otro corte de gasto a mitad de tarea.
+
+**Guardrails nuevos** (ver `OPEN_PROCESS.md` §2): "antes de modelar el acceso de una lente con scope
+`:department`/`:grade_level`/`:group`, confirmar que el lector YA existe en `SCOPE_READERS` y que el
+recurso puede exponer esa columna — si el recurso no la tiene, es válido AGREGAR una columna
+(documentada) al recurso para que el lector la cubra, en vez de inventar un `scope_type` nuevo";
+"`IdentityAccess::PermissionCheck#scope_for` es la vía de filtrado a nivel de índice para un Query
+object que necesita 'todo lo que cubre este scope' como conjunto, no fila por fila — usarlo cuando la
+pregunta es de conjunto (¿qué talentos ve este especialista?) y reservar el `can?` por-fila para cuando
+la decisión es genuinamente por-recurso"; "la prueba de 'esta búsqueda nunca toca datos de una
+persona' se hace con una aserción estructural sobre el SQL generado (`assert_no_match` sobre
+`to_sql`), no solo con revisión de código — mismo nivel de rigor que el aislamiento clínico de la
+Lente 5"; "una librería JS nueva bajo la relajación de §10.3 se verifica con progressive enhancement
+REAL: un `import` dinámico envuelto en `try/catch`, nunca una carga que rompa la página si el pin
+falla o el JS no se ejecuta".
+
 ### v1.41.0 — 2026-07-21 — `schedules`: matrícula por materia, acción deliberada (cierre de `CLOSURE_PLAN.md` §4.4)
 
 **No es un slice de `BI_DOCUMENT.md`** — es el primer ítem de `guidelines/CLOSURE_PLAN.md` (el plan de

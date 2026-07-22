@@ -1,0 +1,46 @@
+<% content_for :title, "Constelación de afinidades" %>
+
+<%= render "shared/page_header", title: "Constelación de afinidades",
+      subtitle: "Talentos y afinidades transversales al colegio (Lente 3 del HPS)." %>
+
+<% if @constellation.any? -%>
+  <div data-controller="constellation"
+       data-constellation-graph-value="<%= @constellation.cytoscape_elements.to_json %>">
+    <%= form_with url: analytics_bi_constellations_path, method: :get,
+          data: { action: "submit->constellation#onSubmit" } do %>
+      <%= render "shared/field", label: "Buscar un talento", name: "q", value: @query,
+            placeholder: "Ej. fútbol, piano…",
+            data: { constellation_target: "search", action: "input->constellation#filter" } %>
+    <% end %>
+
+    <p class="text-muted">
+      Busca un talento, nunca un estudiante — la constelación resalta a quiénes lo comparten
+      (§1.1.6: sin buscador de personas).
+    </p>
+
+    <div class="constellation__canvas" data-constellation-target="canvas" hidden></div>
+
+    <div data-constellation-target="fallback">
+      <% @constellation.taxonomy_nodes_present.each do |node| -%>
+        <% next if @matched_taxonomy_ids && !@matched_taxonomy_ids.include?(node.id) -%>
+        <section class="stack" data-constellation-target="group" data-talent-name="<%= node.name %>">
+          <h2><%= node.name %> <span class="text-muted">(<%= node.kind_label %>)</span></h2>
+          <ul>
+            <% @constellation.student_nodes_for(node.id).each do |student| -%>
+              <li><%= student.name %></li>
+            <% end -%>
+          </ul>
+        </section>
+      <% end -%>
+    </div>
+  </div>
+
+  <p class="text-muted">
+    <%= @constellation.student_count %> estudiantes · <%= @constellation.taxonomy_count %> talentos
+    visibles en tu alcance. El estudiante contra sí mismo, nunca un ranking entre niños (§1.1.3) — es
+    un mapa de descubrimiento, no una tabla de posiciones.
+  </p>
+<% else -%>
+  <%= render "shared/empty_state", title: "Sin afinidades registradas todavía",
+        description: "Un docente u orientador puede registrar una afinidad observada desde la ficha de un estudiante." %>
+<% end -%>
