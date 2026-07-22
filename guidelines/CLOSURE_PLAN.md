@@ -173,7 +173,23 @@ real. Ver `HISTORIA.md` v1.46.0.
   eso la pantalla quedaba permanentemente vacía. `StudentAllergiesController` (nuevo, `new`/`create`)
   gateado por el tier completo únicamente. Ver `HISTORIA.md` v1.48.0.
 - **`cafeteria` — resto** (Menú/Compra/Saldo) — sin construir, driver-based, cuando haya necesidad.
-- **`transportation` / timetable / `admissions`/`library`** — sin construir, sin recon todavía.
+- **Recon de `transportation`/timetable/`admissions`/`library` (2026-07-21)**: los cuatro siguen sin
+  tabla real (cero `create_table` en `db/migrate/` para ninguno). Pero NO son iguales entre sí:
+  - **`transportation`** y **`schedules` — mitad de horario/timetable** (`RoomScope`/`RouteScope`,
+    `RouteRoster`/`RiderRoster`/`RoomRoster`/`ScheduleEventRoster`) son **peor que "sin construir"**:
+    tienen controllers reales, vistas reales, permisos reales (`routes.view`/`boarding.manage`/
+    `rooms.view`/`timetable.manage`, los cuatro ya en `IdentityAccess::SeedPermissions::CATALOG`), Y
+    **entrada de nav ya visible en producción** ("Rutas"/"Abordaje"/"Horario institucional") — un
+    miembro de staff puede navegar hoy a una pantalla que parece real y encontrar datos 100% falsos
+    (`Data.define` con placas/conductores/horarios inventados). Es un callejón sin salida visible, no
+    un hueco invisible.
+  - **`admissions`** y **`library`** no tienen NINGÚN archivo, ruta, ni entrada de nav — cero
+    superficie, cero riesgo de UX. Construirlos sería un dominio enteramente greenfield, no una
+    conversión stub→real.
+  - **Implicación para la priorización**: si Fase D continúa, `transportation`/timetable son el
+    candidato más defendible (cierran un dead-end activo, mismo criterio de operabilidad que motivó
+    `academic_terms`/`accommodations#create`), no `admissions`/`library` (features nuevas sin ninguna
+    urgencia de "arreglar lo que ya se ve roto").
 
 ---
 
