@@ -200,6 +200,32 @@ class CafeteriaTest < ActionDispatch::IntegrationTest
     end
   end
 
+  # M1 (OPEN_PROCESS.md item #5, molde S3b v1.30.0): a real Purchase emits one
+  # "compras" usage event, and resubmitting the same idempotency_key never
+  # double-counts (Cafeteria::PurchaseRecorder's own idempotency guard).
+  test "M1: a real purchase emits one usage event, and resubmitting never duplicates it" do
+    ControlPlane::Addon.find_by!(key: "cafeteria").update!( # sign_in_as_member already seeded this, unmetered
+      metered: true, unit: "compras", included_quota: 100, overage_unit_price_cents: 30
+    )
+    student = build_student_with_allergy(restriction_type: "vegetariano")
+    item = @menu.fetch("Arroz con pollo")
+    key = SecureRandom.uuid
+
+    as_cafeteria_staff do
+      post "/cafeteria/checkouts", params: { student_id: student.id, item_ids: [ item.id ], idempotency_key: key }
+    end
+
+    events = ControlPlane::UsageEvent.where(institution_id: @institution.id)
+    assert_equal 1, events.count
+    assert_equal "compras", events.sole.unit
+
+    as_cafeteria_staff do
+      post "/cafeteria/checkouts", params: { student_id: student.id, item_ids: [ item.id ], idempotency_key: key }
+    end
+
+    assert_equal 1, ControlPlane::UsageEvent.where(institution_id: @institution.id).count
+  end
+
   test "guardian portal cafeteria shows the real balance of the guardian's own child after a real purchase" do
     student = build_student_with_allergy(restriction_type: "vegetariano")
     item = @menu.fetch("Yogurt con granola")

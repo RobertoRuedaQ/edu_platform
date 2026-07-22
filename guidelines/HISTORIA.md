@@ -17,6 +17,39 @@
 > moviera el changelog fuera del doc magro. Las entradas v1.6.0+ se escribieron directamente aquí,
 > ya con el split vigente.
 
+### v1.52.0 — 2026-07-22 — M1: metering real para `cafeteria`/`transportation` (`OPEN_PROCESS.md` ítem #5)
+
+Ambos dominios ya tenían un evento de negocio real — `Cafeteria::Purchase` desde v1.51.0,
+`Transportation::BoardingEvent` desde v1.49.0 — pero `ControlPlane::Usage::Ingest.emit` nunca se
+había cableado, el único trabajo que faltaba para que M1 (ver `PROJECT_STATE.md` §10) los considere
+cerrados. Cero decisión de negocio nueva: el molde es exactamente el de S3b (v1.30.0), reusado sin
+cambios — el mismo guardrail que fijó "un addon nace `metered:true` SOLO cuando su emit ya está
+cableado, nunca especulativamente" (v1.30.0, el propio caso de estudio fue `transportation`) sigue
+vigente; simplemente ya deja de aplicar a estos dos dominios porque ahora SÍ tienen el emit real.
+
+**Cambio técnico**: `Cafeteria::PurchaseRecorder` emite una unidad "compras" por cada `Purchase`
+real, dentro del mismo bloque que ya pasa el guard `next existing if existing` — un resubmit del
+mismo `idempotency_key` nunca re-emite (la venta ya no se duplica, así que su métrica tampoco).
+`Transportation::BoardingEventsController#create` emite una unidad "abordajes" tras cada
+`BoardingEvent#save` exitoso, keyed por el id de la fila — a diferencia de `attendance` (que colapsa
+en `(group, date)`), cada escaneo de abordaje/descenso es su propio evento real distinto, así que no
+hay una clave semántica más fina que el id de la fila misma que colapsar. `seed_catalog.rb` pasa
+ambos addons a `metered: true` **conservando** su `monthly_fee_cents` existente (`Addon#metered?`
+nunca exigió que un addon sea O flat-fee O medido — el modelo híbrido base+overage es válido y no
+rompe ningún supuesto de pricing ya vigente para institución alguna).
+
+**Deliberadamente fuera de alcance**: `student_support`/`counseling`/`analytics_bi` (Clase C o sin
+evento de negocio claro) y `schedules`-timetable (real desde v1.50.0, pero sin un evento de negocio
+tan claro como una clase impartida) — M1 sigue cerrando por dominio, nunca de una vez.
+
+**Tests (suite completa 792→794 runs / 0 fallos / 1 skip preexistente, en serie
+`PARALLEL_WORKERS=1`):** una compra real emite exactamente un evento "compras" y un resubmit del
+mismo `idempotency_key` nunca duplica ni la venta ni la métrica; un abordaje real emite un evento
+"abordajes" y un segundo intento RECHAZADO (event_type inválido) no emite nada; `seed_catalog_test.rb`
+reescrito — ya no afirma que `transportation` esté sin medir, y cubre los 8 dominios medidos más los
+4 que siguen sin medir a propósito (`test/integration/cafeteria_test.rb`,
+`test/integration/transportation_test.rb`, `test/models/control_plane/seed_catalog_test.rb`).
+
 ### v1.51.0 — 2026-07-22 — `cafeteria`: Menú/Compra/Saldo reales — quinto incremento de Fase D (`CLOSURE_PLAN.md`), cierra `OPEN_PROCESS.md` ítem #1
 
 **No es parte del criterio de hecho end-to-end** (completo desde v1.46.0) — es el quinto paso de

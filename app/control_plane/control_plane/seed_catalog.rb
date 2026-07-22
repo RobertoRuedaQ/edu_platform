@@ -10,14 +10,22 @@ module ControlPlane
     # M1 closes per-domain, not all at once: a domain is metered here ONLY
     # once its real facturable event is actually wired (S3b, v1.30.0) — never
     # speculatively, so this table never lies about what's really measured.
-    # `transportation` is Clase C (cero modelos reales, ningun checkout que
-    # emitir) — was metered:true before v1.30.0 purely aspirationally;
-    # flipped to false because a seed that promises measurement over nothing
-    # real is misleading (an invoice would never show overage, but the
-    # catalog implied it could).
+    # `transportation` was Clase C (cero modelos reales, ningún checkout que
+    # emitir) at v1.30.0, so it was flipped to false back then — a seed that
+    # promises measurement over nothing real would be misleading. Real since
+    # v1.49.0 (`Transportation::BoardingEvent`); metered for real here since
+    # OPEN_PROCESS.md item #5 (this slice) wired the actual emit call.
     ADDONS = [
-      { key: "cafeteria", name: "Cafetería", monthly_fee_cents: 800_000 },
-      { key: "transportation", name: "Transporte", monthly_fee_cents: 500_000 },
+      # cafeteria (OPEN_PROCESS.md item #5, this slice): Cafeteria::
+      # PurchaseRecorder emits one "compras" unit per real Purchase (already
+      # idempotent by its OWN idempotency_key, never double-counts a resubmit).
+      { key: "cafeteria", name: "Cafetería", monthly_fee_cents: 800_000, metered: true, unit: "compras",
+        included_quota: 8_000, overage_unit_price_cents: 30 },
+      # transportation (OPEN_PROCESS.md item #5, this slice): BoardingEventsController
+      # emits one "abordajes" unit per real BoardingEvent row — each scan is
+      # its own distinct real-world event, the row's own id is the anchor.
+      { key: "transportation", name: "Transporte", monthly_fee_cents: 500_000, metered: true, unit: "abordajes",
+        included_quota: 20_000, overage_unit_price_cents: 5 },
       { key: "schedules", name: "Horarios", monthly_fee_cents: 400_000 },
       { key: "student_support", name: "Bienestar estudiantil", monthly_fee_cents: 600_000 },
       { key: "counseling", name: "Consejería", monthly_fee_cents: 600_000 },

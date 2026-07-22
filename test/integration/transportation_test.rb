@@ -132,6 +132,32 @@ class TransportationTest < ActionDispatch::IntegrationTest
     end
   end
 
+  # M1 (OPEN_PROCESS.md item #5, molde S3b v1.30.0): each real BoardingEvent
+  # row emits its own "abordajes" usage event — unlike attendance there is no
+  # (route, student, day) row to collapse into, so a SECOND distinct scan for
+  # the same student is a second real event, not a duplicate.
+  test "M1: a real boarding event emits one usage event, and a rejected write emits none" do
+    ControlPlane::Addon.find_by!(key: "transportation").update!( # sign_in_as_member already seeded this, unmetered
+      metered: true, unit: "abordajes", included_quota: 100, overage_unit_price_cents: 5
+    )
+
+    as_driver_route1 do
+      post "/transportation/boarding_events",
+        params: { route_id: @route1.id, student_id: @student_in.id, event_type: "boarded" }
+    end
+
+    events = ControlPlane::UsageEvent.where(institution_id: @institution.id)
+    assert_equal 1, events.count
+    assert_equal "abordajes", events.sole.unit
+
+    as_driver_route1 do
+      post "/transportation/boarding_events",
+        params: { route_id: @route1.id, student_id: @student_in.id, event_type: "bogus" }
+    end
+
+    assert_equal 1, ControlPlane::UsageEvent.where(institution_id: @institution.id).count
+  end
+
   # --- portals: resolved by relation, no RBAC permission needed at all ------
 
   test "student portal transport renders the student's own routes, am and pm separately" do

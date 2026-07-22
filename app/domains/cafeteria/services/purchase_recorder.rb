@@ -11,6 +11,9 @@ module Cafeteria
   # would both pass a pre-lock existence check and race to the unique index,
   # surfacing a raw ActiveRecord::RecordNotUnique instead of the graceful
   # "return the existing sale" this checkout flow needs.
+  #
+  # M1 metering (OPEN_PROCESS.md item #5, molde S3b v1.30.0): emits one
+  # "compras" usage event per real Purchase.
   class PurchaseRecorder
     def self.call(institution:, student:, menu_items:, recorded_by:, idempotency_key: nil)
       new(institution: institution, student: student, menu_items: menu_items,
@@ -48,6 +51,7 @@ module Cafeteria
           Cafeteria::PurchaseLine.create!(institution: institution, purchase: purchase, menu_item: item,
             item_name: item.name, unit_price_cents: item.price_cents)
         end
+        emit_usage(purchase)
         purchase
       end
     end
@@ -79,6 +83,14 @@ module Cafeteria
 
     def total_amount
       BigDecimal(total_cents) / 100
+    end
+
+    # M1 (OPEN_PROCESS.md item #5): one "compras" unit per NEW real Purchase —
+    # only reached past the `next existing if existing` guard above, so a
+    # resubmitted idempotency_key never re-emits.
+    def emit_usage(purchase)
+      ControlPlane::Usage::Ingest.emit(institution: institution, addon_key: "cafeteria",
+        unit: "compras", occurred_at: purchase.purchased_at, idempotency_key: "cafeteria_purchase:#{purchase.id}")
     end
   end
 end

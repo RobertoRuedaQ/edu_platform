@@ -1,16 +1,10 @@
 require "test_helper"
 
-# S3b (v1.30.0): SeedCatalog is the demo catalog seed (S1) — this file only
-# covers what THIS slice changed (metered flags/units), not the whole seed.
+# S3b (v1.30.0) + OPEN_PROCESS.md item #5 (cafeteria/transportation, this
+# slice): SeedCatalog is the demo catalog seed (S1) — this file only covers
+# what metering slices changed (metered flags/units), not the whole seed.
 class ControlPlane::SeedCatalogTest < ActiveSupport::TestCase
-  test "transportation is unmetered (Clase C, no real event to measure — see OPEN_PROCESS.md guardrail v1.30.0)" do
-    ControlPlane::SeedCatalog.call
-    transportation = ControlPlane::Addon.find_by!(key: "transportation")
-    assert_not transportation.metered?
-    assert_nil transportation.unit
-  end
-
-  test "the six S3b domains are metered with their real facturable unit" do
+  test "the eight metered domains are metered with their real facturable unit" do
     ControlPlane::SeedCatalog.call
 
     expected = {
@@ -19,7 +13,9 @@ class ControlPlane::SeedCatalogTest < ActiveSupport::TestCase
       "report_cards" => "boletines",
       "assignments" => "entregas",
       "extracurriculars" => "inscripciones",
-      "finance" => "transacciones"
+      "finance" => "transacciones",
+      "cafeteria" => "compras",
+      "transportation" => "abordajes"
     }
     expected.each do |key, unit|
       addon = ControlPlane::Addon.find_by!(key: key)
@@ -27,6 +23,16 @@ class ControlPlane::SeedCatalogTest < ActiveSupport::TestCase
       assert_equal unit, addon.unit
       assert_not_nil addon.included_quota
       assert_not_nil addon.overage_unit_price_cents
+    end
+  end
+
+  test "the remaining Clase C / no-clear-event domains stay unmetered (OPEN_PROCESS.md item #5)" do
+    ControlPlane::SeedCatalog.call
+
+    %w[schedules student_support counseling analytics_bi].each do |key|
+      addon = ControlPlane::Addon.find_by!(key: key)
+      assert_not addon.metered?, "#{key} should stay unmetered"
+      assert_nil addon.unit
     end
   end
 

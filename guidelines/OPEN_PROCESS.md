@@ -43,12 +43,12 @@
    `boarding_events`, cuya persistencia ya es real desde v1.49.0) y `communication` (canales).
    Diferido, sin driver real todavía.
 
-5. **M1 — metering por dominio, resto** (ver `PROJECT_STATE.md` §10, fila M1): sigue abierto para
-   `cafeteria`/`student_support`/`counseling`/`analytics_bi` (Clase C o sin evento de negocio claro)
-   y también `transportation`/`schedules`-timetable — todos reales ya, pero SIN
-   `ControlPlane::Usage::Ingest.emit` cableado todavía (`cafeteria_purchase`/`boarding_event`/una
-   clase impartida serían los candidatos naturales) — cerrar por dominio, cuando cada uno tenga un
-   evento real que medir, nunca de una vez.
+5. **M1 — metering por dominio, resto** (ver `PROJECT_STATE.md` §10, fila M1): `cafeteria`
+   (v1.51.0→v1.52.0) y `transportation` (v1.49.0→v1.52.0) ya cerrados — sigue abierto solo para
+   `student_support`/`counseling`/`analytics_bi` (Clase C o sin evento de negocio claro) y
+   `schedules`-timetable (real desde v1.50.0, pero sin evento de negocio claro que medir todavía,
+   a diferencia de una clase impartida) — cerrar por dominio, cuando cada uno tenga un evento real
+   que medir, nunca de una vez.
 
 6. **Decisiones abiertas de arquitectura sin backlog de construcción propio** — ver
    `PROJECT_STATE.md` §10 para el detalle: **B2** (¿`role_assignments.valid_from/until` se acopla a
