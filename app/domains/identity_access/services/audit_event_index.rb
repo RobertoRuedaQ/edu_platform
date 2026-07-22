@@ -47,7 +47,14 @@ module IdentityAccess
       # this is a sensitive cross-student signal ("es una señal para
       # intervención humana, no un veredicto"), so every real exposure of it
       # is auditable, same posture as cross_tenant_report_accessed.
-      "family_core.sibling_alert_viewed" => "Alerta de lazos fraternales vista"
+      "family_core.sibling_alert_viewed" => "Alerta de lazos fraternales vista",
+      # student_support (v1.45.0, guidelines/CLOSURE_PLAN.md §3.1/Fase B):
+      # written every time a disciplinary_logs.manage holder records a new
+      # convivencia/disciplinary incident — see StudentSupport::
+      # DisciplinaryLogsController#create. Sensitive (Class S), append-only:
+      # every write is traceable both by the record's own
+      # reported_by_institution_user_id AND this audit trail.
+      "disciplinary_log.recorded" => "Registro de convivencia/disciplina creado"
     }.freeze
 
     Page = Data.define(:events, :page, :total_pages, :total_count)

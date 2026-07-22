@@ -3,14 +3,20 @@
 > **Qué es este documento.** Valida el camino para que `edu_platform` ejecute **de principio a fin**
 > todos los procesos académicos, sin cabos sueltos ni puntos de quiebre, y sequencia el trabajo que
 > falta. **Supersede la premisa de `LINEAMIENTOS_MVP_ITER2.md`** (que asumía el track HPS/BI parado):
-> HPS avanzó de Slice 1 a Slice 6 (v1.35.0→v1.40.0). Ante discrepancia con el repo/`HISTORIA.md`, gana
-> el repo.
+> HPS completó las 8 lentes/slices de su roadmap original (v1.35.0→v1.43.0) y la Fase B (seguimiento
+> disciplinario) también cerró (v1.45.0). Ante discrepancia con el repo/`HISTORIA.md`, gana el repo.
 >
 > **Nota de reconciliación (al guardar este doc, 2026-07-21):** `LINEAMIENTOS_MVP_ITER2.md` **no
 > existe en el repositorio** (verificado, `ls guidelines/`) — la referencia queda documentada tal como
 > se recibió; si ese doc existe en otro lugar o nunca se creó, corregir esta nota al confirmarlo. Este
 > plan además llegó con **Slice 6 marcado "en curso"**; al momento de guardarlo, **Slice 6 ya está
 > cerrado (v1.40.0)** — ver `HISTORIA.md` v1.40.0 y la corrección en §4/§5/§6 abajo.
+>
+> **Actualización (2026-07-21, tras Fase B):** Fases A y B están cerradas. Queda SOLO Fase C (alertas
+> tempranas) para completar el criterio de hecho §1 — el owner autorizó continuar asumiendo la opción
+> recomendada en cada decisión abierta que quedara sin confirmar explícitamente (ver §6.3, resuelta
+> con un default documentado, no una regla de negocio real confirmada — mismo principio de "boring
+> default, revisar cuando exista una necesidad real" ya aplicado repetidamente en este proyecto).
 
 ---
 
@@ -33,16 +39,15 @@ timetable/`admissions`/`library`) es **nice-to-have**, explícitamente fuera de 
 | **Registro de notas** | `schedules` | ✅ | `Assessment` (v1.14.0), única fuente de la nota. |
 | **Evaluación** | `assignments` + `analytics_bi` | ✅ | Track completo con rúbricas (v1.26.0); instrumento de carácter T2 (v1.39.0) + Lente 2/ficha (v1.40.0). |
 | **Seguimiento académico** | `report_cards`/`analytics_bi` | ✅ | Boletines + `hps_term_snapshots` (v1.38.0) + tendencias intra-estudiante + ficha del acudiente/estudiante (v1.40.0). |
-| **Seguimiento disciplinario** | `student_support` | ❌ **GAP** | Clase C — `disciplinary_logs` **no tiene tabla**. Es tier C, pero está en el criterio de hecho (§3.1). |
+| **Seguimiento disciplinario** | `student_support` | ✅ **CERRADO (v1.45.0)** | `StudentSupport::DisciplinaryLog`, molde `counseling`, ver §3.1 — corte mínimo (solo convivencia; `medical_history`/`accommodations` siguen stub). |
 | **Psicoorientación** | `counseling` | ✅ | Casos/sesiones/remisiones reales + proyección `care_auras` (v1.37.0). **No** es lo mismo que disciplinario. |
 | **Emisión de boletines** | `report_cards` | ✅ | Snapshot congelado al publicar (v1.17.0). |
 | **Alertas tempranas** (docente/acudiente) | — | ❌ **GAP** | No diseñado. Existen señales crudas (heat/auras/carácter), no una capa de síntesis+entrega (§3.2). |
 
-**Conclusión de la validación (actualizada 2026-07-21, Slice 8 cerrado):** las 8 lentes/slices de
-`analytics_bi` (Fase A) están TODAS cerradas (v1.35.0→v1.43.0) — ver `HISTORIA.md` v1.43.0. Esto
-**no** entrega por sí solo el criterio de hecho §1: quedan dos procesos sin construir (disciplinario,
-Fase B; alertas tempranas, Fase C — ambas con sus decisiones ya confirmadas por el owner en §6) y
-varios cabos menores (§4).
+**Conclusión de la validación (actualizada 2026-07-21, Fase B cerrada):** las 8 lentes/slices de
+`analytics_bi` (Fase A, v1.35.0→v1.43.0) y el seguimiento disciplinario (Fase B, v1.45.0) están
+CERRADOS — ver `HISTORIA.md` v1.43.0/v1.45.0. Queda un único proceso sin construir para el criterio de
+hecho §1: **alertas tempranas (Fase C)**.
 
 ---
 
@@ -117,11 +122,13 @@ frecuencia) no se modela — mismo principio anti-especulación del repo.
   construyó. Esto es lo único que falta para que "seguimiento año-a-año" sea 100% operativo sin
   consola; no bloquea nada más de Fase A/B/C.
 
-### FASE B — Cerrar seguimiento disciplinario (§3.1)
-- **Slice `student_support` mínimo — `disciplinary_logs` (S).** Molde `counseling`: append-only,
-  auditado, relación-gated en portal, caso de seguridad a nivel de modelo. `medical_history`/
-  `accommodations` NO entran (siguen diferidos). Con esto el criterio de hecho de "disciplinario"
-  queda cubierto sin abrir el Clase C completo.
+### FASE B — Cerrar seguimiento disciplinario (§3.1) — ✅ CERRADA (v1.45.0)
+- ~~**Slice `student_support` mínimo — `disciplinary_logs` (S).**~~ ✅ **CERRADO.** Molde `counseling`:
+  append-only (sin ruta update/destroy — inmutable desde que se crea), auditado
+  (`disciplinary_log.recorded`), permiso `disciplinary_logs.manage` REUSADO (ya existía). **Sin
+  portal** (misma postura que `counseling`, staff-only) — "relación-gated en portal" del boceto
+  original no aplicaba aquí, ninguna superficie de acudiente/estudiante. `medical_history`/
+  `accommodations` NO entraron (siguen diferidos, Clase C). Ver `HISTORIA.md` v1.45.0.
 
 ### FASE B' — Cerrar el hueco de matrícula (§4.4) — ✅ CERRADA (v1.41.0)
 - **Mini-slice: acción deliberada de matrícula por materia×término.** `Schedules::

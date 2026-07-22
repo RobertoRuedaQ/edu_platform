@@ -196,6 +196,14 @@
     - **Primera entrada de `Navigation::Registry` del dominio `core`** (`config/navigation/core.rb`) — a diferencia de las lentes HPS institución-wide-only, esta SÍ es una administración genuina con su propio índice (términos, no personas).
     - 7 tests nuevos (740→747 runs totales, 0 fallos, 1 skip preexistente, en serie). Ver `HISTORIA.md` v1.44.0.
 
+30. **`student_support` — `disciplinary_logs` real** (`guidelines/CLOSURE_PLAN.md` §3.1/Fase B) — ✅ **cerrado (v1.45.0).** Cierra "seguimiento disciplinario" del criterio de hecho — la única salvedad de tier C que el plan NO permitía diferir. Corte mínimo ya confirmado por el owner: solo convivencia, `medical_history`/`accommodations` siguen stub Clase C.
+    - **El hallazgo**: `DisciplinaryLogsController#create` no persistía NADA (`flash[:notice]` de éxito sin ningún `.save` — un no-op literal detrás de un mensaje de éxito falso), y resolvía el estudiante vía `GroupManagement::StudentRoster`, OTRO stub con IDs falsos.
+    - **`StudentSupport::DisciplinaryLog`** net-new, molde EXACTO `Counseling::Case` (la referencia explícita del plan): tenant-scoped, `reported_by_institution_user_id` FK RESTRICT (identidad/accountability), `category` string+CHECK. **Sin columna `status`** — a diferencia de `care_auras`/`character_evaluations`, no hay ningún ciclo de vida; es inmutable desde que se crea (nunca hubo ni hay ruta update/destroy).
+    - **Reusa el permiso `disciplinary_logs.manage` YA EXISTENTE** — cero permiso nuevo. Auditado (`disciplinary_log.recorded`).
+    - **Sin superficie de portal, a propósito** — misma postura que `counseling` mismo (staff-only, RBAC puro); exponer registros disciplinarios a un acudiente sería una decisión de producto que este slice no tenía autorización para tomar unilateralmente.
+    - **Efecto colateral corregido en el mismo commit**: un test existente dependía de IDs de stub (`"s-3"`/`"s-9"`) — reescrito con estudiantes reales; comentarios desactualizados en dos tests más ("stub, Clase C") corregidos para no mentir sobre el estado real del código.
+    - 7 tests nuevos (747→753 runs totales, 0 fallos, 1 skip preexistente, en serie). Ver `HISTORIA.md` v1.45.0.
+
 ---
 
 ## 2. Guardrails operativos (recordatorio permanente)

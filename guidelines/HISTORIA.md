@@ -17,6 +17,80 @@
 > moviera el changelog fuera del doc magro. Las entradas v1.6.0+ se escribieron directamente aquí,
 > ya con el split vigente.
 
+### v1.45.0 — 2026-07-21 — `student_support`: `disciplinary_logs` real (Fase B de `CLOSURE_PLAN.md`, §3.1)
+
+**Cierra el proceso "seguimiento disciplinario" del criterio de hecho (§1) — la única salvedad de tier
+C que el plan de cierre NO permitía diferir.** `student_support` es, por lejos, el dominio más
+stub-heavy del codebase (historia médica, acomodaciones y convivencia, las tres con filas hardcoded
+falsas) — este slice convierte SOLO convivencia (`disciplinary_logs`) a real, dejando
+`medical_history`/`accommodations` diferidos a propósito, exactamente el corte mínimo que el owner ya
+había confirmado (§6.2).
+
+**El hallazgo real detrás del stub**: `StudentSupport::DisciplinaryLogsController#create` NO PERSISTÍA
+NADA — literalmente un `flash[:notice] = "Registro de convivencia guardado (stub)."` sin ningún
+`.save`. Un docente/orientador que "registraba" un incidente de convivencia veía un mensaje de éxito
+que era, en los hechos, una mentira silenciosa: el registro desaparecía al recargar la página. Peor
+aún, `#index`/`#create` resolvían el estudiante a través de `GroupManagement::StudentRoster` — OTRO
+stub, con IDs falsos (`"s-1"`, `"s-3"`...) — cuyo propio comentario de retiro ya decía "retire it once
+those domains get their own real-data slice". Este slice es exactamente ese retiro, para
+`student_support`.
+
+**`StudentSupport::DisciplinaryLog`** (tabla `disciplinary_logs`), net-new, molde EXACTO
+`Counseling::Case` (la referencia explícita del plan, §3.1): tenant-scoped (RLS `ENABLE+FORCE`,
+`uuidv7()`, índice líder `institution_id`), `student_id` FK, `reported_by_institution_user_id` FK
+(`ON DELETE RESTRICT` — misma postura de accountability que `counseling_cases.opened_by`/
+`care_auras.authored_by_counselor`: un registro publicado siempre tiene un autor defendible en
+registro), `category` (`attendance`/`conduct`/`academic_integrity`/`other`, `string`+CHECK —
+desviación documentada del `smallint`, mismo molde de todos los slices anteriores), `description`,
+`occurred_at`. **Sin columna `status` — a diferencia de `care_auras`/`character_evaluations`, no hay
+ningún ciclo de vida que rastrear**: un registro de convivencia es inmutable desde que se crea (no
+existe ninguna ruta `update`/`destroy`, ni antes del stub ni ahora); una corrección se hace agregando
+un NUEVO registro, nunca editando el histórico — append-only por ausencia de mecanismo de edición, no
+por una bandera de estado.
+
+**`StudentSupport::DisciplinaryLogScope`** reemplaza el query object que antes envolvía
+`DisciplinaryLogRoster.all` — mismo molde EXACTO que `Counseling::CaseScope`: relación real + filtro
+explícito de `institution_id` + `can?` por fila vía `.select`, nunca `default_scope`.
+`StudentSupport::DisciplinaryLogsController` resuelve el estudiante con
+`GroupManagement::Student.find_by(institution_id:, id:)` directo — el `GroupManagement::StudentRoster`
+stub queda retirado de este controller (sigue vivo solo para `cafeteria`/`accommodations`, que aún no
+tienen su propio slice real).
+
+**Reusa el permiso `disciplinary_logs.manage` YA EXISTENTE** (sembrado desde antes en
+`IdentityAccess::SeedPermissions::CATALOG`, ya consumido por la pestaña "Convivencia" de
+`group_management/students#show` y por `support_dashboard`) — CERO permiso nuevo, exactamente la
+disciplina de este codebase de revisar el catálogo antes de inventar una llave. El scope-covering
+descriptor (`delegate :group_id, to: :student`) es el mismo truco que `Counseling::Case`/
+`AnalyticsBi::CareAura`/`CharacterEvaluation` ya usaban.
+
+**Auditado** (`disciplinary_log.recorded`, nuevo en `IdentityAccess::AuditEventIndex::ACTIONS`) — cada
+creación queda trazable dos veces: por el propio `reported_by_institution_user_id` de la fila Y por el
+rastro de auditoría cross-cutting, mismo criterio de doble trazabilidad que las auras de cuidado.
+
+**Sin superficie de portal, a propósito — misma postura que `counseling` mismo.** El plan mencionaba
+"relación-gated en portal" como parte genérica del molde de slice sensible, pero `counseling` (la
+referencia explícita de este slice) NUNCA expone sus casos/notas a un acudiente o estudiante — es
+staff-only, RBAC puro. Exponer registros disciplinarios crudos a un acudiente sería una decisión de
+producto real y sensible que este slice no tenía autorización para tomar unilateralmente; se sigue el
+precedente más conservador y ya probado (`counseling`) en vez de inventar una superficie de portal
+nueva sin esa decisión.
+
+**Efecto colateral real, corregido en el mismo slice**: `test/integration/student_support_test.rb`
+tenía un test ("disciplinary log index/create are scoped to the student's group") que dependía de los
+IDs falsos del stub (`"s-3"`/`"s-9"`) — se reescribió con estudiantes y secciones REALES, y se agregaron
+dos tests nuevos (creación real auditada, categoría inválida rechazada limpio). Los comentarios de dos
+tests más (`support_dashboard`, el "retrofit" de `group_management/students#show`) que describían
+convivencia como "stub, Clase C" quedaban desactualizados — corregidos en el mismo commit para no dejar
+un comentario mintiendo sobre el estado real del código.
+
+**Tests (7 nuevos, suite completa 747→753 runs / 0 fallos / 1 skip preexistente, en serie
+`PARALLEL_WORKERS=1`):** el CHECK de `category` a nivel de BD (bypaseando la validación de app);
+`category_label`/`reported_by_name` legibles; `group_id` delegado correctamente al estudiante; múltiples
+registros del mismo estudiante se conservan todos, nunca sobreescritos (`disciplinary_log_test.rb`);
+el índice/creación respetan el scope de grupo del actor con estudiantes reales (ya no IDs de stub);
+crear un registro persiste de verdad, audita, y aparece en la línea de tiempo; una categoría inválida
+se rechaza con un error amable, nunca un 500 (`student_support_test.rb`, actualizado).
+
 ### v1.44.0 — 2026-07-21 — `core`: primera UI de términos académicos (cierre de `CLOSURE_PLAN.md` §4.2)
 
 **No es un slice de `BI_DOCUMENT.md`** — cierra el último cabo de operabilidad de la Fase A del plan

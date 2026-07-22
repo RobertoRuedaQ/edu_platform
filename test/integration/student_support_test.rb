@@ -124,15 +124,68 @@ class StudentSupportTest < ActionDispatch::IntegrationTest
     end
   end
 
-  # --- disciplinary_logs (convivencia) ---------------------------------------
+  # --- disciplinary_logs (convivencia) — REAL since guidelines/CLOSURE_PLAN.md
+  # Fase B (StudentSupport::DisciplinaryLog replaces the DisciplinaryLogRoster
+  # stub). Real students in real sections, not the old stub string ids.
+
+  def build_real_students
+    ActiveRecord::Base.transaction do
+      Tenant::Guc.set_local(@institution.id)
+      section_9a = GroupManagement::Section.find_or_create_by!(id: GroupManagement::GroupRoster::SECTION_9A_ID) do |s|
+        s.institution = @institution
+        s.name = "9°A"
+        s.academic_year = 2026
+      end
+      section_11b = GroupManagement::Section.find_or_create_by!(id: GroupManagement::GroupRoster::SECTION_11B_ID) do |s|
+        s.institution = @institution
+        s.name = "11°B"
+        s.academic_year = 2026
+      end
+      in_scope = GroupManagement::Student.create!(institution: @institution, first_name: "Ana", last_name: "P",
+        gender: "female", birthdate: Date.new(2013, 3, 1), student_code: "DISC-IN", entry_year: 2023, section: section_9a)
+      out_of_scope = GroupManagement::Student.create!(institution: @institution, first_name: "Leo", last_name: "P",
+        gender: "male", birthdate: Date.new(2013, 3, 1), student_code: "DISC-OUT", entry_year: 2023, section: section_11b)
+      [ in_scope, out_of_scope ]
+    end
+  end
 
   test "disciplinary log index/create are scoped to the student's group" do
+    in_scope, out_of_scope = build_real_students
+
     as_counselor_9a do
-      get "/student_support/students/s-3/disciplinary_logs" # s-3 is in stub-section-9a
+      get "/student_support/students/#{in_scope.id}/disciplinary_logs"
       assert_response :success
 
-      get "/student_support/students/s-9/disciplinary_logs" # s-9 is in stub-section-11b
+      get "/student_support/students/#{out_of_scope.id}/disciplinary_logs"
       assert_response :forbidden
+    end
+  end
+
+  test "recording a disciplinary log persists for real, is audited, and appears in the timeline" do
+    in_scope, _out_of_scope = build_real_students
+
+    as_counselor_9a do
+      assert_difference -> { StudentSupport::DisciplinaryLog.count }, 1 do
+        assert_difference -> { IdentityAccess::AuditEvent.where(action: "disciplinary_log.recorded").count }, 1 do
+          post "/student_support/students/#{in_scope.id}/disciplinary_logs",
+            params: { category: "conduct", description: "Conflicto verbal con un compañero.", occurred_at: Date.current }
+        end
+      end
+      assert_response :redirect
+      follow_redirect!
+      assert_match "Conflicto verbal", response.body
+    end
+  end
+
+  test "an invalid category is rejected with a friendly error, never a 500" do
+    in_scope, = build_real_students
+
+    as_counselor_9a do
+      assert_no_difference -> { StudentSupport::DisciplinaryLog.count } do
+        post "/student_support/students/#{in_scope.id}/disciplinary_logs",
+          params: { category: "invented", description: "x", occurred_at: Date.current }
+      end
+      assert_response :unprocessable_entity
     end
   end
 
@@ -157,8 +210,9 @@ class StudentSupportTest < ActionDispatch::IntegrationTest
   test "support_dashboard shows scoped counts for a role holding all three permissions" do
     # Counseling::Case is real since #4 barrido (v1.14.0) — seed one open
     # case in the actor's own group so the dashboard's stat has something
-    # real to count (student_support's own accommodations/disciplinary_logs
-    # stay stub, Class C, unaffected).
+    # real to count (accommodations stays stub, Class C, unaffected;
+    # disciplinary_logs is real since guidelines/CLOSURE_PLAN.md Fase B but
+    # this test seeds none, so its stat stays "0").
     ActiveRecord::Base.transaction do
       Tenant::Guc.set_local(@institution.id)
       section = GroupManagement::Section.find_or_create_by!(id: GroupManagement::GroupRoster::SECTION_9A_ID) do |s|
@@ -184,10 +238,10 @@ class StudentSupportTest < ActionDispatch::IntegrationTest
 
   test "students#show exposes Convivencia and Acomodaciones only with the matching permission" do
     # group_management#show reads a REAL GroupManagement::Student since the
-    # #4 barrido (v1.14.0) — student_support's own Convivencia/Acomodaciones
-    # panels stay on their pre-existing stub (student_support has no real
-    # disciplinary_logs/accommodations table at all, Class C), gated by can?
-    # against this real student's real group_id.
+    # #4 barrido (v1.14.0). Convivencia is REAL since guidelines/CLOSURE_PLAN.md
+    # Fase B (StudentSupport::DisciplinaryLog); Acomodaciones stays on its
+    # pre-existing stub (student_support has no real accommodations table yet,
+    # Class C) — both gated by can? against this real student's real group_id.
     real_student = ActiveRecord::Base.transaction do
       Tenant::Guc.set_local(@institution.id)
       section = GroupManagement::Section.find_or_create_by!(id: GroupManagement::GroupRoster::SECTION_9A_ID) do |s|

@@ -755,6 +755,26 @@ ALTER TABLE ONLY public.dietary_restrictions FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: disciplinary_logs; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.disciplinary_logs (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    student_id uuid NOT NULL,
+    reported_by_institution_user_id uuid NOT NULL,
+    category character varying NOT NULL,
+    description text NOT NULL,
+    occurred_at date NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT disciplinary_logs_category_check CHECK (((category)::text = ANY ((ARRAY['attendance'::character varying, 'conduct'::character varying, 'academic_integrity'::character varying, 'other'::character varying])::text[])))
+);
+
+ALTER TABLE ONLY public.disciplinary_logs FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: email_otps; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2266,6 +2286,14 @@ ALTER TABLE ONLY public.dietary_restrictions
 
 
 --
+-- Name: disciplinary_logs disciplinary_logs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.disciplinary_logs
+    ADD CONSTRAINT disciplinary_logs_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: email_otps email_otps_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2954,6 +2982,13 @@ CREATE UNIQUE INDEX idx_charges_idempotency ON public.charges USING btree (insti
 --
 
 CREATE INDEX idx_classroom_layouts_on_inst_section_term_from ON public.classroom_layouts USING btree (institution_id, section_id, academic_term_id, effective_from);
+
+
+--
+-- Name: idx_disciplinary_logs_on_inst_student_occurred; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_disciplinary_logs_on_inst_student_occurred ON public.disciplinary_logs USING btree (institution_id, student_id, occurred_at);
 
 
 --
@@ -4266,6 +4301,14 @@ ALTER TABLE ONLY public.report_cards
 
 
 --
+-- Name: disciplinary_logs fk_rails_0f6f9b9c53; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.disciplinary_logs
+    ADD CONSTRAINT fk_rails_0f6f9b9c53 FOREIGN KEY (reported_by_institution_user_id) REFERENCES public.institution_users(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: enrollments fk_rails_107f77c451; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4647,6 +4690,22 @@ ALTER TABLE ONLY public.affinity_taxonomy
 
 ALTER TABLE ONLY public.role_permissions
     ADD CONSTRAINT fk_rails_439e640a3f FOREIGN KEY (permission_id) REFERENCES public.permissions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: disciplinary_logs fk_rails_4512f14aa5; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.disciplinary_logs
+    ADD CONSTRAINT fk_rails_4512f14aa5 FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE CASCADE;
+
+
+--
+-- Name: disciplinary_logs fk_rails_455a29b78b; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.disciplinary_logs
+    ADD CONSTRAINT fk_rails_455a29b78b FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
 
 
 --
@@ -6359,6 +6418,19 @@ CREATE POLICY dietary_restrictions_tenant_isolation ON public.dietary_restrictio
 
 
 --
+-- Name: disciplinary_logs; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.disciplinary_logs ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: disciplinary_logs disciplinary_logs_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY disciplinary_logs_tenant_isolation ON public.disciplinary_logs USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
 -- Name: email_otps; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -6989,6 +7061,7 @@ CREATE POLICY teaching_assignments_tenant_isolation ON public.teaching_assignmen
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260721160000'),
 ('20260721150000'),
 ('20260721140000'),
 ('20260721130000'),
