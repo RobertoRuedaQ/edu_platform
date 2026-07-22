@@ -21,10 +21,13 @@
 > Fase D (tier C, nice-to-have, fuera del criterio de hecho) sigue sin construir — nunca estuvo en
 > alcance de este plan.
 >
-> **Actualización (2026-07-21): Fase D iniciada, a pedido explícito del owner, driver-based (una
-> pieza a la vez).** Primer incremento (v1.47.0): `cafeteria` — chequeo de alérgenos real
-> (`Cafeteria::DietaryRestriction`, que YA era real, ahora conectado de verdad al checkout en vez de
-> un stub paralelo). Ver §5/Fase D abajo para el resto pendiente.
+> **Actualización (2026-07-22): Fase D driver-based COMPLETA salvo el greenfield puro.** De los seis
+> candidatos de recon (`cafeteria` alérgenos v1.47.0, `student_support` resto v1.48.0,
+> `transportation` v1.49.0, `schedules` timetable v1.50.0, `cafeteria` resto v1.51.0 + su metering
+> v1.52.0), **cinco ya cerraron** — cero dead-end activo, cero trabajo diferido en el repo. Solo queda
+> `admissions`/`library` (greenfield puro, sin stub previo del que inferir reglas de negocio) —
+> **gateado a confirmación explícita del owner**, nunca un default seguro de asumir (ver
+> `guidelines/OPEN_PROCESS.md` ítem #1). Ver §5/Fase D abajo para el detalle completo.
 
 ---
 
@@ -155,7 +158,7 @@ real. Ver `HISTORIA.md` v1.46.0.
   automática). Se apoyó en todo lo anterior, tal como el plan preveía: sin puntos de quiebre porque
   asistencia/notas/auras/disciplinario ya eran reales al llegar aquí. Ver `HISTORIA.md` v1.46.0.
 
-### FASE D — Tier C propiamente (nice-to-have, fuera del criterio de hecho) — EN CURSO, driver-based
+### FASE D — Tier C propiamente (nice-to-have, fuera del criterio de hecho) — 5/6 CERRADOS, resto gateado
 > **Corrección a la secuencia original**: este bloque asumía que "habilitar alérgenos" en `cafeteria`
 > dependía de terminar `student_support` (medical/accommodations) primero. El recon del primer
 > incremento (v1.47.0) mostró que NO es así — `cafeteria` ya tenía su propio `Cafeteria::
@@ -178,7 +181,8 @@ real. Ver `HISTORIA.md` v1.46.0.
   (`finance.student_accounts`, mismo precedente que `Extracurriculars::EnrollmentCreator`), nunca una
   deducción de crédito prepago. `Cafeteria::PurchaseRecorder` (molde `ChargeCreator`/
   `PaymentRecorder`/`EnrollmentCreator`): `account.lock!` transaccional, idempotencia propia. Sin UI
-  de autoría de menú (seeded, molde `dietary_restrictions`/`character_frameworks`). Ver
+  de autoría de menú (seeded, molde `dietary_restrictions`/`character_frameworks`). Metering (M1)
+  cerrado aparte en v1.52.0, junto con `transportation` — ver `OPEN_PROCESS.md` ítem #5. Ver
   `HISTORIA.md` v1.51.0.
 - ~~**`transportation`**~~ ✅ **CERRADO (v1.49.0).** El peor de los cuatro candidatos de recon — nav
   real ("Rutas"/"Abordaje") + controllers/rutas reales sobre `RouteRoster`/`RiderRoster` (100%
