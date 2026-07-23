@@ -1,0 +1,26 @@
+<% content_for :title, "Campañas de admisión" %>
+
+<%= render "shared/page_header", title: "Campañas de admisión",
+      subtitle: "Ciclos de admisión y su cuota de inscripción.",
+      actions: ui_button("Nueva campaña", href: new_admissions_campaign_path, variant: :primary) %>
+
+<% if @campaigns.any? -%>
+  <%= render layout: "shared/table", locals: { headers: ["Nombre", "Año de ingreso", "Ventana", "Cuota", "Estado", ""] } do -%>
+    <% @campaigns.each do |campaign| -%>
+      <tr>
+        <td><%= campaign.name %></td>
+        <td><%= campaign.target_entry_year %></td>
+        <td><%= campaign.opens_on.strftime("%d/%m/%Y") %> – <%= campaign.closes_on.strftime("%d/%m/%Y") %></td>
+        <td><%= campaign.application_fee_cents.zero? ? "Gratis" : "$#{format('%.2f', campaign.application_fee_amount)} COP" %></td>
+        <td>
+          <%= ui_badge campaign.status.humanize,
+                variant: { "draft" => :neutral, "open" => :success, "closed" => :warning }.fetch(campaign.status, :neutral) %>
+        </td>
+        <td><%= ui_button "Editar", href: edit_admissions_campaign_path(campaign), variant: :secondary, size: :sm %></td>
+      </tr>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state", title: "Sin campañas todavía",
+        description: "Crea la primera campaña para empezar a recibir solicitudes." %>
+<% end -%>

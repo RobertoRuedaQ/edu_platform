@@ -1,0 +1,33 @@
+<% content_for :title, "Nuevo aspirante" %>
+
+<%= render "shared/page_header", title: "Registrar aspirante" %>
+
+<%= form_with url: admissions_applicants_path, method: :post do -%>
+  <% if @applicant.errors.any? -%>
+    <%= render "shared/alert", variant: :danger, message: @applicant.errors.full_messages.join(", ") %>
+  <% end -%>
+
+  <%= render "shared/field", label: "Nombres", name: "applicant[first_name]", type: "text",
+        value: @applicant.first_name, required: true %>
+  <%= render "shared/field", label: "Apellidos", name: "applicant[last_name]", type: "text",
+        value: @applicant.last_name, required: true %>
+
+  <div class="field">
+    <label class="field__label" for="applicant_gender">Género</label>
+    <select class="field__input" id="applicant_gender" name="applicant[gender]">
+      <option value="female" <%= "selected" if @applicant.gender == "female" %>>Femenino</option>
+      <option value="male" <%= "selected" if @applicant.gender == "male" %>>Masculino</option>
+    </select>
+  </div>
+
+  <%= render "shared/field", label: "Fecha de nacimiento", name: "applicant[birthdate]", type: "date",
+        value: @applicant.birthdate, required: true %>
+  <%= render "shared/field", label: "Nombre del acudiente", name: "applicant[guardian_name]", type: "text",
+        value: @applicant.guardian_name, required: true %>
+  <%= render "shared/field", label: "Correo del acudiente", name: "applicant[guardian_email]", type: "email",
+        value: @applicant.guardian_email, required: true %>
+  <%= render "shared/field", label: "Teléfono del acudiente", name: "applicant[guardian_phone]", type: "tel",
+        value: @applicant.guardian_phone %>
+
+  <%= ui_button "Registrar", type: "submit", variant: :primary %>
+<% end -%>

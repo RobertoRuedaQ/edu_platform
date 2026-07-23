@@ -1,0 +1,28 @@
+<%# locals: (campaign:, url:, method:) -%>
+<%= form_with url: url, method: method do -%>
+  <% if campaign.errors.any? -%>
+    <%= render "shared/alert", variant: :danger, message: campaign.errors.full_messages.join(", ") %>
+  <% end -%>
+
+  <%= render "shared/field", label: "Nombre", name: "campaign[name]", type: "text", value: campaign.name, required: true %>
+  <%= render "shared/field", label: "Año de ingreso", name: "campaign[target_entry_year]", type: "number",
+        value: campaign.target_entry_year, required: true %>
+  <%= render "shared/field", label: "Apertura", name: "campaign[opens_on]", type: "date",
+        value: campaign.opens_on, required: true %>
+  <%= render "shared/field", label: "Cierre", name: "campaign[closes_on]", type: "date",
+        value: campaign.closes_on, required: true %>
+  <%= render "shared/field", label: "Cuota de inscripción (centavos)", name: "campaign[application_fee_cents]",
+        type: "number", value: campaign.application_fee_cents,
+        hint: "0 = campaña gratuita. Se cobra como cargo real solo si la solicitud es aceptada." %>
+
+  <div class="field">
+    <label class="field__label" for="campaign_status">Estado</label>
+    <select class="field__input" id="campaign_status" name="campaign[status]">
+      <% Admissions::Campaign::STATUSES.each do |status| -%>
+        <option value="<%= status %>" <%= "selected" if campaign.status == status %>><%= status.humanize %></option>
+      <% end -%>
+    </select>
+  </div>
+
+  <%= ui_button "Guardar", type: "submit", variant: :primary %>
+<% end -%>

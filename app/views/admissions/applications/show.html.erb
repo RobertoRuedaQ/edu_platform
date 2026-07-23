@@ -1,0 +1,61 @@
+<% content_for :title, "Solicitud de #{@application.applicant.full_name}" %>
+
+<%= render "shared/page_header", title: "Solicitud de #{@application.applicant.full_name}",
+      subtitle: "#{@application.campaign.name} — #{@application.target_grade_level.name}" %>
+
+<%= render "shared/detail_list", items: [
+      ["Estado", ui_badge(@application.status.humanize,
+        variant: { "submitted" => :neutral, "under_review" => :warning, "accepted" => :success,
+                   "rejected" => :danger, "withdrawn" => :neutral }.fetch(@application.status, :neutral))],
+      ["Cuota (congelada al radicar)", @application.fee_cents.zero? ? "Gratis" : "$#{format('%.2f', @application.fee_amount)} COP"],
+      ["Radicada", @application.submitted_at.strftime("%d/%m/%Y %H:%M")],
+      ["Decidida", @application.decided_at&.strftime("%d/%m/%Y %H:%M") || "—"]
+    ] %>
+
+<section>
+  <h3>Documentos</h3>
+  <% if @application.documents.any? -%>
+    <ul>
+      <% @application.documents.each do |document| -%>
+        <li><%= link_to document.document_type.humanize,
+              admissions_application_document_path(@application, document) %></li>
+      <% end -%>
+    </ul>
+  <% end -%>
+
+  <%= form_with url: admissions_application_documents_path(@application), method: :post, multipart: true do -%>
+    <%= render "shared/field", label: "Tipo de documento", name: "document_type", type: "text",
+          placeholder: "Ej. registro civil, calificaciones", required: true %>
+    <div class="field">
+      <label class="field__label" for="file">Archivo (PDF, JPG o PNG)</label>
+      <input class="field__input" id="file" name="file" type="file" required>
+    </div>
+    <%= ui_button "Adjuntar", type: "submit", variant: :secondary %>
+  <% end -%>
+</section>
+
+<% if @application.status.in?(%w[submitted under_review]) -%>
+  <section>
+    <h3>Revisar</h3>
+    <%= form_with url: admissions_application_path(@application), method: :patch do -%>
+      <div class="field">
+        <label class="field__label" for="application_status">Nuevo estado</label>
+        <select class="field__input" id="application_status" name="application[status]">
+          <% %w[under_review rejected withdrawn].each do |status| -%>
+            <option value="<%= status %>"><%= status.humanize %></option>
+          <% end -%>
+        </select>
+      </div>
+      <%= ui_button "Actualizar estado", type: "submit", variant: :secondary %>
+    <% end -%>
+  </section>
+
+  <section>
+    <h3>Aceptar y matricular</h3>
+    <%= form_with url: admissions_application_acceptance_path(@application), method: :post do -%>
+      <%= render "shared/field", label: "Código de estudiante", name: "student_code", type: "text",
+            placeholder: "Asignado por la institución", required: true %>
+      <%= ui_button "Aceptar y crear estudiante", type: "submit", variant: :primary %>
+    <% end -%>
+  </section>
+<% end -%>

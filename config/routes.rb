@@ -313,6 +313,26 @@ Rails.application.routes.draw do
     resources :loans, only: :index
   end
 
+  # --- admissions (guidelines/library_prompt.md, Increment 2 — base
+  # pipeline; Increment 3, step templates + public tracker, still pending)
+  # ---------------------------------------------------------------------
+  # admissions.campaigns.manage gates campaign CRUD; admissions.intake gates
+  # the front-desk flow (register applicant, submit application, attach
+  # documents); admissions.applications.manage gates review/decide/convert —
+  # three distinct actors, molde library's action-split discipline.
+  # :acceptance is its own nested singular resource (molde checkouts/returns
+  # in library): converting an accepted application into a real enrolled
+  # Student + charging the fee is a business action with real effects, never
+  # a generic applications#update.
+  namespace :admissions do
+    resources :campaigns,    only: %i[index new create edit update]
+    resources :applicants,   only: %i[index new create show]
+    resources :applications, only: %i[index show create update] do
+      resources :documents,  only: %i[create show], controller: "application_documents"
+      resource  :acceptance, only: :create, controller: "application_acceptances"
+    end
+  end
+
   # --- attendance (net-new domain, v1.16.0, MVP critical path item #2) ------
   # Daily-by-homeroom only. groups#index lists the actor's OWN groups (scope);
   # records#new/#create take attendance for a (group, date) — no groups#show,

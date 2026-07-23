@@ -1,0 +1,25 @@
+<% content_for :title, "Solicitudes" %>
+
+<%= render "shared/page_header", title: "Solicitudes de admisión", subtitle: "Revisión y decisión." %>
+
+<% if @applications.any? -%>
+  <%= render layout: "shared/table", locals: { headers: ["Aspirante", "Campaña", "Grado", "Estado", "Radicada", ""] } do -%>
+    <% @applications.each do |application| -%>
+      <tr>
+        <td><%= application.applicant.full_name %></td>
+        <td><%= application.campaign.name %></td>
+        <td><%= application.target_grade_level.name %></td>
+        <td>
+          <%= ui_badge application.status.humanize,
+                variant: { "submitted" => :neutral, "under_review" => :warning, "accepted" => :success,
+                           "rejected" => :danger, "withdrawn" => :neutral }.fetch(application.status, :neutral) %>
+        </td>
+        <td><%= application.submitted_at.strftime("%d/%m/%Y") %></td>
+        <td><%= ui_button "Ver", href: admissions_application_path(application), variant: :secondary, size: :sm %></td>
+      </tr>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state", title: "Sin solicitudes visibles",
+        description: "Las solicitudes radicadas dentro de tu alcance aparecerán aquí." %>
+<% end -%>
