@@ -17,6 +17,51 @@
 > moviera el changelog fuera del doc magro. Las entradas v1.6.0+ se escribieron directamente aquí,
 > ya con el split vigente.
 
+### v1.59.0 — 2026-07-24 — Billing: `BillingPeriod` como entidad propia + registro manual de abonos (`OPEN_PROCESS.md` ítem #2, confirmado explícitamente por el owner)
+
+Cierra los tres pendientes de "billing hardening" gateados desde v1.33.0. El owner resolvió los
+tres: **sin prorrateo de `addon_fee`** (se mantiene tarifa plana — decisión, no construcción) y
+**sin edición manual de líneas de un borrador** (`recut` ya cubre el caso real — decisión, no
+construcción); pero **`billing_periods` SÍ se construye** como entidad propia, separada de dos
+columnas sueltas en `invoices` — el owner explicó que los períodos deben poder distinguirse entre
+sí como entidades independientes (nunca una sola factura acumulada), y que un abono parcial
+manual debe poder apuntar a exactamente qué período liquida, para mayor claridad con las
+instituciones clientes. Esto llevó a una pregunta de seguimiento que **revisa** el no-goal
+existente ("riel de pago fuera de alcance de v1"): el owner confirmó que sí quiere el registro
+MANUAL de abonos a este nivel — sigue sin existir cobro automático/pasarela, pero ahora sí hay
+dónde anotar que un pago llegó.
+
+`ControlPlane::BillingPeriod` (nueva, GLOBAL — misma postura que `invoices`/`subscriptions`: sin
+RLS, sin `FORCE`, FK plano a `institutions`) es ahora el ancla real de "qué período" — `invoices`
+gana `billing_period_id` (FK restrict, `NOT NULL`) y **pierde** `period_start`/`period_end` como
+columnas propias (migración con backfill inline vía `execute`, reversible de verdad). La unicidad
+"un período no se repite" y "como máximo una factura no anulada por período" ahora viven sobre la
+FK, no sobre dos fechas sueltas. `Invoice#period_start`/`#period_end` sobreviven como métodos
+DELEGADOS (`billing_period.starts_on`/`.ends_on`, vía `alias_method`) — las 3 vistas + 1 formulario
+existentes de facturación no cambiaron ni una línea; solo cambió el flujo de creación
+(`InvoicesController#create`/`#recut` ahora hacen `BillingPeriod.find_or_create_by!` antes de
+llamar a `PeriodCut`, cuya firma pasó de `period_start:`/`period_end:` a `billing_period:`).
+`PeriodCutAllJob` hace lo mismo por institución antes de encolar `PeriodCutJob` (que ahora recibe
+`billing_period_id:`, nunca las fechas sueltas) — un re-run del mismo mes nunca duplica el
+`BillingPeriod` (`find_or_create_by!`).
+
+`ControlPlane::Payment` (tabla `control_plane_payments` — prefijo `control_plane_` porque
+`payments` YA es una tabla real de `Finance`, tenant-scoped, dominio distinto por completo) es un
+registro MANUAL, sin `status`: no hay ningún riel real detrás que justifique inventar una máquina
+de estados — existir ES el único estado que tiene sentido modelar. `ControlPlane::Billing::
+PaymentRecorder` es el molde de `Finance::PaymentRecorder` MENOS el `account.lock!` pesimista — acá
+no hay un total mutable concurrente que proteger (`Invoice#paid_cents` es un `sum` computado,
+nunca una columna que dos requests puedan pisarse), así que un chequeo de idempotencia simple
+basta. Siempre disparado por un `platform_admin` interactivo (nunca el camino desatendido de
+`PeriodCut`), auditado (`Audit.log(action: "payment.recorded", ...)`). `Invoice` gana
+`#paid_cents`/`#balance_due_cents` (computados, nunca persistidos, molde `Loan#overdue?`) y sus
+puentes F6 `#paid_amount`/`#balance_due_amount` (`BigDecimal(cents)/100`, molde `Activity#
+fee_amount`) — dinero en `control_plane_payments` sigue la convención `*_cents bigint` de
+`ControlPlane::*` (nunca el `decimal` grandfathered de `Finance`). `invoices/show.html.erb` gana
+una sección "Pagos" (tabla + formulario inline, oculto si la factura está anulada — molde "una
+computación, N superficies", sin index/vista propia para los pagos). Ver `HISTORIA.md` (esta
+entrada) para el detalle; no-goal de riel de pago reescrito en `OPEN_PROCESS.md`.
+
 ### v1.56.0 — 2026-07-24 — `admissions` Incremento 3: pasos configurables + tracker público por token (`guidelines/library_prompt.md`, `OPEN_PROCESS.md` #1) — CIERRA `admissions` COMPLETO
 
 Tercer y último incremento del greenfield de `admissions` (Incremento 1 fue `library`, v1.54.0;

@@ -19,7 +19,10 @@ module ControlPlane
 
       module_function
 
-      def call(institution:, period_start:, period_end:)
+      def call(institution:, billing_period:)
+        period_start = billing_period.starts_on
+        period_end = billing_period.ends_on
+
         # H9 — no contract, no invoice. Checked unconditionally, even on a
         # re-cut: a subscription that has since ended must block it too.
         subscription = ControlPlane::Subscription.active
@@ -29,12 +32,11 @@ module ControlPlane
         raise NoActiveSubscription, "sin suscripción activa que solape el periodo" if subscription.nil?
 
         invoice = ControlPlane::Invoice.where(institution_id: institution.id,
-          period_start: period_start, period_end: period_end).where.not(status: "void").first
+          billing_period_id: billing_period.id).where.not(status: "void").first
         raise AlreadyFinalized, "la factura de este periodo ya está finalizada" if invoice&.finalized?
 
         is_new = invoice.nil?
-        invoice ||= ControlPlane::Invoice.new(institution: institution,
-          period_start: period_start, period_end: period_end)
+        invoice ||= ControlPlane::Invoice.new(institution: institution, billing_period: billing_period)
 
         notes = []
         lines = build_base_seats_line(institution, subscription, period_end, notes)

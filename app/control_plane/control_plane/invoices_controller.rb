@@ -15,21 +15,27 @@ module ControlPlane
     before_action :set_invoice, only: %i[show finalize void recut]
 
     def index
-      @invoices = Invoice.includes(:institution).order(period_start: :desc).limit(200)
+      @invoices = Invoice.includes(:institution, :billing_period).most_recent_first.limit(200)
     end
 
     def new
       authorize_platform!("billing.manage")
-      @invoice = Invoice.new(period_start: Date.current.beginning_of_month, period_end: Date.current.end_of_month)
+      @invoice = Invoice.new
+      @period_start = Date.current.beginning_of_month
+      @period_end = Date.current.end_of_month
     end
 
     def create
       authorize_platform!("billing.manage")
-      @invoice = Billing::PeriodCut.call(institution: @institution,
-        period_start: Date.parse(invoice_params[:period_start]), period_end: Date.parse(invoice_params[:period_end]))
+      billing_period = BillingPeriod.find_or_create_by!(institution: @institution,
+        starts_on: Date.parse(invoice_params[:period_start]), ends_on: Date.parse(invoice_params[:period_end]))
+      @invoice = Billing::PeriodCut.call(institution: @institution, billing_period: billing_period)
       redirect_to control_plane_institution_invoice_path(@institution, @invoice), notice: "Borrador generado."
-    rescue Billing::PeriodCut::NoActiveSubscription, Billing::PeriodCut::AlreadyFinalized, Date::Error => e
-      @invoice = Invoice.new(period_start: invoice_params[:period_start], period_end: invoice_params[:period_end])
+    rescue Billing::PeriodCut::NoActiveSubscription, Billing::PeriodCut::AlreadyFinalized, Date::Error,
+           ActiveRecord::RecordInvalid => e
+      @invoice = Invoice.new
+      @period_start = invoice_params[:period_start]
+      @period_end = invoice_params[:period_end]
       flash.now[:alert] = e.message
       render :new, status: :unprocessable_entity
     end
@@ -59,7 +65,7 @@ module ControlPlane
 
     def recut
       authorize_platform!("billing.manage")
-      Billing::PeriodCut.call(institution: @institution, period_start: @invoice.period_start, period_end: @invoice.period_end)
+      Billing::PeriodCut.call(institution: @institution, billing_period: @invoice.billing_period)
       redirect_to control_plane_institution_invoice_path(@institution, @invoice), notice: "Borrador recortado de nuevo."
     rescue Billing::PeriodCut::AlreadyFinalized => e
       redirect_to control_plane_institution_invoice_path(@institution, @invoice), alert: e.message

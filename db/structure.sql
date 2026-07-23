@@ -547,6 +547,21 @@ ALTER TABLE ONLY public.audit_events FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: billing_periods; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.billing_periods (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    starts_on date NOT NULL,
+    ends_on date NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT billing_periods_dates_check CHECK ((ends_on >= starts_on))
+);
+
+
+--
 -- Name: boarding_events; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -868,6 +883,27 @@ CREATE TABLE public.control_plane_email_otps (
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
     CONSTRAINT control_plane_email_otps_purpose_check CHECK (((purpose)::text = 'sign_in'::text))
+);
+
+
+--
+-- Name: control_plane_payments; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.control_plane_payments (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    invoice_id uuid NOT NULL,
+    amount_cents bigint NOT NULL,
+    method character varying NOT NULL,
+    paid_on date NOT NULL,
+    notes text,
+    recorded_by_platform_admin_id uuid NOT NULL,
+    idempotency_key character varying,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT control_plane_payments_amount_cents_check CHECK ((amount_cents > 0)),
+    CONSTRAINT control_plane_payments_method_check CHECK (((method)::text = ANY ((ARRAY['cash'::character varying, 'card'::character varying, 'transfer'::character varying, 'other'::character varying])::text[])))
 );
 
 
@@ -1359,8 +1395,6 @@ CREATE TABLE public.invoices (
     id uuid DEFAULT uuidv7() NOT NULL,
     institution_id uuid NOT NULL,
     subscription_id uuid,
-    period_start date NOT NULL,
-    period_end date NOT NULL,
     currency text NOT NULL,
     status text DEFAULT 'draft'::text NOT NULL,
     subtotal_cents bigint DEFAULT 0 NOT NULL,
@@ -1368,8 +1402,8 @@ CREATE TABLE public.invoices (
     finalized_at timestamp with time zone,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
+    billing_period_id uuid NOT NULL,
     CONSTRAINT invoices_currency_check CHECK ((char_length(currency) = 3)),
-    CONSTRAINT invoices_period_check CHECK ((period_end >= period_start)),
     CONSTRAINT invoices_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'finalized'::text, 'void'::text]))),
     CONSTRAINT invoices_subtotal_cents_check CHECK ((subtotal_cents >= 0))
 );
@@ -1729,6 +1763,7 @@ CREATE TABLE public.role_assignments (
     valid_from date DEFAULT CURRENT_DATE NOT NULL,
     valid_until date,
     scope_route_id uuid,
+    academic_term_id uuid,
     CONSTRAINT role_assignments_valid_until_after_valid_from CHECK (((valid_until IS NULL) OR (valid_until >= valid_from)))
 );
 
@@ -2614,6 +2649,14 @@ ALTER TABLE ONLY public.audit_events
 
 
 --
+-- Name: billing_periods billing_periods_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.billing_periods
+    ADD CONSTRAINT billing_periods_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: boarding_events boarding_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2747,6 +2790,14 @@ ALTER TABLE ONLY public.control_plane_audit_events
 
 ALTER TABLE ONLY public.control_plane_email_otps
     ADD CONSTRAINT control_plane_email_otps_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: control_plane_payments control_plane_payments_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.control_plane_payments
+    ADD CONSTRAINT control_plane_payments_pkey PRIMARY KEY (id);
 
 
 --
@@ -4214,6 +4265,20 @@ CREATE INDEX index_audit_events_on_institution_and_target ON public.audit_events
 
 
 --
+-- Name: index_billing_periods_on_institution_and_dates; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_billing_periods_on_institution_and_dates ON public.billing_periods USING btree (institution_id, starts_on, ends_on);
+
+
+--
+-- Name: index_billing_periods_on_institution_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_billing_periods_on_institution_id ON public.billing_periods USING btree (institution_id);
+
+
+--
 -- Name: index_cafeteria_menu_items_on_institution_id_and_available; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -4288,6 +4353,34 @@ CREATE INDEX index_control_plane_email_otps_on_expires_at ON public.control_plan
 --
 
 CREATE INDEX index_control_plane_email_otps_on_platform_admin_id ON public.control_plane_email_otps USING btree (platform_admin_id);
+
+
+--
+-- Name: index_control_plane_payments_on_institution_and_idempotency; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_control_plane_payments_on_institution_and_idempotency ON public.control_plane_payments USING btree (institution_id, idempotency_key) WHERE (idempotency_key IS NOT NULL);
+
+
+--
+-- Name: index_control_plane_payments_on_institution_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_control_plane_payments_on_institution_id ON public.control_plane_payments USING btree (institution_id);
+
+
+--
+-- Name: index_control_plane_payments_on_invoice_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_control_plane_payments_on_invoice_id ON public.control_plane_payments USING btree (invoice_id);
+
+
+--
+-- Name: index_control_plane_payments_on_recorded_by_platform_admin_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_control_plane_payments_on_recorded_by_platform_admin_id ON public.control_plane_payments USING btree (recorded_by_platform_admin_id);
 
 
 --
@@ -4564,6 +4657,13 @@ CREATE INDEX index_invoice_line_items_on_invoice_id ON public.invoice_line_items
 
 
 --
+-- Name: index_invoices_on_billing_period_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_invoices_on_billing_period_id ON public.invoices USING btree (billing_period_id);
+
+
+--
 -- Name: index_invoices_on_institution_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -4578,10 +4678,10 @@ CREATE INDEX index_invoices_on_subscription_id ON public.invoices USING btree (s
 
 
 --
--- Name: index_invoices_one_per_institution_and_period; Type: INDEX; Schema: public; Owner: -
+-- Name: index_invoices_one_per_billing_period; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE UNIQUE INDEX index_invoices_one_per_institution_and_period ON public.invoices USING btree (institution_id, period_start, period_end) WHERE (status <> 'void'::text);
+CREATE UNIQUE INDEX index_invoices_one_per_billing_period ON public.invoices USING btree (billing_period_id) WHERE (status <> 'void'::text);
 
 
 --
@@ -4722,6 +4822,13 @@ CREATE INDEX index_report_cards_on_student_id ON public.report_cards USING btree
 --
 
 CREATE INDEX index_role_assignments_on_institution_id ON public.role_assignments USING btree (institution_id);
+
+
+--
+-- Name: index_role_assignments_on_institution_id_and_academic_term_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_role_assignments_on_institution_id_and_academic_term_id ON public.role_assignments USING btree (institution_id, academic_term_id);
 
 
 --
@@ -5255,6 +5362,14 @@ ALTER TABLE ONLY public.teaching_assignments
 
 
 --
+-- Name: billing_periods fk_rails_160faad99e; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.billing_periods
+    ADD CONSTRAINT fk_rails_160faad99e FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: group_memberships fk_rails_16f363265c; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -5548,6 +5663,14 @@ ALTER TABLE ONLY public.submissions
 
 ALTER TABLE ONLY public.seat_assignments
     ADD CONSTRAINT fk_rails_367791f28a FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE CASCADE;
+
+
+--
+-- Name: role_assignments fk_rails_36bcf43d59; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.role_assignments
+    ADD CONSTRAINT fk_rails_36bcf43d59 FOREIGN KEY (academic_term_id) REFERENCES public.academic_terms(id) ON DELETE SET NULL;
 
 
 --
@@ -6287,6 +6410,14 @@ ALTER TABLE ONLY public.invoice_line_items
 
 
 --
+-- Name: control_plane_payments fk_rails_80721c6bb1; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.control_plane_payments
+    ADD CONSTRAINT fk_rails_80721c6bb1 FOREIGN KEY (recorded_by_platform_admin_id) REFERENCES public.platform_admins(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: conversations fk_rails_80b2afaacf; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -7015,6 +7146,14 @@ ALTER TABLE ONLY public.care_auras
 
 
 --
+-- Name: invoices fk_rails_cb5703557b; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.invoices
+    ADD CONSTRAINT fk_rails_cb5703557b FOREIGN KEY (billing_period_id) REFERENCES public.billing_periods(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: conversation_participants fk_rails_cd21bdc262; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -7036,6 +7175,14 @@ ALTER TABLE ONLY public.meeting_patterns
 
 ALTER TABLE ONLY public.medical_histories
     ADD CONSTRAINT fk_rails_cedac8245e FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE CASCADE;
+
+
+--
+-- Name: control_plane_payments fk_rails_cf436527f2; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.control_plane_payments
+    ADD CONSTRAINT fk_rails_cf436527f2 FOREIGN KEY (invoice_id) REFERENCES public.invoices(id) ON DELETE RESTRICT;
 
 
 --
@@ -7364,6 +7511,14 @@ ALTER TABLE ONLY public.rooms
 
 ALTER TABLE ONLY public.library_resource_copies
     ADD CONSTRAINT fk_rails_f4f3fef62b FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: control_plane_payments fk_rails_f527e52a36; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.control_plane_payments
+    ADD CONSTRAINT fk_rails_f527e52a36 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE RESTRICT;
 
 
 --
@@ -8656,6 +8811,8 @@ CREATE POLICY teaching_assignments_tenant_isolation ON public.teaching_assignmen
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260724180000'),
+('20260724171000'),
 ('20260724090000'),
 ('20260723090000'),
 ('20260722080000'),

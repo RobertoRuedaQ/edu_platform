@@ -29,8 +29,11 @@ class ControlPlane::Billing::PeriodCutAllJobTest < ActiveSupport::TestCase
 
     job_args = enqueued_jobs.find { |j| j["job_class"] == "ControlPlane::Billing::PeriodCutJob" }["arguments"].first
     assert_equal subscribed.id, job_args["institution_id"]
-    assert_equal "2026-06-01", job_args["period_start"]["value"]
-    assert_equal "2026-06-30", job_args["period_end"]["value"]
+
+    period = ControlPlane::BillingPeriod.find(job_args["billing_period_id"])
+    assert_equal subscribed.id, period.institution_id
+    assert_equal Date.new(2026, 6, 1), period.starts_on
+    assert_equal Date.new(2026, 6, 30), period.ends_on
   end
 
   test "acceptance: draining the queue produces a draft invoice for June when run in July" do
@@ -45,5 +48,15 @@ class ControlPlane::Billing::PeriodCutAllJobTest < ActiveSupport::TestCase
     assert_equal Date.new(2026, 6, 1), invoice.period_start
     assert_equal Date.new(2026, 6, 30), invoice.period_end
     assert_equal "draft", invoice.status
+  end
+
+  test "running the same month twice never creates a second BillingPeriod" do
+    institution = build_institution
+    ControlPlane::Subscription.sign!(institution: institution, plan: build_plan, starts_on: Date.new(2026, 1, 1))
+
+    perform_enqueued_jobs { ControlPlane::Billing::PeriodCutAllJob.perform_now(as_of: Date.new(2026, 7, 1)) }
+    perform_enqueued_jobs { ControlPlane::Billing::PeriodCutAllJob.perform_now(as_of: Date.new(2026, 7, 20)) }
+
+    assert_equal 1, ControlPlane::BillingPeriod.where(institution_id: institution.id).count
   end
 end

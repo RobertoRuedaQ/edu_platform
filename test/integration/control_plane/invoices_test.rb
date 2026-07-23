@@ -18,6 +18,11 @@ class ControlPlane::InvoicesTest < ActionDispatch::IntegrationTest
       headcount: 100)
   end
 
+  def billing_period(institution = @institution)
+    ControlPlane::BillingPeriod.find_or_create_by!(institution: institution,
+      starts_on: Date.new(2026, 6, 1), ends_on: Date.new(2026, 6, 30))
+  end
+
   test "generating a draft cuts the invoice and audits it" do
     post control_plane_institution_invoices_path(@institution), params: {
       invoice: { period_start: "2026-06-01", period_end: "2026-06-30" }
@@ -43,8 +48,7 @@ class ControlPlane::InvoicesTest < ActionDispatch::IntegrationTest
   end
 
   test "show renders the line items grouped by kind" do
-    invoice = ControlPlane::Billing::PeriodCut.call(institution: @institution,
-      period_start: Date.new(2026, 6, 1), period_end: Date.new(2026, 6, 30))
+    invoice = ControlPlane::Billing::PeriodCut.call(institution: @institution, billing_period: billing_period)
 
     get control_plane_institution_invoice_path(@institution, invoice)
     assert_response :success
@@ -52,8 +56,7 @@ class ControlPlane::InvoicesTest < ActionDispatch::IntegrationTest
   end
 
   test "finalizing freezes the invoice and audits the acting platform_admin" do
-    invoice = ControlPlane::Billing::PeriodCut.call(institution: @institution,
-      period_start: Date.new(2026, 6, 1), period_end: Date.new(2026, 6, 30))
+    invoice = ControlPlane::Billing::PeriodCut.call(institution: @institution, billing_period: billing_period)
 
     patch finalize_control_plane_institution_invoice_path(@institution, invoice)
 
@@ -64,8 +67,7 @@ class ControlPlane::InvoicesTest < ActionDispatch::IntegrationTest
   end
 
   test "re-cutting a finalized invoice is rejected with a friendly message, not a 500" do
-    invoice = ControlPlane::Billing::PeriodCut.call(institution: @institution,
-      period_start: Date.new(2026, 6, 1), period_end: Date.new(2026, 6, 30))
+    invoice = ControlPlane::Billing::PeriodCut.call(institution: @institution, billing_period: billing_period)
     invoice.finalize!
 
     patch recut_control_plane_institution_invoice_path(@institution, invoice)
@@ -75,16 +77,14 @@ class ControlPlane::InvoicesTest < ActionDispatch::IntegrationTest
   end
 
   test "voiding a draft works" do
-    invoice = ControlPlane::Billing::PeriodCut.call(institution: @institution,
-      period_start: Date.new(2026, 6, 1), period_end: Date.new(2026, 6, 30))
+    invoice = ControlPlane::Billing::PeriodCut.call(institution: @institution, billing_period: billing_period)
 
     patch void_control_plane_institution_invoice_path(@institution, invoice)
     assert_equal "void", invoice.reload.status
   end
 
   test "the top-level index lists invoices across institutions" do
-    ControlPlane::Billing::PeriodCut.call(institution: @institution,
-      period_start: Date.new(2026, 6, 1), period_end: Date.new(2026, 6, 30))
+    ControlPlane::Billing::PeriodCut.call(institution: @institution, billing_period: billing_period)
 
     get control_plane_invoices_path
     assert_response :success

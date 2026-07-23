@@ -8,21 +8,25 @@ class TenantRlsGuardTest < ActiveSupport::TestCase
   #  - institutions / users / sessions are GLOBAL (institutions/users carry no
   #    institution_id; sessions uses current_institution_id, not institution_id)
   #  - subscriptions / institution_entitlements / student_headcount_snapshots /
-  #    usage_events / usage_daily_rollups / invoices are CONTROL PLANE tables
-  #    (app/control_plane/*, S2a/S3a/S4): institution_id there is a plain FK to
-  #    the global institutions table, never an RLS scope — the control plane
-  #    is cross-tenant by design and is served by edu_app_runtime with no GUC
+  #    usage_events / usage_daily_rollups / invoices / billing_periods /
+  #    control_plane_payments are CONTROL PLANE tables (app/control_plane/*,
+  #    S2a/S3a/S4): institution_id there is a plain FK to the global
+  #    institutions table, never an RLS scope — the control plane is
+  #    cross-tenant by design and is served by edu_app_runtime with no GUC
   #    set. The headcount number itself is PUSHED by the tenant under its own
   #    GUC (Core::Headcount::SnapshotJob) but landed in this GLOBAL table;
   #    invoices are cut by ControlPlane::Billing::PeriodCut, which never fixes
-  #    a GUC either (it only ever reads/writes global tables).
+  #    a GUC either (it only ever reads/writes global tables). billing_periods
+  #    is the entity invoices anchor to (same posture); control_plane_payments
+  #    is a manual payment record, always created by an interactive
+  #    platform_admin, never under a tenant GUC either.
   #  - Rails bookkeeping tables
   #  - Solid infra tables live in separate DBs and are never tenant-scoped
   GLOBAL_ALLOWLIST = %w[
     institutions users sessions
     subscriptions institution_entitlements
     student_headcount_snapshots usage_events usage_daily_rollups
-    invoices
+    invoices billing_periods control_plane_payments
     schema_migrations ar_internal_metadata
   ].freeze
   SOLID_PREFIXES = %w[solid_queue_ solid_cache_ solid_cable_].freeze
