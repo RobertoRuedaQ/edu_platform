@@ -17,8 +17,13 @@ module Core
       # touches that table. The membership is not just "consistent" — recon
       # confirmed SessionsController#authenticate_credentials requires an
       # active institution_users row to authenticate at all, so creating it
-      # is what makes the guardian's FUTURE login (post-invitation, a later
-      # slice) possible in the first place.
+      # is what makes the guardian's FUTURE login (post-invitation) possible
+      # in the first place. Batch-invite (OPEN_PROCESS.md, closed): a REAL
+      # new Core::User (resolved.new_user, never a re-affirmed existing one)
+      # gets the SAME invitation PeopleController#create already fires for a
+      # manually-created person — molde Bootstrap::FirstAdmin's
+      # Invitations::Issuer.call shape, attributed to whoever uploaded this
+      # batch (never nil when a real actor exists).
       #
       # "duplicate" row status means the GuardianStudent LINK already
       # exists (not merely that the guardian does) — re-affirms it (G4:
@@ -39,8 +44,9 @@ module Core
         VALID_RELATIONSHIPS = %w[padre madre acudiente tutor].freeze
         PREVIEW_HEADERS = [ "Acudiente", "Documento acudiente", "Relación", "Documento estudiante" ].freeze
 
-        def initialize(institution:)
+        def initialize(institution:, created_by: nil)
           @institution = institution
+          @created_by = created_by
         end
 
         def expected_headers = EXPECTED_HEADERS
@@ -105,6 +111,7 @@ module Core
           attrs[:relationship] = plain["relationship"] if plain["relationship"].present? && link.relationship != plain["relationship"]
           attrs[:status] = "active" if link.status != "active" # a row's presence only ever re-affirms, never revokes
           link.update!(attrs) if attrs.any?
+          invite_new_guardian!(resolved)
           link
         end
 
@@ -118,6 +125,19 @@ module Core
         end
 
         private
+
+        # OPEN_PROCESS.md batch-invite: SOLO un Core::User genuinamente
+        # nuevo recibe invitación — uno re-afirmado (ya existía antes de
+        # este batch) nunca se re-invita, sin importar cuántas filas del
+        # CSV lo mencionen ni cuántas veces se re-comitee el batch
+        # (idempotente por construcción: new_user solo es true la PRIMERA
+        # vez que Resolver crea la fila).
+        def invite_new_guardian!(resolved)
+          return unless resolved.new_user
+
+          IdentityAccess::Invitations::Issuer.call(user: resolved.user, institution: @institution,
+            created_by: @created_by)
+        end
 
         def existing_guardian(national_id)
           return nil if national_id.blank?

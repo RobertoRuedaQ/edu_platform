@@ -6,6 +6,22 @@
         ui_button("Nueva persona", href: new_identity_access_person_path, variant: :primary)
       ]) %>
 
+<%= form_with url: identity_access_people_path, method: :get, class: "audit-filters" do -%>
+  <div class="field">
+    <label class="field__label" for="people-role">Rol de cuenta</label>
+    <select class="field__input" id="people-role" name="role">
+      <option value="">Todos</option>
+      <% @roles.each do |role| -%>
+        <option value="<%= role %>" <%= "selected" if params[:role] == role %>><%= role.humanize %></option>
+      <% end -%>
+    </select>
+  </div>
+  <div class="audit-filters__actions">
+    <%= ui_button "Filtrar", type: "submit", variant: :primary %>
+    <%= link_to "Limpiar", identity_access_people_path, class: "btn btn--secondary" %>
+  </div>
+<% end -%>
+
 <% if @memberships.empty? -%>
   <%= render "shared/empty_state", title: "Todavía no hay personas registradas", icon: "users" %>
 <% else -%>
@@ -40,6 +56,9 @@
               <%= button_to "Suspender", suspend_identity_access_person_path(membership), method: :post, class: "btn btn--danger btn--sm" %>
             <% else -%>
               <%= button_to "Reactivar", reactivate_identity_access_person_path(membership), method: :post, class: "btn btn--secondary btn--sm" %>
+            <% end -%>
+            <% if can?("roles.manage") -%>
+              <%= ui_button "Asignar rol", href: new_identity_access_assignment_path(user_id: membership.user_id), variant: :secondary, size: :sm %>
             <% end -%>
           </div>
         </td>

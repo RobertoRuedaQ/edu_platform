@@ -1,0 +1,34 @@
+<%# locals: (role:, granted_keys: [], url:, method:) -%>
+<%# Permisos agrupados por el prefijo antes del primer "." — puramente de
+    presentación (Permission no tiene ninguna columna de categoría real). -%>
+<% permissions_by_group = IdentityAccess::SeedPermissions::CATALOG.map { |key, description|
+     [ IdentityAccess::Permission.find_by(key: key), description ]
+   }.select { |permission, _| permission }.group_by { |permission, _| permission.key.split(".").first } -%>
+<%= form_with url: url, method: method do -%>
+  <% if role.errors.any? -%>
+    <%= render "shared/alert", variant: :danger, message: role.errors.full_messages.join(", ") %>
+  <% end -%>
+
+  <%= render "shared/field", label: "Nombre", name: "role[name]", type: "text", value: role.name, required: true %>
+
+  <div class="field">
+    <label class="field__label" for="role_description">Descripción</label>
+    <textarea class="field__input" id="role_description" name="role[description]" rows="3"><%= role.description %></textarea>
+  </div>
+
+  <fieldset class="field">
+    <legend class="field__label">Permisos</legend>
+    <% permissions_by_group.sort.each do |group, permissions| -%>
+      <h4><%= group.humanize %></h4>
+      <% permissions.each do |permission, description| -%>
+        <label class="role-form__permission">
+          <input type="checkbox" name="role[permission_ids][]" value="<%= permission.id %>"
+                 <%= "checked" if granted_keys.include?(permission.key) %>>
+          <code><%= permission.key %></code> — <%= description %>
+        </label>
+      <% end -%>
+    <% end -%>
+  </fieldset>
+
+  <%= ui_button "Guardar", type: "submit", variant: :primary %>
+<% end -%>

@@ -1,9 +1,9 @@
-<% content_for :title, @user.name %>
+<% content_for :title, @membership.user.name %>
 
 <%= render "identity_access/user_identity_card",
-      name: @user.name, email: @user.email,
-      roles: @user.roles.map { |r| { role_name: r.role_name, scope_label: r.scope_label, system: r.system } } %>
+      name: @membership.user.name, email: @membership.user.email,
+      roles: @membership.role_assignments.map { |ra| { role_name: ra.role.name, scope_label: ra.scope_label, system: ra.role.system? } } %>
 
 <% if can?("roles.manage") -%>
-  <%= ui_button "Asignar rol", href: new_identity_access_assignment_path(user_id: @user.id), variant: :primary %>
+  <%= ui_button "Asignar rol", href: new_identity_access_assignment_path(user_id: @membership.user_id), variant: :primary %>
 <% end -%>

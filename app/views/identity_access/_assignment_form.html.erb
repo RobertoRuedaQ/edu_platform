@@ -1,10 +1,10 @@
-<%# locals: (roles: [], departments: [], grade_levels: [], groups: [], url: "#", **attrs) -%>
+<%# locals: (roles: [], departments: [], grade_levels: [], groups: [], routes: [], academic_terms: [], user_id:, url: "#", **attrs) -%>
 <%#
-  roles: [label, id] pairs. url defaults to "#" (pure UI exercise, e.g. a
-  preview gallery); pass the real endpoint to actually submit.
-  # TODO: conectar scope_selector a datos reales (departments/grade_levels/groups).
+  roles/departments/grade_levels/groups/routes/academic_terms: [label, id] pairs.
 -%>
 <%= form_with url: url, method: :post, class: "assignment-form" do |f| -%>
+  <%= hidden_field_tag :user_id, user_id %>
+
   <div class="field">
     <label class="field__label" for="assignment-role">Rol</label>
     <select class="field__input" id="assignment-role" name="assignment[role_id]">
@@ -15,8 +15,20 @@
   <fieldset class="assignment-form__scope">
     <legend class="field__label">Alcance</legend>
     <%= render "identity_access/scope_selector",
-          departments: departments, grade_levels: grade_levels, groups: groups %>
+          departments: departments, grade_levels: grade_levels, groups: groups, routes: routes %>
   </fieldset>
+
+  <div class="field">
+    <label class="field__label" for="assignment-academic-term">Término académico (opcional)</label>
+    <select class="field__input" id="assignment-academic-term" name="assignment[academic_term_id]">
+      <option value="">Sin acoplar a un término</option>
+      <% Array(academic_terms).each do |label, id| -%><option value="<%= id %>"><%= label %></option><% end -%>
+    </select>
+    <p class="field__hint">Si eliges un término, la asignación vence automáticamente al cerrarlo.</p>
+  </div>
+
+  <%= render "shared/field", label: "Vigente desde", name: "assignment[valid_from]", type: "date" %>
+  <%= render "shared/field", label: "Vigente hasta (opcional)", name: "assignment[valid_until]", type: "date" %>
 
   <div class="assignment-form__actions">
     <%= ui_button "Asignar rol", type: "submit", variant: :primary %>

@@ -3,11 +3,11 @@
 <%= render "shared/page_header", title: "Usuarios", subtitle: "Membresías de tu institución." %>
 
 <div class="tile-grid">
-  <% @users.each do |user| -%>
-    <%= link_to identity_access_user_path(user.id), class: "identity-card-link" do %>
+  <% @memberships.each do |membership| -%>
+    <%= link_to identity_access_user_path(membership.user_id), class: "identity-card-link" do %>
       <%= render "identity_access/user_identity_card",
-            name: user.name, email: user.email,
-            roles: user.roles.map { |r| { role_name: r.role_name, scope_label: r.scope_label, system: r.system } } %>
+            name: membership.user.name, email: membership.user.email,
+            roles: membership.role_assignments.map { |ra| { role_name: ra.role.name, scope_label: ra.scope_label, system: ra.role.system? } } %>
     <% end %>
   <% end -%>
 </div>

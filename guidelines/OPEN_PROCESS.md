@@ -26,12 +26,10 @@
 
 1. **Onboarding — hardening no bloqueante** — ⛔ **gateado: sin necesidad de producción confirmada**
    (ver `HISTORIA.md` v1.7.0/v1.32.0, marcado así explícitamente en el propio texto del ítem, no
-   solo aquí): batch-invite tras el alta de acudientes (hoy un acudiente creado por roster import no
-   recibe ninguna invitación — confirmado por `test/integration/roster_imports_guardians_test.rb`);
-   full-async de parse+validar de `RosterImport` (hoy corre síncrono en `#create`, capado a
-   `MAX_ROWS`, cambiarlo requiere rediseñar el estado "pendiente" de la vista previa y sus tests).
-   Webhook real para `Invitations::BounceHandler` — ⛔ **gateado: decisión de negocio** (requiere
-   elegir proveedor de correo antes de construir el receptor).
+   solo aquí): full-async de parse+validar de `RosterImport` (hoy corre síncrono en `#create`,
+   capado a `MAX_ROWS`, cambiarlo requiere rediseñar el estado "pendiente" de la vista previa y sus
+   tests). Webhook real para `Invitations::BounceHandler` — ⛔ **gateado: decisión de negocio**
+   (requiere elegir proveedor de correo antes de construir el receptor).
 
 2. **Tiempo real** (Turbo Streams sobre Solid Cable, sin Redis) — ⛔ **gateado: sin driver real
    todavía** — `transportation` (broadcast de `boarding_events`, cuya persistencia ya es real desde
@@ -43,10 +41,13 @@
    v1.50.0, pero sin un evento tan claro como una clase impartida) — cerrar por dominio, cuando
    cada uno tenga un evento real que medir, nunca de una vez.
 
-4. **Decisiones abiertas de arquitectura sin backlog de construcción propio** — ⛔ **gateado:
-   pregunta para el owner, no una tarea de construcción** — ver `PROJECT_STATE.md` §10 para el
-   detalle: **B2** (¿`role_assignments.valid_from/until` se acopla a `academic_terms`?), **P2**
-   (¿qué hacer con `institution_users.role`, columna libre sin lectores?).
+4. **Organigrama / jerarquía interna** — ⛔ **gateado: pedido explícito del owner al resolver P2
+   (v1.57.0)**. Al conectar `institution_users.role` a un uso real, el owner describió algo más
+   grande: poder establecer el organigrama de la institución para usuarios internos (jerarquía de
+   reporte) además de mostrar el cargo. Necesita su propio diseño — probablemente un catálogo de
+   cargos + una relación de reporte (¿en `staff_management`, dueño de `StaffMember`? — nunca en
+   `institution_users.role`, que es un discriminador de tipo de persona `member`/`guardian`, no un
+   cargo). No se construye hasta que el owner confirme el alcance.
 
 5. **`finance` — procesar/aprobar los cobros de admisión** — ⛔ **gateado: pedido explícito del
    owner al confirmar el diseño de `admissions` Incremento 2**. `Admissions::AcceptanceConverter`

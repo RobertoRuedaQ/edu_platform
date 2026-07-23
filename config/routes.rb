@@ -545,7 +545,7 @@ Rails.application.routes.draw do
   # control_plane's existing surface, so this stays institution_admin-only.
   namespace :identity_access do
     resources :users, only: %i[index show]
-    resources :roles, only: %i[index show]
+    resources :roles, only: %i[index show new create edit update]
     resources :assignments, only: %i[index new create]
 
     # Gestión de personas/cuentas: crear (Core::People::Resolver), invitar/

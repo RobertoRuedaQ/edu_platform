@@ -7,12 +7,15 @@ module IdentityAccess
   class UsersController < ApplicationController
     def index
       authorize!("roles.manage")
-      @users = IdentityAccess::UserRoster.all
+      @memberships = Current.institution.memberships.includes(:user, role_assignments: :role).order(:created_at)
     end
 
     def show
-      @user = IdentityAccess::UserRoster.find(params[:id]) or raise ActiveRecord::RecordNotFound
-      authorize!("roles.manage", @user)
+      @membership = Current.institution.memberships.includes(:user, role_assignments: :role)
+        .find_by(user_id: params[:id])
+      raise ActiveRecord::RecordNotFound if @membership.nil?
+
+      authorize!("roles.manage", @membership)
     end
   end
 end
