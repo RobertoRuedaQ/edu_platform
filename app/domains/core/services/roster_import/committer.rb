@@ -12,7 +12,10 @@ module Core
     # consistently even for a row the validator originally called "valid".
     # Only "valid"/"duplicate" rows are applied; "error"/"collision" rows are
     # skipped and left as-is — the batch still commits, just with those
-    # omitted. Never invites (J3/J3-bis) — only ever writes roster records.
+    # omitted. Committer itself never invites — that stays a strategy-level
+    # decision (J3-bis, closed for guardians: Strategies::Guardians invites
+    # a REAL new user, attributed to @batch.created_by, molde
+    # Bootstrap::FirstAdmin). Students never invites, no login to activate.
     class Committer
       COMMITTABLE_STATUSES = %w[valid duplicate].freeze
 
@@ -22,7 +25,7 @@ module Core
 
       def initialize(batch)
         @batch = batch
-        @strategy = Strategy.for(batch.kind, institution: batch.institution)
+        @strategy = Strategy.for(batch.kind, institution: batch.institution, created_by: batch.created_by)
       end
 
       def call

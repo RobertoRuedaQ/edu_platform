@@ -30,12 +30,14 @@
 
 1. **Onboarding — hardening no bloqueante** — ⛔ **gateado: sin necesidad de producción confirmada**
    (ver `HISTORIA.md` v1.7.0/v1.32.0, marcado así explícitamente en el propio texto del ítem, no
-   solo aquí): batch-invite tras el alta de acudientes (hoy un acudiente creado por roster import no
-   recibe ninguna invitación — confirmado por `test/integration/roster_imports_guardians_test.rb`);
-   full-async de parse+validar de `RosterImport` (hoy corre síncrono en `#create`, capado a
-   `MAX_ROWS`, cambiarlo requiere rediseñar el estado "pendiente" de la vista previa y sus tests).
-   Webhook real para `Invitations::BounceHandler` — ⛔ **gateado: decisión de negocio** (requiere
-   elegir proveedor de correo antes de construir el receptor).
+   solo aquí): full-async de parse+validar de `RosterImport` (hoy corre síncrono en `#create`,
+   capado a `MAX_ROWS`, cambiarlo requiere rediseñar el estado "pendiente" de la vista previa y sus
+   tests). Webhook real para `Invitations::BounceHandler` — ⛔ **gateado: decisión de negocio**
+   (requiere elegir proveedor de correo antes de construir el receptor).
+   ~~Batch-invite tras el alta de acudientes~~ ✅ **CERRADO (v1.58.0), confirmado explícitamente
+   por el owner** — `Core::RosterImport::Strategies::Guardians#commit_row!` invita al acudiente
+   SOLO cuando `Core::People::Resolver#new_user` es `true` (molde `Bootstrap::FirstAdmin`),
+   atribuido a `batch.created_by`. Ver `HISTORIA.md` v1.58.0.
 
 2. **Billing — hardening pendiente** — ⛔ **gateado: decisión de negocio real** (ver `HISTORIA.md`
    v1.33.0 para lo ya cerrado): estos tres no son defaults seguros de asumir — prorrateo de

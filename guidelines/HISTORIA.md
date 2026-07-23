@@ -17,6 +17,36 @@
 > moviera el changelog fuera del doc magro. Las entradas v1.6.0+ se escribieron directamente aquí,
 > ya con el split vigente.
 
+### v1.58.0 — 2026-07-24 — Onboarding: batch-invite tras alta de acudientes por roster import (`OPEN_PROCESS.md` ítem #1a)
+
+Cierra el hueco más simple del backlog de hardening de onboarding (`HISTORIA.md` v1.7.0/v1.32.0):
+un acudiente creado vía roster import (CSV masivo) no recibía ninguna invitación — solo el camino
+manual de "Nueva persona" (`IdentityAccess::PeopleController#create`) la disparaba. Cero decisión
+de negocio pendiente para esto — el comportamiento ya existía en el repo, solo faltaba aplicarlo
+al lote.
+
+**Cambio técnico**: `Core::RosterImport::Strategies::Guardians#commit_row!` invita al acudiente
+SOLO cuando `Core::People::Resolver#new_user` es `true` — es decir, únicamente cuando ESTE commit
+crea el `Core::User` de verdad, nunca cuando una fila re-afirma un acudiente que ya existía antes
+del batch (sea de un batch anterior o de un alta manual previa). Molde exacto
+`IdentityAccess::Bootstrap::FirstAdmin`: `Invitations::Issuer.call(user:, institution:,
+created_by:)`. `created_by` se atribuye a quien subió el batch (`Core::RosterImportBatch
+#created_by`, ya existía sin usarse) — se hizo fluir vía `Core::RosterImport::Strategy.for`
+(nuevo kwarg opcional `created_by: nil`, kind-agnóstico: solo `Guardians` lo usa, `Students` lo
+ignora sin tocar su propia firma) y `Committer` (pasa `batch.created_by`). Idempotencia gratis: un
+acudiente con N hijos genera N filas del CSV, pero `Resolver` solo devuelve `new_user: true` en la
+fila que efectivamente lo crea (orden por `line_number`) — las demás, y cualquier re-commit
+posterior del mismo batch, encuentran el usuario ya existente y nunca re-invitan. Sin
+idempotency_key propio: la semántica de "buscar antes de crear" de `Resolver` ya lo garantiza.
+
+**Tests**: `test/integration/roster_imports_guardians_test.rb` extendido — el acudiente
+genuinamente nuevo recibe exactamente UNA invitación (pese a tener 2 filas en el CSV, S-A y S-B),
+atribuida al actor que subió el batch; el acudiente que YA existía antes del batch nunca se
+re-invita aunque una fila del CSV re-afirme su vínculo; un re-commit del mismo batch no duplica
+la invitación. Sanity manual vía `bin/rails runner` (transacción con rollback) confirma el mismo
+comportamiento llamando la estrategia directo. Suite completa 877 runs / 0 fallos / 1 skip
+preexistente.
+
 ### v1.57.0 — 2026-07-24 — RBAC real: roles/asignaciones + fechado por término + role de persona (`OPEN_PROCESS.md` B2/P2)
 
 El owner resolvió las dos "decisiones abiertas de arquitectura" (B2/P2) que llevaban sin backlog

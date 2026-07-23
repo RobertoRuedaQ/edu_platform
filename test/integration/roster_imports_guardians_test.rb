@@ -101,12 +101,30 @@ class RosterImportsGuardiansTest < ActionDispatch::IntegrationTest
         assert_equal "committed", batch.reload.status
         g = Core::User.find_by(national_id: "G-NEW")
         assert g.present?
-        assert_nil g.password_digest # J3-bis: no invitation, no password
+        assert_nil g.password_digest # invitation issued, but never sets a password directly
         membership = Core::InstitutionUser.find_by(institution: @institution, user: g)
         assert membership.active?
         assert_equal 0, IdentityAccess::RoleAssignment.where(institution_user_id: membership.id).count
         assert_equal 2, Core::GuardianStudent.where(guardian_user_id: g.id).count
         g
+      end
+
+      # Batch-invite (OPEN_PROCESS.md, closed): the REAL new guardian gets
+      # exactly ONE invitation — one row despite having TWO CSV rows
+      # (S-A, S-B), because Resolver only returns new_user: true on
+      # whichever row commits first (line_number order). Attributed to
+      # whoever uploaded the batch (Current.institution_user, via
+      # as_people_manager), never nil when a real actor exists.
+      within_tenant do
+        invitations = IdentityAccess::Invitation.where(institution: @institution, user: new_guardian)
+        assert_equal 1, invitations.count
+        assert_equal @user.id, invitations.sole.created_by.user_id
+      end
+
+      # G-EXISTING already existed before this batch (test setup) — never
+      # re-invited just because a CSV row re-affirms their link.
+      within_tenant do
+        assert_equal 0, IdentityAccess::Invitation.where(institution: @institution, user: existing_guardian).count
       end
 
       # The crown test: the pre-existing link to student_c (never in the CSV) survives.
@@ -116,12 +134,13 @@ class RosterImportsGuardiansTest < ActionDispatch::IntegrationTest
         assert_equal 2, Core::GuardianStudent.where(guardian_user_id: existing_guardian.id).count # old + new (S-A)
       end
 
-      # Idempotency: re-commit does not duplicate.
+      # Idempotency: re-commit does not duplicate — including never a second invitation.
       perform_enqueued_jobs { post commit_identity_access_roster_import_path(batch) }
       within_tenant do
         assert_equal 1, Core::User.where(national_id: "G-NEW").count
         # existing_guardian: S-C (pre-existing) + S-A (new) = 2; new_guardian: S-A + S-B = 2.
         assert_equal 4, Core::GuardianStudent.count
+        assert_equal 1, IdentityAccess::Invitation.where(institution: @institution, user: new_guardian).count
       end
 
       # Privacy: no plaintext national_id anywhere in the rows.
