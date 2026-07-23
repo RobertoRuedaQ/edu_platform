@@ -4,8 +4,9 @@ class ControlPlane::InvoiceLineItemTest < ActiveSupport::TestCase
   def build_invoice
     institution = Core::Institution.create!(name: "Colegio #{SecureRandom.hex(4)}", slug: "ili-#{SecureRandom.hex(4)}",
       code: "C-#{SecureRandom.hex(3)}", kind: "school")
-    ControlPlane::Invoice.create!(institution: institution, period_start: Date.new(2026, 6, 1),
-      period_end: Date.new(2026, 6, 30), currency: "COP")
+    billing_period = ControlPlane::BillingPeriod.create!(institution: institution,
+      starts_on: Date.new(2026, 6, 1), ends_on: Date.new(2026, 6, 30))
+    ControlPlane::Invoice.create!(institution: institution, billing_period: billing_period, currency: "COP")
   end
 
   def build_addon

@@ -15,6 +15,8 @@
   <%= render "shared/detail_list", items: {
         "Estado"    => render("control_plane/shared/invoice_status_badge", status: @invoice.status),
         "Subtotal"  => money(@invoice.subtotal_cents / 100.0, currency: @invoice.currency),
+        "Pagado"    => money(@invoice.paid_amount, currency: @invoice.currency),
+        "Saldo pendiente" => money(@invoice.balance_due_amount, currency: @invoice.currency),
         "Finalizada" => @invoice.finalized_at ? datetime(@invoice.finalized_at, format: :date) : "—",
         "Notas"     => @invoice.notes.presence || "—"
       } %>
@@ -69,5 +71,51 @@
     </ul>
   </section>
 <% end %>
+
+<section class="cp-section" aria-labelledby="cp-payments-h">
+  <h2 id="cp-payments-h">Pagos</h2>
+  <% if @invoice.payments.empty? %>
+    <p>Sin abonos registrados todavía.</p>
+  <% else %>
+    <%= render layout: "shared/table",
+          locals: { headers: [ "Monto", "Método", "Fecha", "Registrado por", "Notas" ] } do %>
+      <% @invoice.payments.order(:paid_on).each do |payment| %>
+        <tr>
+          <td><%= money(payment.amount, currency: @invoice.currency) %></td>
+          <td><%= { "cash" => "Efectivo", "card" => "Tarjeta", "transfer" => "Transferencia", "other" => "Otro" }.fetch(payment.method, payment.method) %></td>
+          <td><%= datetime(payment.paid_on.to_time, format: :date) %></td>
+          <td><%= payment.recorded_by.name %></td>
+          <td><%= payment.notes.presence || "—" %></td>
+        </tr>
+      <% end %>
+    <% end %>
+  <% end %>
+
+  <% unless @invoice.void? %>
+    <%= form_with url: control_plane_institution_invoice_payments_path(@institution, @invoice), method: :post do %>
+      <%# Idempotency: la MISMA key sobrevive un re-render (error de validación)
+          y un doble-submit genuino — PaymentRecorder devuelve el pago ya
+          registrado en vez de registrar uno segundo. -%>
+      <%= hidden_field_tag :idempotency_key, SecureRandom.uuid %>
+
+      <%= render "shared/field", label: "Monto", name: "amount", type: "number", step: "0.01", required: true %>
+
+      <div class="field">
+        <label class="field__label" for="payment_method">Método</label>
+        <select class="field__input" id="payment_method" name="method" required>
+          <% { "cash" => "Efectivo", "transfer" => "Transferencia", "card" => "Tarjeta", "other" => "Otro" }.each do |value, label| %>
+            <option value="<%= value %>"><%= label %></option>
+          <% end %>
+        </select>
+      </div>
+
+      <%= render "shared/field", label: "Fecha de pago", name: "paid_on", type: "date",
+            value: Date.current, required: true %>
+      <%= render "shared/field", label: "Notas (opcional)", name: "notes", type: "text" %>
+
+      <%= ui_button "Registrar pago", type: "submit", variant: :primary %>
+    <% end %>
+  <% end %>
+</section>
 
 <p><%= link_to "Volver a la institución", control_plane_institution_path(@institution) %></p>

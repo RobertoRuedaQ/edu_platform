@@ -15,8 +15,9 @@ module ControlPlane
         Core::Institution.find_each do |institution|
           next unless ControlPlane::Subscription.active.exists?(institution_id: institution.id)
 
-          PeriodCutJob.perform_later(institution_id: institution.id,
-            period_start: period_start, period_end: period_end)
+          billing_period = ControlPlane::BillingPeriod.find_or_create_by!(institution: institution,
+            starts_on: period_start, ends_on: period_end)
+          PeriodCutJob.perform_later(institution_id: institution.id, billing_period_id: billing_period.id)
         end
       end
     end

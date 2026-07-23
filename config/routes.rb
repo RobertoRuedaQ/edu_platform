@@ -620,6 +620,9 @@ Rails.application.routes.draw do
           patch :void
           patch :recut
         end
+        # Sin index/vista propia — los pagos se listan inline en
+        # invoices/show (molde "una computación, N superficies").
+        resources :payments, only: %i[create]
       end
     end
     resources :addons, except: %i[destroy] do

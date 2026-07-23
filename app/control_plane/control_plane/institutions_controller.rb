@@ -34,7 +34,7 @@ module ControlPlane
       @usage_rollups = UsageDailyRollup.for_institution(@institution).includes(:addon)
         .most_recent_first.limit(20)
 
-      @invoices = Invoice.for_institution(@institution).most_recent_first.limit(10)
+      @invoices = Invoice.for_institution(@institution).includes(:billing_period).most_recent_first.limit(10)
     end
 
     def new

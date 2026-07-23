@@ -13,9 +13,9 @@
   <% end %>
 
   <%= render "shared/field", label: "Inicio del periodo", name: "invoice[period_start]",
-        type: "date", value: @invoice.period_start, required: true %>
+        type: "date", value: @period_start, required: true %>
   <%= render "shared/field", label: "Fin del periodo", name: "invoice[period_end]",
-        type: "date", value: @invoice.period_end, required: true %>
+        type: "date", value: @period_end, required: true %>
 
   <%= ui_button "Generar borrador", type: "submit", variant: :primary %>
 <% end %>

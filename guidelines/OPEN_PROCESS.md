@@ -61,9 +61,13 @@
    DIFERIDA 30 días (`RETENTION`, PLACEHOLDER), ancla `committed_at` nueva en `roster_import_batches`.
    Ver `HISTORIA.md` v1.53.0.
 
-3. **Billing — hardening pendiente** — ⛔ **gateado: decisión de negocio real** (ver `HISTORIA.md`
-   v1.33.0 para lo ya cerrado): estos tres no son defaults seguros de asumir — prorrateo de
-   `addon_fee`; edición manual de líneas de un borrador; tabla `billing_periods` explícita.
+3. ~~Billing — hardening pendiente~~ ✅ **CERRADO (v1.59.0), confirmado explícitamente por el
+   owner** — prorrateo de `addon_fee` y edición manual de líneas de un borrador: decisión de NO
+   construir (tarifa plana / `recut` ya cubre el caso real, no quedan diferidos). `billing_periods`
+   (`ControlPlane::BillingPeriod`) SÍ se construyó como entidad propia, GLOBAL — `invoices.
+   billing_period_id` reemplaza las columnas sueltas `period_start`/`period_end`. De paso, el owner
+   revisó el no-goal de "riel de pago" (ver abajo): el registro MANUAL de abonos (`ControlPlane::
+   Payment` vía `ControlPlane::Billing::PaymentRecorder`) ahora es real. Ver `HISTORIA.md` v1.59.0.
 
 4. **Tiempo real** (Turbo Streams sobre Solid Cable, sin Redis) — ⛔ **gateado: sin driver real
    todavía** — `transportation` (broadcast de `boarding_events`, cuya persistencia ya es real desde
@@ -91,15 +95,17 @@
    camino — mismo criterio que el resto de items de este backlog (riel de pago real ya está fuera
    de alcance de v1, ver no-goals abajo).
 
-**Próximo paso sugerido**: con el ítem #1 (Fase D) 100% cerrado, quedan seis pendientes (#2–#7) y
-ninguno es "el siguiente slice obvio" — pedir al owner que elija uno y confirme explícitamente antes
-de construir cualquiera de estos (mismo patrón que ya cerró la purga de `roster_import_rows`,
-v1.53.0, y los tres incrementos de Fase D).
+**Próximo paso sugerido**: con los ítems #1 (Fase D) y #3 (Billing) 100% cerrados, quedan cuatro
+pendientes (#2, #4–#7) y ninguno es "el siguiente slice obvio" — pedir al owner que elija uno y
+confirme explícitamente antes de construir cualquiera de estos (mismo patrón que ya cerró la purga
+de `roster_import_rows`, v1.53.0, los tres incrementos de Fase D, y billing hardening, v1.59.0).
 
 ### No-goals confirmados (fuera de alcance, no backlog)
 
-- **Riel de pago** (cobrar/enviar una factura) — fuera de alcance de v1; finalizar una factura la
-  congela, no la cobra.
+- **Riel de pago AUTOMÁTICO/pasarela** (cobrar una factura sin intervención humana) — fuera de
+  alcance de v1; finalizar una factura la congela, no la cobra. **Revisado en v1.59.0**: el
+  registro MANUAL de un abono (`ControlPlane::Payment`) SÍ es real desde entonces — este no-goal
+  cubre solo la automatización, nunca existió como bloqueo para anotar que un pago llegó.
 - Integración GPS/mapa para `transportation` — sin señal de necesidad real.
 
 ---

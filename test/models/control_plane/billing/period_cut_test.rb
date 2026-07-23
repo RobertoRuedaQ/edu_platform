@@ -9,6 +9,11 @@ class ControlPlane::Billing::PeriodCutTest < ActiveSupport::TestCase
     Core::Institution.create!(name: "Colegio #{slug}", slug: slug, code: "C-#{SecureRandom.hex(3)}", kind: "school")
   end
 
+  def billing_period(institution)
+    ControlPlane::BillingPeriod.find_or_create_by!(institution: institution,
+      starts_on: PERIOD_START, ends_on: PERIOD_END)
+  end
+
   def build_plan_with_tiers
     plan = ControlPlane::Plan.create!(key: "plan-#{SecureRandom.hex(4)}", name: "Plan de prueba",
       base_price_per_student_cents: 300_000, currency: "COP")
@@ -54,7 +59,7 @@ class ControlPlane::Billing::PeriodCutTest < ActiveSupport::TestCase
     s = full_scenario
 
     invoice = ControlPlane::Billing::PeriodCut.call(institution: s[:institution],
-      period_start: PERIOD_START, period_end: PERIOD_END)
+      billing_period: billing_period(s[:institution]))
 
     assert invoice.draft?
     kinds = invoice.line_items.pluck(:kind).sort
@@ -66,7 +71,7 @@ class ControlPlane::Billing::PeriodCutTest < ActiveSupport::TestCase
   test "base_seats uses the tier the headcount falls into (H4)" do
     s = full_scenario # headcount 600 -> second tier, 250_000/student
     invoice = ControlPlane::Billing::PeriodCut.call(institution: s[:institution],
-      period_start: PERIOD_START, period_end: PERIOD_END)
+      billing_period: billing_period(s[:institution]))
 
     base_line = invoice.line_items.find_by(kind: "base_seats")
     assert_equal 600, base_line.quantity.to_i
@@ -82,8 +87,7 @@ class ControlPlane::Billing::PeriodCutTest < ActiveSupport::TestCase
     ControlPlane::StudentHeadcountSnapshot.create!(institution: institution, as_of_date: Date.new(2026, 6, 15),
       headcount: 42)
 
-    invoice = ControlPlane::Billing::PeriodCut.call(institution: institution,
-      period_start: PERIOD_START, period_end: PERIOD_END)
+    invoice = ControlPlane::Billing::PeriodCut.call(institution: institution, billing_period: billing_period(institution))
 
     base_line = invoice.line_items.find_by(kind: "base_seats")
     assert_equal 999_000, base_line.unit_price_cents
@@ -92,7 +96,7 @@ class ControlPlane::Billing::PeriodCutTest < ActiveSupport::TestCase
   test "overrides win over the catalog for both addon_fee and usage_overage (H3)" do
     s = full_scenario
     invoice = ControlPlane::Billing::PeriodCut.call(institution: s[:institution],
-      period_start: PERIOD_START, period_end: PERIOD_END)
+      billing_period: billing_period(s[:institution]))
 
     counseling_fee = invoice.line_items.find_by(kind: "addon_fee", addon_id: s[:counseling].id)
     assert_equal 500_000, counseling_fee.unit_price_cents # override, not the catalog's 600_000
@@ -110,7 +114,7 @@ class ControlPlane::Billing::PeriodCutTest < ActiveSupport::TestCase
   test "usage_overage quantity is usage minus quota, using the override quota (H7)" do
     s = full_scenario # usage 50+30=80, override quota 50 -> overage 30
     invoice = ControlPlane::Billing::PeriodCut.call(institution: s[:institution],
-      period_start: PERIOD_START, period_end: PERIOD_END)
+      billing_period: billing_period(s[:institution]))
 
     overage = invoice.line_items.find_by(kind: "usage_overage")
     assert_equal 30, overage.quantity.to_i
@@ -126,7 +130,7 @@ class ControlPlane::Billing::PeriodCutTest < ActiveSupport::TestCase
       usage_date: Date.new(2026, 6, 10), total_quantity: 20, event_count: 2) # under the 50 override quota
 
     invoice = ControlPlane::Billing::PeriodCut.call(institution: s[:institution],
-      period_start: PERIOD_START, period_end: PERIOD_END)
+      billing_period: billing_period(s[:institution]))
 
     assert_nil invoice.line_items.find_by(kind: "usage_overage")
   end
@@ -136,7 +140,7 @@ class ControlPlane::Billing::PeriodCutTest < ActiveSupport::TestCase
     ControlPlane::UsageDailyRollup.where(institution_id: s[:institution].id).destroy_all
 
     invoice = ControlPlane::Billing::PeriodCut.call(institution: s[:institution],
-      period_start: PERIOD_START, period_end: PERIOD_END)
+      billing_period: billing_period(s[:institution]))
 
     assert_nil invoice.line_items.find_by(kind: "usage_overage")
     assert invoice.line_items.find_by(kind: "base_seats").present?
@@ -145,33 +149,41 @@ class ControlPlane::Billing::PeriodCutTest < ActiveSupport::TestCase
 
   test "re-cutting the same period replaces lines in place, does not duplicate (H1)" do
     s = full_scenario
-    first = ControlPlane::Billing::PeriodCut.call(institution: s[:institution],
-      period_start: PERIOD_START, period_end: PERIOD_END)
+    period = billing_period(s[:institution])
+    first = ControlPlane::Billing::PeriodCut.call(institution: s[:institution], billing_period: period)
     first_count = first.line_items.count
 
-    second = ControlPlane::Billing::PeriodCut.call(institution: s[:institution],
-      period_start: PERIOD_START, period_end: PERIOD_END)
+    second = ControlPlane::Billing::PeriodCut.call(institution: s[:institution], billing_period: period)
 
     assert_equal first.id, second.id
     assert_equal first_count, second.line_items.count
     assert ControlPlane::AuditEvent.exists?(action: "invoice.redrafted", target_id: first.id)
   end
 
+  test "re-cutting the same period never creates a second BillingPeriod" do
+    s = full_scenario
+    period = billing_period(s[:institution])
+    ControlPlane::Billing::PeriodCut.call(institution: s[:institution], billing_period: period)
+    ControlPlane::Billing::PeriodCut.call(institution: s[:institution], billing_period: billing_period(s[:institution]))
+
+    assert_equal 1, ControlPlane::BillingPeriod.where(institution_id: s[:institution].id).count
+  end
+
   test "re-cutting a finalized invoice is rejected" do
     s = full_scenario
-    invoice = ControlPlane::Billing::PeriodCut.call(institution: s[:institution],
-      period_start: PERIOD_START, period_end: PERIOD_END)
+    period = billing_period(s[:institution])
+    invoice = ControlPlane::Billing::PeriodCut.call(institution: s[:institution], billing_period: period)
     invoice.finalize!
 
     assert_raises(ControlPlane::Billing::PeriodCut::AlreadyFinalized) do
-      ControlPlane::Billing::PeriodCut.call(institution: s[:institution], period_start: PERIOD_START, period_end: PERIOD_END)
+      ControlPlane::Billing::PeriodCut.call(institution: s[:institution], billing_period: period)
     end
   end
 
   test "no active subscription rejects the cut (H9)" do
     institution = build_institution
     assert_raises(ControlPlane::Billing::PeriodCut::NoActiveSubscription) do
-      ControlPlane::Billing::PeriodCut.call(institution: institution, period_start: PERIOD_START, period_end: PERIOD_END)
+      ControlPlane::Billing::PeriodCut.call(institution: institution, billing_period: billing_period(institution))
     end
   end
 
@@ -181,7 +193,7 @@ class ControlPlane::Billing::PeriodCutTest < ActiveSupport::TestCase
     subscription.end!(ends_on: PERIOD_END + 1)
 
     assert_raises(ControlPlane::Billing::PeriodCut::NoActiveSubscription) do
-      ControlPlane::Billing::PeriodCut.call(institution: institution, period_start: PERIOD_START, period_end: PERIOD_END)
+      ControlPlane::Billing::PeriodCut.call(institution: institution, billing_period: billing_period(institution))
     end
   end
 
@@ -189,7 +201,7 @@ class ControlPlane::Billing::PeriodCutTest < ActiveSupport::TestCase
     institution = build_institution
     sign_subscription(institution)
 
-    invoice = ControlPlane::Billing::PeriodCut.call(institution: institution, period_start: PERIOD_START, period_end: PERIOD_END)
+    invoice = ControlPlane::Billing::PeriodCut.call(institution: institution, billing_period: billing_period(institution))
 
     assert invoice.draft?
     assert_nil invoice.line_items.find_by(kind: "base_seats")
@@ -203,7 +215,7 @@ class ControlPlane::Billing::PeriodCutTest < ActiveSupport::TestCase
       ActiveRecord::Base.connection.select_value("SELECT current_setting('app.current_institution_id', true)").presence
     }
 
-    ControlPlane::Billing::PeriodCut.call(institution: s[:institution], period_start: PERIOD_START, period_end: PERIOD_END)
+    ControlPlane::Billing::PeriodCut.call(institution: s[:institution], billing_period: billing_period(s[:institution]))
 
     assert_nil ActiveRecord::Base.uncached {
       ActiveRecord::Base.connection.select_value("SELECT current_setting('app.current_institution_id', true)").presence
@@ -215,7 +227,7 @@ class ControlPlane::Billing::PeriodCutTest < ActiveSupport::TestCase
     s[:counseling_entitlement].update!(override_currency: "USD")
 
     invoice = ControlPlane::Billing::PeriodCut.call(institution: s[:institution],
-      period_start: PERIOD_START, period_end: PERIOD_END)
+      billing_period: billing_period(s[:institution]))
 
     assert_match "Moneda de override", invoice.notes
     assert_equal "COP", invoice.currency # still the subscription's single currency (H5)
