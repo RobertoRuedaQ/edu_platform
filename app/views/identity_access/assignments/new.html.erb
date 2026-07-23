@@ -2,7 +2,7 @@
 
 <%= render "shared/page_header",
       title: "Nueva asignación de rol",
-      subtitle: (@user ? "Para #{@user.name}" : "Selecciona un rol y un alcance.") %>
+      subtitle: "Para #{@institution_user.user.name}" %>
 
 <%= render "shared/alert",
       variant: :info,
@@ -10,5 +10,10 @@
                "Si el alcance elegido no aplica para el rol, la asignación se rechaza." %>
 
 <%= render "identity_access/assignment_form",
-      url: identity_access_assignments_path,
-      roles: @roles.map { |role| [role.name, role.id] } %>
+      url: identity_access_assignments_path, user_id: @institution_user.user_id,
+      roles: @roles.map { |role| [role.name, role.id] },
+      departments: @departments.map { |d| [d.name, d.id] },
+      grade_levels: @grade_levels.map { |g| [g.name, g.id] },
+      groups: @groups.map { |g| [g.name, g.id] },
+      routes: @routes.map { |r| [r.name, r.id] },
+      academic_terms: @academic_terms.map { |t| [t.name, t.id] } %>

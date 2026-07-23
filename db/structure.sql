@@ -1729,6 +1729,7 @@ CREATE TABLE public.role_assignments (
     valid_from date DEFAULT CURRENT_DATE NOT NULL,
     valid_until date,
     scope_route_id uuid,
+    academic_term_id uuid,
     CONSTRAINT role_assignments_valid_until_after_valid_from CHECK (((valid_until IS NULL) OR (valid_until >= valid_from)))
 );
 
@@ -4725,6 +4726,13 @@ CREATE INDEX index_role_assignments_on_institution_id ON public.role_assignments
 
 
 --
+-- Name: index_role_assignments_on_institution_id_and_academic_term_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_role_assignments_on_institution_id_and_academic_term_id ON public.role_assignments USING btree (institution_id, academic_term_id);
+
+
+--
 -- Name: index_role_assignments_on_scope_route_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -5548,6 +5556,14 @@ ALTER TABLE ONLY public.submissions
 
 ALTER TABLE ONLY public.seat_assignments
     ADD CONSTRAINT fk_rails_367791f28a FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE CASCADE;
+
+
+--
+-- Name: role_assignments fk_rails_36bcf43d59; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.role_assignments
+    ADD CONSTRAINT fk_rails_36bcf43d59 FOREIGN KEY (academic_term_id) REFERENCES public.academic_terms(id) ON DELETE SET NULL;
 
 
 --
@@ -8656,6 +8672,7 @@ CREATE POLICY teaching_assignments_tenant_isolation ON public.teaching_assignmen
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260724171000'),
 ('20260724090000'),
 ('20260723090000'),
 ('20260722080000'),

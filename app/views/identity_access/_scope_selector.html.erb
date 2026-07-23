@@ -1,12 +1,12 @@
-<%# locals: (departments: [], grade_levels: [], groups: [], selected: {}, name_prefix: "assignment") -%>
+<%# locals: (departments: [], grade_levels: [], groups: [], routes: [], selected: {}, name_prefix: "assignment") -%>
 <%#
-  UI-only scope picker. Each dimension defaults to "Toda la institución" (blank
-  value = institution-wide). Options are [label, id] pairs (stub or real).
-  # TODO: cablear a datos reales; sin lógica de submit aquí.
+  Scope picker. Each dimension defaults to "Toda la institución" (blank
+  value = institution-wide). Options are [label, id] pairs.
 -%>
 <% dims = [["scope_department_id", "Departamento", departments],
            ["scope_grade_level_id", "Nivel/Grado", grade_levels],
-           ["scope_group_id", "Grupo", groups]] -%>
+           ["scope_group_id", "Grupo", groups],
+           ["scope_route_id", "Ruta", routes]] -%>
 <div class="scope-selector">
   <% dims.each do |field, label, options| -%>
     <div class="field">

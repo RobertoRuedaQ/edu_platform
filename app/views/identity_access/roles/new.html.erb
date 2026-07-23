@@ -1,0 +1,4 @@
+<% content_for :title, "Nuevo rol" %>
+
+<%= render "shared/page_header", title: "Nuevo rol" %>
+<%= render "identity_access/roles/form", role: @role, granted_keys: [], url: identity_access_roles_path, method: :post %>

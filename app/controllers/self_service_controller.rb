@@ -13,6 +13,7 @@
 # as" selector, which doesn't exist as a real mechanism yet anyway.
 class SelfServiceController < ApplicationController
   def show
+    @institution_user = Current.institution_user
     @profile = Core::Access::StaffProfileScope.for(Current.user)
     @role_assignments = Core::Access::StaffRoleAssignmentsScope.for(Current.user)
       .includes(:role, :scope_department, :scope_grade_level, :scope_group)

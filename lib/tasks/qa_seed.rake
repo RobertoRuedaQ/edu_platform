@@ -30,29 +30,29 @@ namespace :qa do
     end
 
     # ---- 1) Real RBAC roles + permissions (Role/RolePermission have zero
-    # seed data anywhere else — mirror the UI stub's data into real rows). ----
+    # seed data anywhere else — mirror the demo catalog into real rows). ----
     roles_by_key = {}
-    IdentityAccess::RoleRoster.all.each do |rd|
+    IdentityAccess::RoleCatalog::CANONICAL_ROLES.each do |rd|
       with_tenant.call do
-        role = IdentityAccess::Role.find_or_create_by!(institution_id: institution.id, key: rd.key) do |r|
-          r.name = rd.name
-          r.description = rd.description
-          r.system = rd.system
+        role = IdentityAccess::Role.find_or_create_by!(institution_id: institution.id, key: rd[:key]) do |r|
+          r.name = rd[:name]
+          r.description = rd[:description]
+          r.system = rd[:system]
         end
-        IdentityAccess::RoleRoster::PERMISSIONS_BY_ROLE_KEY.fetch(rd.key, []).each do |perm_key|
+        rd[:permission_keys].each do |perm_key|
           permission = IdentityAccess::Permission.find_by(key: perm_key)
           next unless permission
           IdentityAccess::RolePermission.find_or_create_by!(
             institution_id: institution.id, role_id: role.id, permission_id: permission.id
           )
         end
-        roles_by_key[rd.key] = role
+        roles_by_key[rd[:key]] = role
       end
     end
 
     # ---- 2) One Core::User per RBAC role, membership + assignment. ----
-    staff_rows = IdentityAccess::RoleRoster.all.map do |rd|
-      email = "#{rd.key}@colegio-san-jose.test"
+    staff_rows = IdentityAccess::RoleCatalog::CANONICAL_ROLES.map do |rd|
+      email = "#{rd[:key]}@colegio-san-jose.test"
       user = Core::User.find_or_create_by!(email: email) do |u|
         u.password = QA_PASSWORD
         u.password_confirmation = QA_PASSWORD
@@ -64,12 +64,12 @@ namespace :qa do
           m.status = "active"
         end
         IdentityAccess::RoleAssignment.find_or_create_by!(
-          institution_id: institution.id, institution_user_id: membership.id, role_id: roles_by_key[rd.key].id
+          institution_id: institution.id, institution_user_id: membership.id, role_id: roles_by_key[rd[:key]].id
         )
       end
-      puts "#{rd.key}: #{email}"
-      { role: rd.name, key: rd.key, email: email,
-        notes: "Asignación RBAC real (#{IdentityAccess::RoleRoster::PERMISSIONS_BY_ROLE_KEY.fetch(rd.key, []).join(', ')})." }
+      puts "#{rd[:key]}: #{email}"
+      { role: rd[:name], key: rd[:key], email: email,
+        notes: "Asignación RBAC real (#{rd[:permission_keys].join(', ')})." }
     end
 
     # ---- 3) Student login: reuse a seeded student that already has legacy

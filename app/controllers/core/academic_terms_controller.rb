@@ -74,6 +74,7 @@ module Core
       ActiveRecord::Base.transaction(requires_new: true) do
         @term.update!(status: "closed")
         AnalyticsBi::HpsTermSnapshotJob.enqueue_for(Current.institution, academic_term: @term)
+        expire_opted_in_role_assignments
       end
       redirect_to core_academic_terms_path, notice: "Término cerrado — snapshot del HPS encolado."
     end
@@ -89,6 +90,16 @@ module Core
 
     def term_params
       params.require(:academic_term).permit(:code, :name, :starts_on, :ends_on)
+    end
+
+    # OPEN_PROCESS.md B2: opt-in coupling — only role_assignments EXPLICITLY
+    # tied to this term (academic_term_id) get capped, and only if still
+    # open (valid_until nil); an admin's own earlier manual valid_until is
+    # never overwritten.
+    def expire_opted_in_role_assignments
+      IdentityAccess::RoleAssignment
+        .where(institution_id: Current.institution_id, academic_term_id: @term.id, valid_until: nil)
+        .update_all(valid_until: @term.ends_on)
     end
   end
 end

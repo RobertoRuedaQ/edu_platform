@@ -8,6 +8,8 @@ module IdentityAccess
       Invitations::Expirer.call(institution: Current.institution)
 
       @memberships = Current.institution.memberships.includes(:user).order(:created_at)
+      @memberships = @memberships.where(role: params[:role]) if params[:role].present?
+      @roles = Current.institution.memberships.distinct.order(:role).pluck(:role)
       @invitations_by_user = Invitation
         .where(institution_id: Current.institution_id, user_id: @memberships.map(&:user_id))
         .order(created_at: :desc)

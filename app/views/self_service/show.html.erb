@@ -12,9 +12,11 @@
           "Categoría" => @profile.staff_category.humanize,
           "Tipo de vinculación" => @profile.employment_type.humanize,
           "Estado" => @profile.status.humanize,
-          "Departamento" => @profile.department&.name
+          "Departamento" => @profile.department&.name,
+          "Rol de cuenta" => @institution_user.role.humanize
         } %>
   <% else -%>
+    <%= render "shared/detail_list", items: { "Rol de cuenta" => @institution_user.role.humanize } %>
     <%= render "shared/empty_state", icon: "user",
           title: "Aún no tienes un perfil de personal vinculado",
           description: "Si esto no es lo esperado, contacta a tu institución." %>

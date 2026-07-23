@@ -1,4 +1,4 @@
-<%# locals: (person_name:, role_name:, scope_label: "Toda la institución", system: false, email: nil) -%>
+<%# locals: (person_name:, role_name:, scope_label: "Toda la institución", system: false, email: nil, valid_from: nil, valid_until: nil, academic_term_name: nil) -%>
 <%# A person × role × scope row, for a table of assignments. -%>
 <tr>
   <td>
@@ -12,4 +12,11 @@
   </td>
   <td><%= render "identity_access/role_badge", role_name: role_name, system: system %></td>
   <td><%= scope_label %></td>
+  <td>
+    <% if valid_until.present? -%>
+      Hasta <%= valid_until.strftime("%d/%m/%Y") %><% if academic_term_name.present? -%> (<%= academic_term_name %>)<% end -%>
+    <% else -%>
+      Sin vencimiento
+    <% end -%>
+  </td>
 </tr>

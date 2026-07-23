@@ -17,6 +17,65 @@
 > moviera el changelog fuera del doc magro. Las entradas v1.6.0+ se escribieron directamente aquí,
 > ya con el split vigente.
 
+### v1.57.0 — 2026-07-24 — RBAC real: roles/asignaciones + fechado por término + role de persona (`OPEN_PROCESS.md` B2/P2)
+
+El owner resolvió las dos "decisiones abiertas de arquitectura" (B2/P2) que llevaban sin backlog
+de construcción propio desde P1. Pidió atacar la más simple primero — la investigación reveló que
+B2 (¿`role_assignments.valid_from/until` se acopla a `academic_terms`?) no era solo una columna:
+**el único formulario real de asignación de roles (`IdentityAccess::AssignmentsController#create`)
+era un STUB que no persistía nada**, y tirando del hilo, **crear un `Role` tampoco tenía UI real**
+(`resources :roles, only: %i[index show]`) — solo existía `institution_admin`, sembrado por
+`Bootstrap::FirstAdmin` al aprovisionar. El owner confirmó llevarlo hasta el final. Tres stubs se
+retiran (`RoleRoster`/`UserRoster`/`RoleAssignmentRoster`) — mismo patrón "stub → real" de Fase D
+(cafeteria/transportation/schedules), aplicado aquí a `identity_access`.
+
+**B2 — schema + acople**: `role_assignments.academic_term_id` (nullable, `on_delete: :nullify` —
+un término nunca se destruye hoy, pero si existiera esa acción la asignación no debe desaparecer
+con él, solo desacoplarse). Opt-in: cuando se setea, `Core::AcademicTermsController#close`
+(dentro de la MISMA transacción que ya usaba para el snapshot del HPS — no existe ningún mecanismo
+de eventos/pub-sub en este repo, confirmado por grep, así que el punto de integración es directo)
+capa `valid_until` al `ends_on` del término, SOLO para las que siguen abiertas (`valid_until: nil`)
+— una fecha de cierre manual previa nunca se sobreescribe.
+
+**Roles/asignaciones reales**: `IdentityAccess::RolesController` gana `new`/`create`/`edit`/`update`
+(antes `index`/`show` ya existían pero leían el stub) — crea `Role` + sincroniza `RolePermission`
+desde un picker de permisos agrupado por el prefijo de `key` (presentación pura, `Permission` no
+tiene columna de categoría real). `key` se deriva del nombre al crear y nunca se regenera al
+editar. Roles `system: true` (`institution_admin`) rechazan edición (molde
+`Library::ResourceCopiesController` rechazando a mano la transición "loaned").
+`IdentityAccess::AssignmentsController` reescrito por completo: exige un `user_id` real (flujo:
+"Personas" → botón "Asignar rol"), carga las 4 dimensiones de alcance reales (antes el form nunca
+las recibía — solo mostraba "Toda la institución"), valida `assignable_scope_types` vía el nuevo
+`IdentityAccess::RoleCatalog` (mismo comportamiento que el stub ya encodeaba para los 5 roles
+canónicos; cualquier rol custom admite cualquier alcance — no se puede inventar una restricción
+para un rol que el admin acaba de crear). Un `RecordNotUnique` (índice único
+`idx_ra_unique_scope`) se atrapa dentro de un SAVEPOINT (`transaction(requires_new: true)`, molde
+`AcademicTermsController#activate`) — sin esto, el rescate de Ruby no alcanza: Postgres ya había
+abortado la transacción completa de la request, y renderizar `:new` after reventaba con "current
+transaction is aborted" (encontrado real construyendo esto). `IdentityAccess::UsersController`
+(otro consumidor de `UserRoster`) también se convirtió a datos reales.
+`IdentityAccess::RoleCatalog` reemplaza la mitad "código" de `RoleRoster`: `ASSIGNABLE_SCOPE_TYPES`
+(la validación) y `CANONICAL_ROLES` (los 5 roles de demo, ahora el origen real de datos de
+`lib/tasks/qa_seed.rake` en vez del stub retirado).
+
+**P2 (alcance achicado por decisión del owner)**: filtro por `institution_users.role` en
+"Personas" (molde el filtro ya real de `audit_events/index.html.erb`) + fila "Rol de cuenta" en
+"Mis datos" (`SelfServiceController`, siempre presente a diferencia de `@profile`/`StaffMember`
+que puede ser `nil`). El organigrama/jerarquía que el owner también describió (catálogo de cargos +
+relación de reporte) quedó fuera de alcance — es una feature bastante más grande, documentada como
+su propio ítem nuevo de backlog (`OPEN_PROCESS.md`), no construida aquí.
+
+**Tests (suite completa 869→877 runs / 0 fallos / 1 skip preexistente, en serie
+`PARALLEL_WORKERS=1`)**: `test/integration/identity_access_test.rb` reescrito por completo contra
+modelos reales (antes usaba ids de stub `"role-1"`/`"stub-section-9a"` y el nombre hardcodeado
+"Laura Gómez Duarte") — mismo comportamiento de validación de `assignable_scope_types` verificado
+contra roles reales, más: CRUD de roles (crear con permisos, editar, rechazo de edición de roles
+`system`), un rol custom admite cualquier alcance, un grant duplicado se rechaza con mensaje
+amable (nunca 500), el acople B2 de punta a punta (crear asignación con término activo → cerrar
+el término → `valid_until` capado; una asignación con `valid_until` manual previo NO se
+sobreescribe), filtro de "Personas" por role, "Mis datos" muestra el role. `bin/rails
+qa:seed_role_logins` verificado manualmente contra `RoleCatalog` en vez del stub retirado.
+
 ### v1.56.0 — 2026-07-24 — `admissions` Incremento 3: pasos configurables + tracker público por token (`guidelines/library_prompt.md`, `OPEN_PROCESS.md` #1) — CIERRA `admissions` COMPLETO
 
 Tercer y último incremento del greenfield de `admissions` (Incremento 1 fue `library`, v1.54.0;

@@ -2,21 +2,23 @@
 
 <%= render "shared/page_header", title: "Roles", subtitle: "Catálogo de roles de tu institución.",
       actions: safe_join([
+        ui_button("Nuevo rol", href: new_identity_access_role_path, variant: :primary),
         ui_button("Usuarios", href: identity_access_users_path, variant: :secondary),
         ui_button("Asignaciones", href: identity_access_assignments_path, variant: :secondary)
       ]) %>
 
-<%= render layout: "shared/table", locals: { headers: ["Rol", "Descripción", "Tipo"] } do -%>
+<%= render layout: "shared/table", locals: { headers: ["Rol", "Descripción", "Tipo", ""] } do -%>
   <% @roles.each do |role| -%>
     <tr>
-      <td><%= link_to role.name, identity_access_role_path(role.id) %></td>
+      <td><%= link_to role.name, identity_access_role_path(role) %></td>
       <td><%= role.description %></td>
-      <td><%= render "identity_access/role_badge", role_name: (role.system ? "Sistema" : "Personalizado"), system: role.system %></td>
+      <td><%= render "identity_access/role_badge", role_name: (role.system? ? "Sistema" : "Personalizado"), system: role.system? %></td>
+      <td><% unless role.system? -%><%= ui_button "Editar", href: edit_identity_access_role_path(role), variant: :secondary, size: :sm %><% end -%></td>
     </tr>
   <% end -%>
 <% end -%>
 
 <h3>Matriz de permisos</h3>
 <%= render "identity_access/permission_matrix",
-      roles: @roles.map { |role| { name: role.name, permission_keys: IdentityAccess::RoleRoster.permission_keys_for(role) } },
+      roles: @roles.map { |role| { name: role.name, permission_keys: role.permissions.pluck(:key) } },
       permissions: IdentityAccess::SeedPermissions::CATALOG.map { |key, description| { key: key, description: description } } %>

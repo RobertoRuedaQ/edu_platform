@@ -5,10 +5,12 @@
       subtitle: "Quién tiene qué rol, y sobre qué alcance.",
       actions: (can?("roles.manage") ? ui_button("Nueva asignación", href: new_identity_access_assignment_path, variant: :primary) : nil) %>
 
-<%= render layout: "shared/table", locals: { headers: ["Persona", "Rol", "Alcance"] } do -%>
+<%= render layout: "shared/table", locals: { headers: ["Persona", "Rol", "Alcance", "Vigencia"] } do -%>
   <% @assignments.each do |assignment| -%>
     <%= render "identity_access/role_assignment_row",
-          person_name: assignment.person_name, email: assignment.email,
-          role_name: assignment.role_name, scope_label: assignment.scope_label, system: assignment.system %>
+          person_name: assignment.institution_user.user.name, email: assignment.institution_user.user.email,
+          role_name: assignment.role.name, scope_label: assignment.scope_label, system: assignment.role.system?,
+          valid_from: assignment.valid_from, valid_until: assignment.valid_until,
+          academic_term_name: assignment.academic_term&.name %>
   <% end -%>
 <% end -%>

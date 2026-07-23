@@ -1,0 +1,5 @@
+<% content_for :title, "Editar #{@role.name}" %>
+
+<%= render "shared/page_header", title: "Editar \"#{@role.name}\"" %>
+<%= render "identity_access/roles/form", role: @role, granted_keys: @role.permissions.pluck(:key),
+      url: identity_access_role_path(@role), method: :patch %>

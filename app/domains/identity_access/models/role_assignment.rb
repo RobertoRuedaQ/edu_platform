@@ -13,6 +13,11 @@ module IdentityAccess
     belongs_to :scope_group,       class_name: "GroupManagement::Section",      optional: true
     belongs_to :scope_route,       class_name: "Transportation::Route",        optional: true
 
+    # OPEN_PROCESS.md B2: opt-in coupling to a term — when set,
+    # Core::AcademicTermsController#close caps valid_until at the term's
+    # ends_on. Nil means unchanged legacy behavior (independent calendar dates).
+    belongs_to :academic_term, class_name: "Core::AcademicTerm", optional: true
+
     # R5 (dating): a grant only applies within [valid_from, valid_until].
     # valid_until nil == open-ended.
     scope :effective_now, -> {
