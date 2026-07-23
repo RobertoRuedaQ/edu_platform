@@ -26,6 +26,8 @@ module Admissions
     belongs_to :converted_student, class_name: "GroupManagement::Student", optional: true
     has_many :documents, class_name: "Admissions::Document", inverse_of: :application,
       dependent: :destroy
+    has_many :application_steps, class_name: "Admissions::ApplicationStep", inverse_of: :application,
+      dependent: :destroy
 
     validates :status, inclusion: { in: STATUSES }
     validates :submitted_at, presence: true

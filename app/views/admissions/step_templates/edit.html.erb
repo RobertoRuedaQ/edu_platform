@@ -1,0 +1,5 @@
+<% content_for :title, "Editar paso" %>
+
+<%= render "shared/page_header", title: "Editar \"#{@step_template.name}\" — #{@campaign.name}" %>
+<%= render "admissions/step_templates/form", campaign: @campaign, step_template: @step_template,
+      url: admissions_campaign_step_template_path(@campaign, @step_template), method: :patch %>

@@ -1,0 +1,21 @@
+<%# locals: (steps: [], **attrs) -%>
+<%#
+  Horizontal step indicator, vanilla CSS (no external library) — molde de
+  autoría de shared/_timeline.html.erb. steps: array of Hashes, each:
+    { position:, label:, status: "pending" | "in_progress" | "completed" | "skipped" }
+-%>
+<% attrs[:class] = class_names("stepper", attrs[:class]) -%>
+<%= tag.ol(**attrs) do -%>
+  <% Array(steps).each do |step| -%>
+    <li class="stepper__item stepper__item--<%= step[:status] %>">
+      <span class="stepper__marker" aria-hidden="true">
+        <% if step[:status] == "completed" -%>
+          <%= ui_icon("check-circle", size: 14) %>
+        <% else -%>
+          <%= step[:position] %>
+        <% end -%>
+      </span>
+      <span class="stepper__label"><%= step[:label] %></span>
+    </li>
+  <% end -%>
+<% end -%>

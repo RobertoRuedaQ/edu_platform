@@ -17,6 +17,63 @@
 > moviera el changelog fuera del doc magro. Las entradas v1.6.0+ se escribieron directamente aquí,
 > ya con el split vigente.
 
+### v1.56.0 — 2026-07-24 — `admissions` Incremento 3: pasos configurables + tracker público por token (`guidelines/library_prompt.md`, `OPEN_PROCESS.md` #1) — CIERRA `admissions` COMPLETO
+
+Tercer y último incremento del greenfield de `admissions` (Incremento 1 fue `library`, v1.54.0;
+Incremento 2, la base, v1.55.0). Su propio pase de diseño completo antes de construir (mismo
+criterio "una pieza a la vez"), aprobado por el owner. Con este incremento, `admissions` queda
+100% cerrado — solo sigue pendiente el ítem de backlog #7 (`finance` procesando/aprobando los
+cobros de admisión), ya documentado y fuera de este alcance.
+
+**Dos piezas net-new, ninguna con precedente exacto en el repo**: (1) `admission_step_templates`/
+`admission_application_steps` — instancias MUTABLES reales por fila (nunca un snapshot jsonb como
+rúbricas/`character_frameworks`), porque el estado de un paso (`pending`→`in_progress`→`completed`/
+`skipped`, más `private_notes`/`evaluator`) cambia con el tiempo, algo que un jsonb congelado no
+puede representar. (2) El tracker público del aspirante (`/admisiones/solicitud/:token`,
+subdominio-scoped, molde exacto `IdentityAccess::Invitations::Issuer`: `SecureRandom.
+urlsafe_base64(32)`, solo `Digest::SHA256.hexdigest(token)` persistido en `admission_applications.
+tracker_token_digest`) — investigación confirmó que ESTA app no tenía ningún precedente de "página
+pública que oculta campos de un registro por lo demás legible" (cada superficie existente gatea
+FILAS completas por RBAC/relación, nunca redacta a nivel de CAMPO). Resuelto con el mismo molde que
+`AnalyticsBi::Lens::AuraScope` (aislamiento clínico, guardrail v1.37.0): `Admissions::Tracker::
+PublicView` retorna un `Data` allowlist (`Result`/`StepView`) sin NINGÚN accessor para
+`private_notes`/`evaluator_institution_user_id` — el controller público SOLO toca ese `Data`,
+nunca el AR record, así que esos dos campos no pueden filtrarse por un descuido de vista futuro.
+Verificado con un test de integración explícito (criterio de aceptación de la spec): un paso con
+`private_notes: "NOTA SECRETA..."` y un evaluador con nombre real, pegado al tracker sin sesión —
+el body renderiza nombre/campaña/estado/pasos pero NUNCA la nota ni el nombre/correo del evaluador.
+
+**Cambio técnico**: `Admissions::ApplicationSubmitter` (extendido, no un servicio nuevo — la
+radicación sigue siendo el único punto de entrada real) ahora también, TODO gateado por
+`previously_new_record?` (nunca en un reenvío): genera el token del tracker, hace fan-out de un
+`ApplicationStep` `pending` por cada `StepTemplate` de la campaña (ninguno si la campaña no
+configuró pasos — opcional, nunca bloqueante), y encola `Admissions::TrackerMailer` (molde exacto
+`InvitationMailer`: primitivos planos, `host: "#{institution_slug}.#{base_host}"` interpolado a
+mano porque un mailer no tiene el subdominio de la request). Ruta pública TOP-LEVEL (molde
+`resources :invitations`, NUNCA anidada en `namespace :admissions` — debe saltarse el RBAC del
+dominio por completo); sin `before_action` de tenant separado, RLS + `institution_id` explícito ya
+garantizan cero filas si el subdominio no resuelve o pertenece a otra institución (`find_by!` →
+`RecordNotFound` → 404 estándar). Lado staff: `Admissions::StepTemplatesController` (nested bajo
+campañas, molde `Library::ResourceCopiesController`) y `Admissions::ApplicationStepsController#update`
+— AMBOS reusan permisos YA existentes (`admissions.campaigns.manage`/`admissions.applications.manage`),
+sin ninguna key nueva (molde v1.37.0: "si un key ya describe la capacidad, reusarlo"). Stepper
+vainilla nuevo (`shared/_stepper.html.erb` + `.stepper`/`.stepper__*` en `components.css`, molde de
+autoría de `_timeline.html.erb`) — cero componente similar existía antes, cero librería externa.
+
+**Tests (suite completa 852→869 runs / 0 fallos / 1 skip preexistente, en serie
+`PARALLEL_WORKERS=1`):** CHECK de BD rechaza `status` inválido en `admission_application_steps`
+incluso saltando la validación de app; índices únicos `(campaign,position)`/
+`(application,step_template)` respaldan contra duplicados incluso bypaseando el servicio;
+`ApplicationSubmitter` fan-out crea exactamente un paso `pending` por template (cero si la campaña
+no tiene ninguno) y encola el correo del tracker solo en la creación real; `PublicView` — test
+estructural que confirma que `Result`/`StepView` NI SIQUIERA exponen un accessor para los campos
+sensibles; integración: el criterio de aceptación explícito de la spec (nota/evaluador nunca en el
+body), token inválido → 404, un token válido pedido desde el subdominio de OTRA institución → 404
+(aislamiento real, no solo "coincide el token"), RBAC fail-closed en `step_templates`/
+`application_steps` (`test/models/admissions/` +2 archivos +
+`test/models/admissions/tracker/public_view_test.rb`, nuevo;
+`test/integration/admissions_tracker_test.rb`, nuevo).
+
 ### v1.55.0 — 2026-07-23 — `admissions` Incremento 2: base — campañas/aspirantes/solicitudes/documentos (`guidelines/library_prompt.md`, `OPEN_PROCESS.md` #1)
 
 Segundo dominio greenfield de Fase D, mismo criterio "una pieza a la vez" que `library` (v1.54.0):

@@ -32,6 +32,11 @@ Rails.application.routes.draw do
     member { post :discrepancy }
   end
 
+  # Tracker público de admisión (guidelines/library_prompt.md, Increment 3):
+  # token-keyed, subdomain-scoped (molde invitations arriba) — sin sesión,
+  # sin RBAC. RLS + institution_id explícito son el único portón.
+  resources :applicant_trackers, only: :show, param: :token, path: "admisiones/solicitud"
+
   # --- Role-aware shell (Part 2) --------------------------------------------
   # Global search escape hatch (stub results) + institution switcher (stub).
   get "search", to: "search#index", as: :search
@@ -325,11 +330,18 @@ Rails.application.routes.draw do
   # Student + charging the fee is a business action with real effects, never
   # a generic applications#update.
   namespace :admissions do
-    resources :campaigns,    only: %i[index new create edit update]
+    resources :campaigns,    only: %i[index new create edit update] do
+      # Pasos configurables por campaña (Increment 3) — reusa
+      # admissions.campaigns.manage, sin permiso nuevo.
+      resources :step_templates, only: %i[index new create edit update]
+    end
     resources :applicants,   only: %i[index new create show]
     resources :applications, only: %i[index show create update] do
       resources :documents,  only: %i[create show], controller: "application_documents"
       resource  :acceptance, only: :create, controller: "application_acceptances"
+      # Actualiza estado/notas/evaluador de un paso (Increment 3) — reusa
+      # admissions.applications.manage, sin permiso nuevo.
+      resources :steps,      only: :update, controller: "application_steps"
     end
   end
 

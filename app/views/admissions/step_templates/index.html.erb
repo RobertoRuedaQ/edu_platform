@@ -1,0 +1,21 @@
+<% content_for :title, "Pasos — #{@campaign.name}" %>
+
+<%= render "shared/page_header", title: "Pasos de \"#{@campaign.name}\"",
+      subtitle: "Configura el pipeline de revisión de esta campaña.",
+      actions: ui_button("Nuevo paso", href: new_admissions_campaign_step_template_path(@campaign), variant: :primary) %>
+
+<% if @step_templates.any? -%>
+  <%= render layout: "shared/table", locals: { headers: ["Orden", "Nombre", "Descripción", ""] } do -%>
+    <% @step_templates.each do |step_template| -%>
+      <tr>
+        <td><%= step_template.position %></td>
+        <td><%= step_template.name %></td>
+        <td><%= step_template.description %></td>
+        <td><%= ui_button "Editar", href: edit_admissions_campaign_step_template_path(@campaign, step_template), variant: :secondary, size: :sm %></td>
+      </tr>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state", title: "Sin pasos configurados",
+        description: "Sin pasos, las solicitudes de esta campaña no muestran un tracker con etapas." %>
+<% end -%>
