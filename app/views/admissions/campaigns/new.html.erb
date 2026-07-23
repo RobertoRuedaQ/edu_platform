@@ -1,0 +1,4 @@
+<% content_for :title, "Nueva campaña" %>
+
+<%= render "shared/page_header", title: "Nueva campaña de admisión" %>
+<%= render "admissions/campaigns/form", campaign: @campaign, url: admissions_campaigns_path, method: :post %>

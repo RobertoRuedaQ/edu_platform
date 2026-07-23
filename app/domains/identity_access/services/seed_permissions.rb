@@ -203,7 +203,14 @@ module IdentityAccess
       # reusable.
       "library.catalog.manage" => "Crear, editar y catalogar títulos y ejemplares físicos",
       "library.loans.manage" => "Consultar el historial global de préstamos y la cartera en mora",
-      "library.checkout" => "Operar el mostrador de préstamo y devolución"
+      "library.checkout" => "Operar el mostrador de préstamo y devolución",
+      # admissions (guidelines/library_prompt.md, Increment 2). Split by
+      # action, mismo molde que library: crear/abrir campañas vs. revisar y
+      # decidir solicitudes vs. operar el mostrador de intake son tres
+      # actores reales distintos — no existe ninguna key reusable.
+      "admissions.campaigns.manage" => "Crear, editar y abrir/cerrar campañas de admisión",
+      "admissions.applications.manage" => "Revisar solicitudes, decidir y convertir aceptados en matriculados",
+      "admissions.intake" => "Registrar aspirantes, radicar solicitudes y adjuntar documentos"
     }.freeze
 
     def self.call

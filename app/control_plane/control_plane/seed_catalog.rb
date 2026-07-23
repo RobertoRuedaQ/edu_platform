@@ -66,7 +66,14 @@ module ControlPlane
       # a resubmit) — wired for real from day one, unlike cafeteria/
       # transportation which were retrofitted later (M1, v1.52.0).
       { key: "library", name: "Biblioteca", metered: true, unit: "préstamos",
-        included_quota: 3_000, overage_unit_price_cents: 50 }
+        included_quota: 3_000, overage_unit_price_cents: 50 },
+      # admissions (guidelines/library_prompt.md, Increment 2): Admissions::
+      # ApplicationSubmitter emits one "solicitudes" unit per NEW real
+      # Application (already idempotent by its own idempotency_key, never
+      # double-counts a resubmit) — wired for real from day one, same
+      # posture as library.
+      { key: "admissions", name: "Admisiones", metered: true, unit: "solicitudes",
+        included_quota: 200, overage_unit_price_cents: 500 }
     ].freeze
 
     PLAN = {

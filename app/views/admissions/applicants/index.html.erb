@@ -1,0 +1,22 @@
+<% content_for :title, "Aspirantes" %>
+
+<%= render "shared/page_header", title: "Aspirantes",
+      subtitle: "Registro de aspirantes (mostrador de admisiones).",
+      actions: ui_button("Nuevo aspirante", href: new_admissions_applicant_path, variant: :primary) %>
+
+<% if @applicants.any? -%>
+  <%= render layout: "shared/table", locals: { headers: ["Nombre", "Nacimiento", "Acudiente", "Correo del acudiente", ""] } do -%>
+    <% @applicants.each do |applicant| -%>
+      <tr>
+        <td><%= applicant.full_name %></td>
+        <td><%= applicant.birthdate.strftime("%d/%m/%Y") %></td>
+        <td><%= applicant.guardian_name %></td>
+        <td><%= applicant.guardian_email %></td>
+        <td><%= ui_button "Ver", href: admissions_applicant_path(applicant), variant: :secondary, size: :sm %></td>
+      </tr>
+    <% end -%>
+  <% end -%>
+<% else -%>
+  <%= render "shared/empty_state", title: "Sin aspirantes todavía",
+        description: "Registra el primer aspirante para empezar a radicar solicitudes." %>
+<% end -%>

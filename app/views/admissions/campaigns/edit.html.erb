@@ -1,0 +1,4 @@
+<% content_for :title, "Editar campaña" %>
+
+<%= render "shared/page_header", title: "Editar \"#{@campaign.name}\"" %>
+<%= render "admissions/campaigns/form", campaign: @campaign, url: admissions_campaign_path(@campaign), method: :patch %>

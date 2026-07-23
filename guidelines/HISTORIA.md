@@ -17,6 +17,67 @@
 > moviera el changelog fuera del doc magro. Las entradas v1.6.0+ se escribieron directamente aquí,
 > ya con el split vigente.
 
+### v1.55.0 — 2026-07-23 — `admissions` Incremento 2: base — campañas/aspirantes/solicitudes/documentos (`guidelines/library_prompt.md`, `OPEN_PROCESS.md` #1)
+
+Segundo dominio greenfield de Fase D, mismo criterio "una pieza a la vez" que `library` (v1.54.0):
+el overview original solo estaba diseñado a nivel de bosquejo — este incremento le dio su propio
+pase de diseño completo (`.claude/plans/mutable-noodling-whistle.md`) antes de construir, no se
+construyó a ciegas. Incremento 3 (plantillas de pasos dinámicos + tracker público del aspirante por
+token) sigue pendiente, diseño propio cuando se llegue.
+
+**Dos correcciones al overview original, verificadas contra el repo real antes de construir** (el
+repo manda sobre el plan):
+1. El overview apuntaba `Schedules::Enrollment.find_or_create_by!` para el paso de aceptación —
+   primitiva equivocada. `Schedules::Enrollment` es matrícula de MATERIA (`belongs_to :subject`,
+   para notas/`Schedules::Assessment`), no "admitir un estudiante nuevo al colegio". La primitiva
+   real ya existía: `Core::RosterImport::Strategies::Students#create_student!`
+   (`GroupManagement::Student.create!` directo) — `Admissions::AcceptanceConverter` reusa
+   exactamente esa forma (sin `section`: asignar sección sigue siendo un flujo posterior ya
+   existente, `GroupManagement::SectionReassigner`, fuera del alcance de admitir).
+2. Un aspirante NO es cobrable vía Finance hasta ser un `GroupManagement::Student` real —
+   `Finance::StudentAccount`/`Charge` exigen `student_id` NOT NULL (`on_delete: :restrict`), sin
+   ningún precedente de cobro a una entidad prospectiva en todo el codebase. Confirmado con el
+   owner: la cuota de inscripción se congela como snapshot (`fee_cents`) al radicar, y el
+   `Finance::Charge` REAL nace recién en la aceptación (una vez existen `Student`+`StudentAccount`),
+   nunca bloqueando la revisión por falta de pago. El owner pidió explícitamente un ítem de backlog
+   nuevo (`OPEN_PROCESS.md` #7): `finance` todavía necesita su propio diseño para procesar/aprobar
+   estos cobros — hoy el único camino de cierre es 100% manual (`Finance::PaymentRecorder` ya
+   existente), sin ningún gancho de vuelta hacia `admissions`.
+
+**Cambio técnico**: cuatro tablas net-new (`admission_campaigns`, `admission_applicants`,
+`admission_applications`, `admission_documents`), las cuatro RLS `ENABLE+FORCE`. Un aspirante
+(`Admissions::Applicant`) nunca toca `Core::User`/`Core::InstitutionUser` — nombre + contacto del
+acudiente en texto plano, sin membresía/login para una familia que puede no ser aceptada nunca.
+`Admissions::ApplicationSubmitter` (molde `Finance::ChargeCreator` para la idempotencia +
+`Schedules::EnrollmentsController#create` para el `find_or_create_by!`/`previously_new_record?`)
+congela `fee_cents` desde la campaña al radicar. `Admissions::AcceptanceConverter` bloquea
+`application` (nunca `applicant`/`campaign` — el recurso contendido es "esta solicitud se convierte
+una sola vez"; `converted_student_id`, seteado dentro del mismo lock, es el ancla de idempotencia):
+crea el `GroupManagement::Student` real, resuelve/liga al acudiente vía `Core::People::Resolver` +
+`Core::GuardianStudent` (molde exacto `Core::RosterImport::Strategies::Guardians`), y —SOLO si
+`fee_cents.positive?`— crea `Finance::StudentAccount` + `Finance::Charge` en la MISMA transacción
+(molde exacto `Extracurriculars::EnrollmentCreator#charge_for_paid_activity`). `Admissions::
+Application#grade_level_id` aliasea `target_grade_level_id` (molde `Transportation::Route#route_id`)
+— habilita el scope RBAC `:grade_level` YA real en el motor (`role_assignments.
+scope_grade_level_id`), cero migración al motor de RBAC. `admission_documents` es un bridge table
+molde exacto `Assignments::SubmissionAttachment` — RLS vive SOLO ahí, nunca en
+`active_storage_*`; servido vía `send_data` (`AttachmentServing`), nunca `rails_blob_path`. Tres
+permisos nuevos, mismo split de 3 vías que `library`: `admissions.campaigns.manage`/
+`admissions.applications.manage`/`admissions.intake`. Metering M1 cableado desde el día uno
+(`ApplicationSubmitter` emite `"solicitudes"`), mismo criterio que `library`.
+
+**Tests (suite completa 829→852 runs / 0 fallos / 1 skip preexistente, en serie
+`PARALLEL_WORKERS=1`):** CHECK de BD rechaza `status`/`gender` inválidos incluso saltando la
+validación de app; el índice único `(institution_id, applicant_id, campaign_id)` y el índice único
+parcial en `converted_student_id` respaldan contra doble-radicación/doble-conversión incluso
+bypaseando el servicio; `ApplicationSubmitter` es idempotente (resubmit nunca duplica) y congela el
+fee aunque la campaña cambie después; `AcceptanceConverter` es idempotente (reintento nunca crea un
+segundo `Student`/`Charge`), no genera `Charge` cuando `fee_cents == 0`, y crea
+`Student`+`GuardianStudent`+`StudentAccount`+`Charge` reales en un solo flujo; RBAC fail-closed por
+cada uno de los tres permisos nuevos, incluyendo un revisor scoped a un solo `:grade_level` que solo
+ve las solicitudes de ese grado; metering M1 emite una unidad real y nunca duplica en un resubmit
+(`test/models/admissions/`, cinco archivos nuevos; `test/integration/admissions_test.rb`, nuevo).
+
 ### v1.54.0 — 2026-07-22 — `library`: primer dominio greenfield de Fase D (`guidelines/library_prompt.md`, `OPEN_PROCESS.md` #1)
 
 **Distinto de todo lo demás de Fase D**: cafeteria/transportation/schedules-timetable convertían un

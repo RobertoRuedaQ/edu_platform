@@ -33,11 +33,14 @@
    ~~`library`~~ ✅ **CERRADO (v1.54.0)** — tres tablas net-new, `LoanRecorder`/`ReturnRecorder`
    (`copy.lock!`, primer molde de este repo que guarda la propia columna de estado de la fila
    bloqueada), portales estudiante/acudiente, metering M1 cableado desde el día uno. Ver
-   `HISTORIA.md` v1.54.0. **`admissions` sigue pendiente** — dos incrementos diseñados a nivel
-   overview en el plan de v1.54.0 (ver `.claude/plans/snoopy-questing-sunrise.md` o rediseñar cuando
-   se lleguen, no construir a ciegas): (2) base — campañas/aspirantes/solicitudes/documentos,
-   conversión atómica a estudiante real (`Core::People::Resolver` + `guardian_students` +
-   `Schedules::Enrollment`); (3) adenda — pasos configurables por campaña + tracker público del
+   `HISTORIA.md` v1.54.0.
+   ~~`admissions` Incremento 2 (base)~~ ✅ **CERRADO (v1.55.0)** — cuatro tablas net-new
+   (campañas/aspirantes/solicitudes/documentos), `AcceptanceConverter` (crea el `Student` real
+   — corrección: `Schedules::Enrollment` era la primitiva equivocada, es matrícula de MATERIA —
+   liga al acudiente, cobra la cuota vía `Finance::Charge` SOLO al aceptar, nunca al radicar, ver
+   ítem #7 abajo). Ver `HISTORIA.md` v1.55.0. **`admissions` Incremento 3 sigue pendiente** —
+   diseño propio a nivel overview (ver `.claude/plans/mutable-noodling-whistle.md` o rediseñar
+   cuando se llegue, no construir a ciegas): pasos configurables por campaña + tracker público del
    aspirante por token (subdominio-scoped, molde `Invitations::Issuer`, corrección a la spec — un
    token verdaderamente sin-tenant no tiene precedente en este repo).
 
@@ -74,7 +77,17 @@
    detalle: **B2** (¿`role_assignments.valid_from/until` se acopla a `academic_terms`?), **P2**
    (¿qué hacer con `institution_users.role`, columna libre sin lectores?).
 
-**Próximo paso sugerido**: ninguno de los seis es "el siguiente slice obvio" — pedir al owner que
+7. **`finance` — procesar/aprobar los cobros de admisión** — ⛔ **gateado: pedido explícito del
+   owner al confirmar el diseño de `admissions` Incremento 2**. `Admissions::AcceptanceConverter`
+   genera un `Finance::Charge` real al aceptar una solicitud (una vez existen `Student`+
+   `StudentAccount`), pero cerrarlo — registrar el pago y dar por aprobado/cerrado el proceso de
+   admisión — sigue siendo 100% manual vía `Finance::PaymentRecorder` ya existente, sin ningún
+   gancho de vuelta hacia `admissions` (ni un estado "fee pagado" visible en la solicitud, ni nada
+   que dispare una notificación). No se construye hasta que el owner confirme cómo debe verse ese
+   camino — mismo criterio que el resto de items de este backlog (riel de pago real ya está fuera
+   de alcance de v1, ver no-goals abajo).
+
+**Próximo paso sugerido**: ninguno de los siete es "el siguiente slice obvio" — pedir al owner que
 elija uno y confirme explícitamente antes de construir cualquiera de estos (mismo patrón que ya
 cerró la purga de `roster_import_rows`, v1.53.0).
 

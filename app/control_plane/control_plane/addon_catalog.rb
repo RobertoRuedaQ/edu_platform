@@ -22,6 +22,7 @@ module ControlPlane
       calendar
       extracurriculars
       library
+      admissions
     ].freeze
   end
 end

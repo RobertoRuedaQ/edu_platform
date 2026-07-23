@@ -1,0 +1,61 @@
+<% content_for :title, @applicant.full_name %>
+
+<%= render "shared/page_header", title: @applicant.full_name,
+      subtitle: "Acudiente: #{@applicant.guardian_name} (#{@applicant.guardian_email})" %>
+
+<section>
+  <h3>Solicitudes</h3>
+  <% if @applications.any? -%>
+    <%= render layout: "shared/table", locals: { headers: ["Campaña", "Grado", "Estado", "Radicada", ""] } do -%>
+      <% @applications.each do |application| -%>
+        <tr>
+          <td><%= application.campaign.name %></td>
+          <td><%= application.target_grade_level.name %></td>
+          <td>
+            <%= ui_badge application.status.humanize,
+                  variant: { "submitted" => :neutral, "under_review" => :warning, "accepted" => :success,
+                             "rejected" => :danger, "withdrawn" => :neutral }.fetch(application.status, :neutral) %>
+          </td>
+          <td><%= application.submitted_at.strftime("%d/%m/%Y") %></td>
+          <td><%= ui_button "Ver", href: admissions_application_path(application), variant: :secondary, size: :sm %></td>
+        </tr>
+      <% end -%>
+    <% end -%>
+  <% else -%>
+    <%= render "shared/empty_state", title: "Sin solicitudes todavía",
+          description: "Radica la primera solicitud de este aspirante en una campaña abierta." %>
+  <% end -%>
+</section>
+
+<section>
+  <h3>Radicar nueva solicitud</h3>
+  <% if @open_campaigns.any? -%>
+    <%= form_with url: admissions_applications_path, method: :post do -%>
+      <%= hidden_field_tag :applicant_id, @applicant.id %>
+      <%= hidden_field_tag :idempotency_key, SecureRandom.uuid %>
+
+      <div class="field">
+        <label class="field__label" for="campaign_id">Campaña</label>
+        <select class="field__input" id="campaign_id" name="campaign_id">
+          <% @open_campaigns.each do |campaign| -%>
+            <option value="<%= campaign.id %>"><%= campaign.name %> (<%= campaign.target_entry_year %>)</option>
+          <% end -%>
+        </select>
+      </div>
+
+      <div class="field">
+        <label class="field__label" for="target_grade_level_id">Grado al que aspira</label>
+        <select class="field__input" id="target_grade_level_id" name="target_grade_level_id">
+          <% @grade_levels.each do |grade| -%>
+            <option value="<%= grade.id %>"><%= grade.name %></option>
+          <% end -%>
+        </select>
+      </div>
+
+      <%= ui_button "Radicar solicitud", type: "submit", variant: :primary %>
+    <% end -%>
+  <% else -%>
+    <%= render "shared/empty_state", title: "Sin campañas abiertas",
+          description: "Abre una campaña antes de poder radicar una solicitud." %>
+  <% end -%>
+</section>
