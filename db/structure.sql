@@ -283,6 +283,27 @@ ALTER TABLE ONLY public.admission_applicants FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: admission_application_steps; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.admission_application_steps (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    application_id uuid NOT NULL,
+    step_template_id uuid NOT NULL,
+    status character varying DEFAULT 'pending'::character varying NOT NULL,
+    private_notes text,
+    evaluator_institution_user_id uuid,
+    completed_at timestamp(6) without time zone,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT admission_application_steps_status_check CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'in_progress'::character varying, 'completed'::character varying, 'skipped'::character varying])::text[])))
+);
+
+ALTER TABLE ONLY public.admission_application_steps FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: admission_applications; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -301,6 +322,7 @@ CREATE TABLE public.admission_applications (
     idempotency_key character varying,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
+    tracker_token_digest character varying,
     CONSTRAINT admission_applications_status_check CHECK (((status)::text = ANY ((ARRAY['submitted'::character varying, 'under_review'::character varying, 'accepted'::character varying, 'rejected'::character varying, 'withdrawn'::character varying])::text[])))
 );
 
@@ -343,6 +365,24 @@ CREATE TABLE public.admission_documents (
 );
 
 ALTER TABLE ONLY public.admission_documents FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: admission_step_templates; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.admission_step_templates (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    institution_id uuid NOT NULL,
+    campaign_id uuid NOT NULL,
+    name character varying NOT NULL,
+    "position" integer NOT NULL,
+    description text,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+ALTER TABLE ONLY public.admission_step_templates FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -2470,6 +2510,14 @@ ALTER TABLE ONLY public.admission_applicants
 
 
 --
+-- Name: admission_application_steps admission_application_steps_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.admission_application_steps
+    ADD CONSTRAINT admission_application_steps_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: admission_applications admission_applications_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2491,6 +2539,14 @@ ALTER TABLE ONLY public.admission_campaigns
 
 ALTER TABLE ONLY public.admission_documents
     ADD CONSTRAINT admission_documents_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: admission_step_templates admission_step_templates_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.admission_step_templates
+    ADD CONSTRAINT admission_step_templates_pkey PRIMARY KEY (id);
 
 
 --
@@ -3416,6 +3472,13 @@ CREATE INDEX idx_activity_enrollments_on_institution_student ON public.activity_
 
 
 --
+-- Name: idx_admission_application_steps_app_template_unique; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_admission_application_steps_app_template_unique ON public.admission_application_steps USING btree (institution_id, application_id, step_template_id);
+
+
+--
 -- Name: idx_admission_applications_applicant_campaign_unique; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3437,10 +3500,24 @@ CREATE UNIQUE INDEX idx_admission_applications_idempotency ON public.admission_a
 
 
 --
+-- Name: idx_admission_applications_tracker_token_digest; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_admission_applications_tracker_token_digest ON public.admission_applications USING btree (tracker_token_digest) WHERE (tracker_token_digest IS NOT NULL);
+
+
+--
 -- Name: idx_admission_documents_on_institution_application; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_admission_documents_on_institution_application ON public.admission_documents USING btree (institution_id, application_id);
+
+
+--
+-- Name: idx_admission_step_templates_campaign_position_unique; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_admission_step_templates_campaign_position_unique ON public.admission_step_templates USING btree (institution_id, campaign_id, "position");
 
 
 --
@@ -5082,6 +5159,14 @@ ALTER TABLE ONLY public.assessments
 
 
 --
+-- Name: admission_step_templates fk_rails_0c4c1437e6; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.admission_step_templates
+    ADD CONSTRAINT fk_rails_0c4c1437e6 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: student_guardians fk_rails_0eb2a4bdc7; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -5199,6 +5284,14 @@ ALTER TABLE ONLY public.student_placements
 
 ALTER TABLE ONLY public.submissions
     ADD CONSTRAINT fk_rails_19447e9b4d FOREIGN KEY (student_id) REFERENCES public.students(id) ON DELETE CASCADE;
+
+
+--
+-- Name: admission_application_steps fk_rails_1b055a5124; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.admission_application_steps
+    ADD CONSTRAINT fk_rails_1b055a5124 FOREIGN KEY (step_template_id) REFERENCES public.admission_step_templates(id) ON DELETE RESTRICT;
 
 
 --
@@ -5415,6 +5508,14 @@ ALTER TABLE ONLY public.admission_documents
 
 ALTER TABLE ONLY public.messages
     ADD CONSTRAINT fk_rails_31aae3c129 FOREIGN KEY (institution_user_id) REFERENCES public.institution_users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: admission_application_steps fk_rails_31bdafeebb; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.admission_application_steps
+    ADD CONSTRAINT fk_rails_31bdafeebb FOREIGN KEY (evaluator_institution_user_id) REFERENCES public.institution_users(id) ON DELETE RESTRICT;
 
 
 --
@@ -6466,6 +6567,14 @@ ALTER TABLE ONLY public.referrals
 
 
 --
+-- Name: admission_step_templates fk_rails_a2c9c0d3a5; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.admission_step_templates
+    ADD CONSTRAINT fk_rails_a2c9c0d3a5 FOREIGN KEY (campaign_id) REFERENCES public.admission_campaigns(id) ON DELETE CASCADE;
+
+
+--
 -- Name: character_evaluations fk_rails_a4ae08b190; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -6730,6 +6839,14 @@ ALTER TABLE ONLY public.dietary_restrictions
 
 
 --
+-- Name: admission_application_steps fk_rails_be023722e9; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.admission_application_steps
+    ADD CONSTRAINT fk_rails_be023722e9 FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: activities fk_rails_be32e7f3a9; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -6879,6 +6996,14 @@ ALTER TABLE ONLY public.student_guardians
 
 ALTER TABLE ONLY public.role_assignments
     ADD CONSTRAINT fk_rails_c81e0ed360 FOREIGN KEY (institution_user_id) REFERENCES public.institution_users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: admission_application_steps fk_rails_c8278289ea; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.admission_application_steps
+    ADD CONSTRAINT fk_rails_c8278289ea FOREIGN KEY (application_id) REFERENCES public.admission_applications(id) ON DELETE CASCADE;
 
 
 --
@@ -7355,6 +7480,19 @@ CREATE POLICY admission_applicants_tenant_isolation ON public.admission_applican
 
 
 --
+-- Name: admission_application_steps; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.admission_application_steps ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: admission_application_steps admission_application_steps_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY admission_application_steps_tenant_isolation ON public.admission_application_steps USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
 -- Name: admission_applications; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -7391,6 +7529,19 @@ ALTER TABLE public.admission_documents ENABLE ROW LEVEL SECURITY;
 --
 
 CREATE POLICY admission_documents_tenant_isolation ON public.admission_documents USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
+
+
+--
+-- Name: admission_step_templates; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.admission_step_templates ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: admission_step_templates admission_step_templates_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY admission_step_templates_tenant_isolation ON public.admission_step_templates USING ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid)) WITH CHECK ((institution_id = (NULLIF(current_setting('app.current_institution_id'::text, true), ''::text))::uuid));
 
 
 --
@@ -8505,6 +8656,7 @@ CREATE POLICY teaching_assignments_tenant_isolation ON public.teaching_assignmen
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260724090000'),
 ('20260723090000'),
 ('20260722080000'),
 ('20260722070000'),

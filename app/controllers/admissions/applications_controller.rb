@@ -9,6 +9,8 @@ module Admissions
 
     def show
       authorize!("admissions.applications.manage", @application)
+      @steps = @application.application_steps.includes(:step_template, :evaluator)
+        .order("admission_step_templates.position")
     end
 
     def create

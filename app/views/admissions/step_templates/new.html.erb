@@ -1,0 +1,5 @@
+<% content_for :title, "Nuevo paso" %>
+
+<%= render "shared/page_header", title: "Nuevo paso — #{@campaign.name}" %>
+<%= render "admissions/step_templates/form", campaign: @campaign, step_template: @step_template,
+      url: admissions_campaign_step_templates_path(@campaign), method: :post %>

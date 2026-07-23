@@ -1,0 +1,16 @@
+<% content_for :title, "Estado de tu solicitud" %>
+
+<%# SOLO usa @tracker (Admissions::Tracker::PublicView::Result) — nunca
+    @application. private_notes/evaluador no existen en este Data, así que
+    no pueden filtrarse aquí por descuido. -%>
+<h1>Solicitud de <%= @tracker.applicant_name %></h1>
+<p><%= @tracker.campaign_name %> — <%= @tracker.grade_level_name %></p>
+<p>
+  <%= ui_badge @tracker.status.humanize,
+        variant: { "submitted" => :neutral, "under_review" => :warning, "accepted" => :success,
+                   "rejected" => :danger, "withdrawn" => :neutral }.fetch(@tracker.status, :neutral) %>
+</p>
+
+<% if @tracker.steps.any? -%>
+  <%= render "shared/stepper", steps: @tracker.steps.map { |s| { position: s.position, label: s.name, status: s.status } } %>
+<% end -%>

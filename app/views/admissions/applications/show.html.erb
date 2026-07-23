@@ -34,6 +34,32 @@
   <% end -%>
 </section>
 
+<% if @steps.any? -%>
+  <section>
+    <h3>Pasos</h3>
+    <% @steps.each do |step| -%>
+      <div class="card">
+        <h4><%= step.step_template.position %>. <%= step.step_template.name %></h4>
+        <%= form_with url: admissions_application_step_path(@application, step), method: :patch do -%>
+          <div class="field">
+            <label class="field__label" for="step_status_<%= step.id %>">Estado</label>
+            <select class="field__input" id="step_status_<%= step.id %>" name="application_step[status]">
+              <% Admissions::ApplicationStep::STATUSES.each do |status| -%>
+                <option value="<%= status %>" <%= "selected" if step.status == status %>><%= status.humanize %></option>
+              <% end -%>
+            </select>
+          </div>
+          <div class="field">
+            <label class="field__label" for="step_private_notes_<%= step.id %>">Notas internas (nunca visibles para el aspirante)</label>
+            <textarea class="field__input" id="step_private_notes_<%= step.id %>" name="application_step[private_notes]" rows="2"><%= step.private_notes %></textarea>
+          </div>
+          <%= ui_button "Actualizar paso", type: "submit", variant: :secondary, size: :sm %>
+        <% end -%>
+      </div>
+    <% end -%>
+  </section>
+<% end -%>
+
 <% if @application.status.in?(%w[submitted under_review]) -%>
   <section>
     <h3>Revisar</h3>

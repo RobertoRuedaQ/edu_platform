@@ -1,0 +1,18 @@
+<%# locals: (campaign:, step_template:, url:, method:) -%>
+<%= form_with url: url, method: method do -%>
+  <% if step_template.errors.any? -%>
+    <%= render "shared/alert", variant: :danger, message: step_template.errors.full_messages.join(", ") %>
+  <% end -%>
+
+  <%= render "shared/field", label: "Nombre", name: "step_template[name]", type: "text",
+        value: step_template.name, required: true %>
+  <%= render "shared/field", label: "Orden", name: "step_template[position]", type: "number",
+        value: step_template.position, required: true %>
+
+  <div class="field">
+    <label class="field__label" for="step_template_description">Descripción</label>
+    <textarea class="field__input" id="step_template_description" name="step_template[description]" rows="3"><%= step_template.description %></textarea>
+  </div>
+
+  <%= ui_button "Guardar", type: "submit", variant: :primary %>
+<% end -%>

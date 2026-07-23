@@ -10,6 +10,8 @@ module Admissions
     belongs_to :institution, class_name: "Core::Institution"
     has_many :applications, class_name: "Admissions::Application", inverse_of: :campaign,
       dependent: :restrict_with_exception
+    has_many :step_templates, -> { order(:position) }, class_name: "Admissions::StepTemplate",
+      inverse_of: :campaign, dependent: :restrict_with_exception
 
     validates :name, :target_entry_year, :opens_on, :closes_on, presence: true
     validates :status, inclusion: { in: STATUSES }

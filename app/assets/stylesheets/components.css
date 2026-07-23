@@ -428,6 +428,53 @@
   .timeline__meta { font-size: var(--text-xs); color: var(--color-text-subtle); }
   .timeline__body { font-size: var(--text-sm); color: var(--color-text-muted); margin-top: var(--space-1); }
 
+  /* --- Stepper (horizontal, vanilla — admissions tracker) ----------------- */
+  .stepper { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 0; }
+  .stepper__item {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 1;
+    min-width: 6rem;
+    text-align: center;
+    gap: var(--space-2);
+  }
+  .stepper__marker {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: var(--radius-full);
+    border: 2px solid var(--color-border-strong);
+    background: var(--color-surface);
+    color: var(--color-text-subtle);
+    font-weight: var(--weight-medium);
+    font-size: var(--text-sm);
+    flex: none;
+    position: relative;
+    z-index: 1;
+  }
+  /* Connecting line between markers. */
+  .stepper__item:not(:last-child)::before {
+    content: "";
+    position: absolute;
+    top: 1rem;
+    left: 50%;
+    width: 100%;
+    height: 2px;
+    background: var(--color-border);
+  }
+  .stepper__label { font-size: var(--text-xs); color: var(--color-text-muted); }
+  .stepper__item--in_progress .stepper__marker { border-color: var(--color-primary); color: var(--color-primary); }
+  .stepper__item--completed .stepper__marker {
+    border-color: var(--color-success); background: var(--color-success); color: var(--color-success-subtle);
+  }
+  .stepper__item--completed:not(:last-child)::before { background: var(--color-success); }
+  .stepper__item--skipped .stepper__marker { border-style: dashed; }
+  .stepper__item--skipped .stepper__label { text-decoration: line-through; }
+
   /* --- Alert (inline callout; static, embeddable — not the flash toast) --- */
   .alert {
     --_accent: var(--color-info);
