@@ -48,15 +48,21 @@ class RosterImportsTest < ActionDispatch::IntegrationTest
         "9001,Ana,Pérez,female,2015-03-01,ACC-1,2026,,,\n" \
         "9002,Luis,Gómez,male,2014-05-10,ACC-2,2026,,,\n"
 
-      # Step 1: upload -> parse + validate, redirect to preview.
-      post "/identity_access/roster_imports", params: { roster_import: { kind: "students", file: upload(content) } }
-      assert_redirected_to identity_access_roster_import_path(Core::RosterImportBatch.last)
+      # Step 1: upload -> enqueue parse + validate, redirect to preview.
+      # perform_enqueued_jobs resets the tenant GUC once the job it drains
+      # finishes (see ApplicationJob's around_perform), so anything read
+      # afterward — even Core::RosterImportBatch.last — must go through
+      # within_tenant just like the rest of this test already does.
+      perform_enqueued_jobs do
+        post "/identity_access/roster_imports", params: { roster_import: { kind: "students", file: upload(content) } }
+      end
+      batch = within_tenant { Core::RosterImportBatch.last }
+      assert_redirected_to identity_access_roster_import_path(batch)
       follow_redirect!
       assert_response :success
       assert_select ".stat__value", text: "2" # total_rows
       assert_no_match(/9001|9002/, response.body) # national_id never shown in full
 
-      batch = within_tenant { Core::RosterImportBatch.last }
       assert_equal "validated", within_tenant { batch.reload.status }
       assert_equal 0, within_tenant { GroupManagement::Student.count } # no writes yet
 
@@ -101,7 +107,9 @@ class RosterImportsTest < ActionDispatch::IntegrationTest
         "8002,Actualizado,Nombre,male,2014-01-01,PRE-EXISTING,2026,,,\n" + # update
         ",SinDocumento,Prueba,male,2014-01-01,MIX-3,2026,,,\n"        # error
 
-      post "/identity_access/roster_imports", params: { roster_import: { kind: "students", file: upload(content) } }
+      perform_enqueued_jobs do
+        post "/identity_access/roster_imports", params: { roster_import: { kind: "students", file: upload(content) } }
+      end
       assert_response :redirect
       follow_redirect!
       assert_response :success
@@ -137,6 +145,48 @@ class RosterImportsTest < ActionDispatch::IntegrationTest
 
       get "/identity_access/roster_imports"
       assert_response :success
+    end
+  end
+
+  test "full-async hardening: upload only enqueues, batch waits queued until the job runs" do
+    ensure_active_term!
+
+    as_people_manager do
+      content = CSV_HEADER + "9101,Ana,Pérez,female,2015-03-01,ASY-1,2026,,,\n"
+
+      assert_enqueued_with(job: Core::RosterImport::ParseAndValidateJob) do
+        post "/identity_access/roster_imports", params: { roster_import: { kind: "students", file: upload(content) } }
+      end
+      assert_redirected_to identity_access_roster_import_path(Core::RosterImportBatch.last)
+      follow_redirect!
+      assert_response :success
+      assert_select ".empty-state__title", text: /Procesando/
+
+      batch = within_tenant { Core::RosterImportBatch.last }
+      within_tenant do
+        assert_equal "queued", batch.reload.status
+        assert_equal 0, batch.roster_import_rows.count
+        assert_equal 0, GroupManagement::Student.count
+      end
+
+      # The ciphertext column, read straight from the DB, never shows the
+      # plaintext CSV — same rigor as the existing row-level privacy check.
+      ciphertext = within_tenant do
+        ActiveRecord::Base.connection.select_value(
+          "SELECT pending_content FROM roster_import_batches WHERE id = #{ActiveRecord::Base.connection.quote(batch.id)}"
+        )
+      end
+      assert_not_nil ciphertext
+      assert_not ciphertext.include?("9101")
+      assert_not ciphertext.include?("Ana")
+
+      perform_enqueued_jobs
+
+      within_tenant do
+        assert_equal "validated", batch.reload.status
+        assert_equal 1, batch.roster_import_rows.count
+        assert_nil batch.pending_content
+      end
     end
   end
 end

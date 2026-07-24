@@ -24,12 +24,9 @@
 > veces) — **todo lo que sigue está gateado por una confirmación explícita del owner o una decisión
 > de negocio real.** Cada ítem indica cuál.
 
-1. **Onboarding — hardening no bloqueante** — ⛔ **gateado: sin necesidad de producción confirmada**
-   (ver `HISTORIA.md` v1.7.0/v1.32.0, marcado así explícitamente en el propio texto del ítem, no
-   solo aquí): full-async de parse+validar de `RosterImport` (hoy corre síncrono en `#create`,
-   capado a `MAX_ROWS`, cambiarlo requiere rediseñar el estado "pendiente" de la vista previa y sus
-   tests). Webhook real para `Invitations::BounceHandler` — ⛔ **gateado: decisión de negocio**
-   (requiere elegir proveedor de correo antes de construir el receptor).
+1. **Onboarding — hardening no bloqueante** — Webhook real para `Invitations::BounceHandler` —
+   ⛔ **gateado: decisión de negocio** (requiere elegir proveedor de correo antes de construir el
+   receptor).
 
 2. **Tiempo real** (Turbo Streams sobre Solid Cable, sin Redis) — ⛔ **gateado: sin driver real
    todavía** — `transportation` (broadcast de `boarding_events`, cuya persistencia ya es real desde

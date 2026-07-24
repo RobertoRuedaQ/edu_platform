@@ -17,6 +17,74 @@
 > moviera el changelog fuera del doc magro. Las entradas v1.6.0+ se escribieron directamente aquí,
 > ya con el split vigente.
 
+### v1.60.0 — 2026-07-24 — Onboarding: full-async parse+validar de `RosterImport` (`OPEN_PROCESS.md` ítem #1, hardening no bloqueante)
+
+Cierra la mitad "full-async" del ítem de hardening pendiente desde v1.7.0/v1.32.0 (la otra mitad,
+webhook real de `Invitations::BounceHandler`, sigue abierta y gateada por la decisión de proveedor
+de correo). El problema: `IdentityAccess::RosterImportsController#create` corría `Parser`+
+`Validator` de forma síncrona dentro del request del admin, capado a `MAX_ROWS = 2_000` — un
+archivo grande bloqueaba el navegador del admin durante todo el parseo+cifrado+escritura por fila.
+
+**La restricción de fondo, no el "cómo mover a un job"**: `Core::RosterImportBatch` documentaba
+explícitamente que el CSV crudo NUNCA se persiste — se lee en memoria y se descarta, deliberadamente
+sin `has_one_attached :file`, porque Active Storage son tablas GLOBALES sin RLS (exposición
+cross-tenant real de national_id/nombres). Un job async corre en un worker de Solid Queue, en un
+proceso distinto del request, y necesita el contenido del CSV después de que el archivo subido ya
+no existe — pero `solid_queue_jobs` es igual de global/sin-RLS que Active Storage, así que pasarlo
+como argumento del job (aun cifrado) reintroduce el mismo patrón de riesgo que el código ya
+rechazaba. Solución: una columna `pending_content` (texto, `encrypts` no determinístico) en la
+MISMA `roster_import_batches` — tabla que ya tiene RLS desde su migración original — así el job
+solo recibe `batch_id` (UUID opaco) como argumento, nunca el contenido. `ParseAndValidateJob` la
+limpia (`pending_content: nil`) apenas `Parser` termina de leerla, dejando la ventana de texto
+plano acotada a un solo intento de job exitoso.
+
+**Cambio técnico**: nuevo estado de batch `"queued"` (CHECK constraint extendido) entre la subida
+y el parseo — `#create` conserva los guards baratos en-request (kind válido, archivo presente,
+`MAX_ROWS`, término académico activo), pero en vez de llamar `Parser`/`Validator` inline crea el
+batch en `"queued"` con `pending_content: content` y encola `Core::RosterImport::
+ParseAndValidateJob` (mismo molde dual `enqueue_for`/`run_now_for` que `CommitJob`, mismo manejo de
+GUC vía `ApplicationJob`, con guard de idempotencia — `return if batch.roster_import_rows.exists?`
+— para que un reintento manual del job no duplique filas). El audit log pasa de
+`"roster_import.validated"` (logueado tras validar síncronamente) a `"roster_import.parse_enqueued"`
+en el momento del enqueue — mismo criterio que ya usaba `#commit` (loguea solo al encolar; ningún
+job de este dominio loguea Audit desde adentro). La vista de preview (`show.html.erb`) gana un
+estado "pendiente" explícito (sin stats/tabla, `shared/empty_state`) con un `<meta
+http-equiv="refresh">` de 3s mientras `status == "queued"` — HTML plano, deliberadamente SIN Turbo
+Streams/ActionCable (eso es el ítem #2 del backlog, "Tiempo real", gateado aparte por falta de
+driver real; este cambio no lo adelanta). `Parser`/`Validator`/`Committer` no cambiaron — siguen
+siendo kind-agnósticos, el job solo los orquesta async igual que `CommitJob` orquesta `Committer`.
+
+**Tests**: los tests de integración existentes (`roster_imports_test.rb`,
+`roster_imports_guardians_test.rb`) envuelven ahora el POST de upload en `perform_enqueued_jobs`
+(mismo patrón que ya usaban para `#commit`) — con el ajuste de que, tras drenar un job,
+`Core::RosterImportBatch.last` debe leerse vía `within_tenant`, porque `ApplicationJob`'s
+`around_perform` resetea el GUC al terminar (mismo motivo por el que los tests de `CommitJob` ya
+usaban ese patrón). Nuevo test de aceptación del flujo async completo: sube sin drenar jobs → batch
+`"queued"`, cero filas/estudiantes, job encolado (`assert_enqueued_with`); corre el job → batch
+`"validated"`, filas creadas, `pending_content` en `nil`; el ciphertext leído directo de la columna
+nunca contiene el national_id ni el nombre en texto plano (mismo rigor de verificación de privacidad
+explícita que ya usaba la suite para `roster_import_rows.raw`). Nuevo
+`test/models/core/roster_import/parse_and_validate_job_test.rb`, mismo esqueleto que
+`commit_job_test.rb`: `run_now_for` parsea+valida y limpia `pending_content`; el GUC no se filtra
+pasado el job (prueba real bajo RLS, no `current_setting()`); `enqueue_for` efectivamente encola un
+job de Solid Queue; correr el job dos veces no duplica filas.
+
+**Archivos creados/editados por rol:**
+- Migración: `db/migrate/20260724190000_add_pending_content_and_queued_status_to_roster_import_batches.rb`
+  (columna `pending_content`, CHECK constraint de `status` extendido con `"queued"`).
+- Modelo: `app/domains/core/models/roster_import_batch.rb` (`encrypts :pending_content`, comentario
+  de clase actualizado).
+- Job (nuevo): `app/domains/core/jobs/roster_import/parse_and_validate_job.rb`.
+- Controller: `app/controllers/identity_access/roster_imports_controller.rb` (`#create`).
+- Vista: `app/views/identity_access/roster_imports/show.html.erb`.
+- Helper: `app/helpers/identity_access_helper.rb` (`BATCH_STATUS["queued"]`).
+- Tests: `test/integration/roster_imports_test.rb`, `test/integration/roster_imports_guardians_test.rb`,
+  `test/models/core/roster_import/parse_and_validate_job_test.rb` (nuevo).
+
+**Resultado**: suite completa 898 runs / 3679 assertions / 0 fallos / 0 errores / 1 skip
+preexistente (baseline 877; 21 tests nuevos entre integración y el job). `bin/rails
+zeitwerk:check` verde.
+
 ### v1.59.0 — 2026-07-24 — Billing: `BillingPeriod` como entidad propia + registro manual de abonos (`OPEN_PROCESS.md` ítem #2, confirmado explícitamente por el owner)
 
 Cierra los tres pendientes de "billing hardening" gateados desde v1.33.0. El owner resolvió los

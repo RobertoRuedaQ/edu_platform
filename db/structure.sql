@@ -1838,8 +1838,9 @@ CREATE TABLE public.roster_import_batches (
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
     committed_at timestamp(6) without time zone,
+    pending_content text,
     CONSTRAINT roster_import_batches_kind_check CHECK (((kind)::text = ANY ((ARRAY['students'::character varying, 'guardians'::character varying])::text[]))),
-    CONSTRAINT roster_import_batches_status_check CHECK (((status)::text = ANY ((ARRAY['uploaded'::character varying, 'validated'::character varying, 'previewed'::character varying, 'committed'::character varying, 'failed'::character varying])::text[])))
+    CONSTRAINT roster_import_batches_status_check CHECK (((status)::text = ANY ((ARRAY['queued'::character varying, 'uploaded'::character varying, 'validated'::character varying, 'previewed'::character varying, 'committed'::character varying, 'failed'::character varying])::text[])))
 );
 
 ALTER TABLE ONLY public.roster_import_batches FORCE ROW LEVEL SECURITY;
@@ -8811,6 +8812,7 @@ CREATE POLICY teaching_assignments_tenant_isolation ON public.teaching_assignmen
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260724190000'),
 ('20260724180000'),
 ('20260724171000'),
 ('20260724090000'),

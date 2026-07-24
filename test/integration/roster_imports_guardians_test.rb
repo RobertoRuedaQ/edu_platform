@@ -78,13 +78,18 @@ class RosterImportsGuardiansTest < ActionDispatch::IntegrationTest
         "G-ERR1,Falla,Uno,sinestudiante@correo.test,padre,NOPE\n" \
         "G-ERR2,Falla,Dos,,padre,S-A\n"
 
-      post "/identity_access/roster_imports", params: { roster_import: { kind: "guardians", file: upload(content) } }
-      assert_redirected_to identity_access_roster_import_path(Core::RosterImportBatch.last)
+      # perform_enqueued_jobs resets the tenant GUC once the job it drains
+      # finishes (see ApplicationJob's around_perform), so batch lookup must
+      # go through within_tenant, same as everything else in this test.
+      perform_enqueued_jobs do
+        post "/identity_access/roster_imports", params: { roster_import: { kind: "guardians", file: upload(content) } }
+      end
+      batch = within_tenant { Core::RosterImportBatch.last }
+      assert_redirected_to identity_access_roster_import_path(batch)
       follow_redirect!
       assert_response :success
       assert_no_match(/G-NEW|G-EXISTING|G-ERR|S-A|S-B/, response.body)
 
-      batch = within_tenant { Core::RosterImportBatch.last }
       within_tenant do
         assert_equal "validated", batch.reload.status
         assert_equal 2, batch.summary["create_count"]  # the two G-NEW rows

@@ -1,5 +1,6 @@
 module IdentityAccessHelper
   BATCH_STATUS = {
+    "queued"    => { label: "En cola", variant: :neutral },
     "uploaded"  => { label: "Cargado", variant: :neutral },
     "validated" => { label: "Validado", variant: :info },
     "committed" => { label: "Aplicado", variant: :success },

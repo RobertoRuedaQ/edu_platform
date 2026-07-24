@@ -5,9 +5,11 @@ module IdentityAccess
   # slice) — the controller only threads `kind` through to
   # Core::RosterImportBatch and the per-kind Strategy handles the rest
   # (G7); it never branches on kind itself. Three explicit phases (J4):
-  # #create parses+validates synchronously (capped, see MAX_ROWS) and
-  # redirects to the preview (#show); #commit enqueues the async apply. No
-  # invitations are ever sent from here (J3/J3-bis) — this only
+  # #create only validates the upload itself (capped, see MAX_ROWS) and
+  # enqueues the async parse+validate (full-async hardening,
+  # OPEN_PROCESS.md item #1), redirecting to the preview (#show), which
+  # shows a pending state until the job lands; #commit enqueues the async
+  # apply. No invitations are ever sent from here (J3/J3-bis) — this only
   # creates/updates roster records.
   class RosterImportsController < ApplicationController
     MAX_ROWS = 2_000
@@ -51,13 +53,14 @@ module IdentityAccess
 
       batch = Core::RosterImportBatch.create!(
         institution: Current.institution, academic_term: active_term, kind: kind,
-        created_by: Current.institution_user
+        created_by: Current.institution_user, status: "queued", pending_content: content
       )
-      Core::RosterImport::Parser.call(batch: batch, content: content)
-      Core::RosterImport::Validator.call(batch: batch)
 
-      IdentityAccess::Audit.log(institution: Current.institution, action: "roster_import.validated",
-        actor_institution_user: Current.institution_user, target: batch, metadata: batch.summary)
+      # Same convention as #commit below: log at enqueue time, not at
+      # completion — no job in this domain logs Audit from inside #perform.
+      IdentityAccess::Audit.log(institution: Current.institution, action: "roster_import.parse_enqueued",
+        actor_institution_user: Current.institution_user, target: batch)
+      Core::RosterImport::ParseAndValidateJob.enqueue_for(batch)
 
       redirect_to identity_access_roster_import_path(batch)
     end
